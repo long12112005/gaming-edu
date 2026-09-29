@@ -1,0 +1,409 @@
+@import url("https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100&display=swap");
+@import "tailwindcss";
+
+
+:root {
+  --navy-950: #0a0e27;
+  --navy-900: #0f1535;
+  --navy-800: #1a2055;
+  --navy-700: #1e2a6e;
+  --primary-yellow: #f5c518;
+  --primary-orange: #ff8c00;
+  --accent-purple: #7c3aed;
+  --accent-blue: #3b82f6;
+  --accent-pink: #ec4899;
+  --accent-green: #10b981;
+}
+
+@theme inline {
+  --color-navy-950: var(--navy-950);
+  --color-navy-900: var(--navy-900);
+  --color-navy-800: var(--navy-800);
+  --color-navy-700: var(--navy-700);
+  --color-primary: #7c3aed;
+  --color-primary-hover: #6d28d9;
+  --color-yellow: var(--primary-yellow);
+  --color-orange: var(--primary-orange);
+  --font-sans: "Be Vietnam Pro", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: "Be Vietnam Pro", sans-serif;
+  background-color: #f0f2f8;
+  color: #1a1a2e;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ===========================
+   SCROLLBAR STYLING
+=========================== */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #1a2055;
+}
+::-webkit-scrollbar-thumb {
+  background: #7c3aed;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #6d28d9;
+}
+
+/* ===========================
+   ANIMATIONS
+=========================== */
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes pulse-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 20px rgba(124, 58, 237, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 40px rgba(124, 58, 237, 0.8);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes spin-slow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes gradient-shift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+.animate-spin-slow {
+  animation: spin-slow 8s linear infinite;
+}
+.animate-fade-in-up {
+  animation: fade-in-up 0.6s ease-out forwards;
+}
+.animate-gradient {
+  background-size: 200% 200%;
+  animation: gradient-shift 4s ease infinite;
+}
+
+/* ===========================
+   GLASSMORPHISM UTILITIES
+=========================== */
+.glass {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 16px;
+}
+
+/* ===========================
+   GRADIENT BACKGROUNDS
+=========================== */
+.bg-hero-gradient {
+  background: linear-gradient(135deg, #0a0e27 0%, #1a0a3d 50%, #0d1a4a 100%);
+}
+
+.bg-card-gradient {
+  background: linear-gradient(145deg, rgba(26, 32, 85, 0.9) 0%, rgba(15, 21, 53, 0.95) 100%);
+}
+
+.text-gradient-purple {
+  background: linear-gradient(135deg, #a855f7, #7c3aed, #4f46e5);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.text-gradient-yellow {
+  background: linear-gradient(135deg, #fbbf24, #f59e0b, #d97706);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ===========================
+   BUTTON STYLES
+=========================== */
+.btn-primary {
+  background: linear-gradient(135deg, #7c3aed, #4f46e5);
+  color: white;
+  font-weight: 700;
+  padding: 12px 28px;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-primary::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.5s;
+}
+
+.btn-primary:hover::before {
+  left: 100%;
+}
+
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(124, 58, 237, 0.5);
+}
+
+.btn-yellow {
+  background: linear-gradient(135deg, #f5c518, #ff8c00);
+  color: #1a1a2e;
+  font-weight: 800;
+  padding: 14px 28px;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.btn-yellow:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(245, 197, 24, 0.5);
+}
+
+/* ===========================
+   PIN INPUT
+=========================== */
+.pin-input {
+  font-size: 2.5rem;
+  font-weight: 800;
+  letter-spacing: 0.3em;
+  text-align: center;
+  color: #1a1a2e;
+  border: none;
+  outline: none;
+  background: transparent;
+  width: 100%;
+}
+
+.pin-input::placeholder {
+  color: #9ca3af;
+  letter-spacing: 0.2em;
+}
+
+/* ===========================
+   HORIZONTAL SCROLL
+=========================== */
+.scroll-container {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  padding-bottom: 12px;
+  scrollbar-width: thin;
+  scrollbar-color: #7c3aed #f0f2f8;
+}
+
+.scroll-container::-webkit-scrollbar {
+  height: 4px;
+}
+.scroll-container::-webkit-scrollbar-track {
+  background: #e5e7eb;
+}
+.scroll-container::-webkit-scrollbar-thumb {
+  background: #7c3aed;
+  border-radius: 4px;
+}
+
+/* ===========================
+   CARD HOVER EFFECTS
+=========================== */
+.card-hover {
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.card-hover:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+}
+
+/* ===========================
+   NAVBAR BADGE
+=========================== */
+.ai-badge {
+  background: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%);
+  color: white;
+  padding: 6px 14px;
+  border-radius: 100px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.3s;
+}
+
+.ai-badge:hover {
+  box-shadow: 0 4px 15px rgba(124, 58, 237, 0.5);
+  transform: translateY(-1px);
+}
+
+/* ===========================
+   AUTH PANEL STARS
+=========================== */
+.stars-bg {
+  background-image: radial-gradient(2px 2px at 20px 30px, rgba(255, 255, 255, 0.6), transparent),
+    radial-gradient(2px 2px at 40px 70px, rgba(255, 255, 255, 0.4), transparent),
+    radial-gradient(1px 1px at 70px 20px, rgba(255, 255, 255, 0.7), transparent),
+    radial-gradient(1px 1px at 100px 50px, rgba(255, 255, 255, 0.5), transparent),
+    radial-gradient(2px 2px at 130px 80px, rgba(255, 255, 255, 0.3), transparent),
+    radial-gradient(1px 1px at 160px 30px, rgba(255, 255, 255, 0.6), transparent),
+    radial-gradient(2px 2px at 200px 60px, rgba(255, 255, 255, 0.4), transparent),
+    radial-gradient(1px 1px at 240px 90px, rgba(255, 255, 255, 0.5), transparent);
+  background-repeat: repeat;
+  background-size: 250px 120px;
+}
+
+/* ===========================
+   INPUT FIELDS
+=========================== */
+.input-field {
+  width: 100%;
+  padding: 12px 16px 12px 44px;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  font-family: "Be Vietnam Pro", sans-serif;
+  color: #1a1a2e;
+  background: #f9fafb;
+  outline: none;
+  transition: all 0.3s;
+}
+
+.input-field:focus {
+  border-color: #7c3aed;
+  background: white;
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
+}
+
+.input-field::placeholder {
+  color: #9ca3af;
+}
+
+/* ===========================
+   QUIZ CARD BADGES
+=========================== */
+.badge-new {
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: white;
+  padding: 3px 10px;
+  border-radius: 100px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.badge-hot {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  color: white;
+  padding: 3px 10px;
+  border-radius: 100px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.badge-featured {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: white;
+  padding: 3px 10px;
+  border-radius: 100px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ===========================
+   FOOTER
+=========================== */
+.footer-bg {
+  background: linear-gradient(180deg, #0f1535 0%, #0a0e27 100%);
+}
+
+/* Stagger animation delay classes */
+.delay-100 { animation-delay: 100ms; }
+.delay-200 { animation-delay: 200ms; }
+.delay-300 { animation-delay: 300ms; }
+.delay-400 { animation-delay: 400ms; }
+.delay-500 { animation-delay: 500ms; }
