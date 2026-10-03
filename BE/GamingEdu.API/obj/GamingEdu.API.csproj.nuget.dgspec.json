@@ -1,20 +1,20 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\LONG\\gaming-edu\\BE\\GamingEDU.API\\GamingEdu.API.csproj": {}
+    "C:\\Users\\LONG\\gaming-edu\\BE\\GamingEdu.API\\GamingEdu.API.csproj": {}
   },
   "projects": {
-    "C:\\Users\\LONG\\gaming-edu\\BE\\GamingEDU.API\\GamingEdu.API.csproj": {
+    "C:\\Users\\LONG\\gaming-edu\\BE\\GamingEdu.API\\GamingEdu.API.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\LONG\\gaming-edu\\BE\\GamingEDU.API\\GamingEdu.API.csproj",
+        "projectUniqueName": "C:\\Users\\LONG\\gaming-edu\\BE\\GamingEdu.API\\GamingEdu.API.csproj",
         "projectName": "GamingEdu.API",
-        "projectPath": "C:\\Users\\LONG\\gaming-edu\\BE\\GamingEDU.API\\GamingEdu.API.csproj",
+        "projectPath": "C:\\Users\\LONG\\gaming-edu\\BE\\GamingEdu.API\\GamingEdu.API.csproj",
         "packagesPath": "C:\\Users\\LONG\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\LONG\\gaming-edu\\BE\\GamingEDU.API\\obj\\",
+        "outputPath": "C:\\Users\\LONG\\gaming-edu\\BE\\GamingEdu.API\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
-          "C:\\Users\\LONG\\gaming-edu\\BE\\GamingEDU.API\\NuGet.Config",
+          "C:\\Users\\LONG\\gaming-edu\\BE\\GamingEdu.API\\NuGet.Config",
           "C:\\Users\\LONG\\AppData\\Roaming\\NuGet\\NuGet.Config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
@@ -52,9 +52,17 @@
               "target": "Package",
               "version": "[4.0.3, )"
             },
+            "ClosedXML": {
+              "target": "Package",
+              "version": "[0.105.1, )"
+            },
             "EFCore.NamingConventions": {
               "target": "Package",
               "version": "[8.0.3, )"
+            },
+            "MailKit": {
+              "target": "Package",
+              "version": "[4.18.1, )"
             },
             "Microsoft.AspNetCore.Authentication.JwtBearer": {
               "target": "Package",
@@ -81,6 +89,10 @@
               "suppressParent": "All",
               "target": "Package",
               "version": "[8.0.11, )"
+            },
+            "StackExchange.Redis": {
+              "target": "Package",
+              "version": "[2.7.33, )"
             },
             "Swashbuckle.AspNetCore": {
               "target": "Package",

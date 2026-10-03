@@ -1,4 +1,7 @@
 using System.Text;
+using System.Threading.RateLimiting;
+using System.Security.Claims;
+using System.IdentityModel.Tokens.Jwt;
 using GamingEdu.API.Data;
 using GamingEdu.API.Hubs;
 using GamingEdu.API.Services;
@@ -6,6 +9,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -88,7 +92,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ClockSkew                = TimeSpan.FromMinutes(1),
         };
 
-        // Allow JWT tokens via SignalR query string (?access_token=...)
+        // Allow JWT tokens via SignalR query string (?access_token=...) and Validate Single Session
         options.Events = new JwtBearerEvents
         {
             OnMessageReceived = ctx =>
@@ -98,11 +102,28 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
                     ctx.Token = accessToken;
                 return Task.CompletedTask;
+            },
+            OnTokenValidated = async ctx =>
+            {
+                var userId = ctx.Principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                var jti = ctx.Principal?.FindFirst(JwtRegisteredClaimNames.Jti)?.Value;
+                if (userId != null && jti != null)
+                {
+                    var redis = ctx.HttpContext.RequestServices.GetRequiredService<IConnectionMultiplexer>().GetDatabase();
+                    var activeSession = await redis.StringGetAsync($"session:{userId}");
+                    if (!activeSession.HasValue || activeSession.ToString() != jti)
+                    {
+                        ctx.Fail("Phiên đăng nhập không hợp lệ hoặc bạn đã đăng nhập ở nơi khác.");
+                    }
+                }
             }
         };
     });
 
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("RequireAdmin", policy => policy.RequireClaim("is_admin", "true"));
+});
 
 // ─── SIGNALR ──────────────────────────────────────────────────────────────
 builder.Services.AddSignalR(options =>
@@ -111,10 +132,41 @@ builder.Services.AddSignalR(options =>
     options.MaximumReceiveMessageSize = 32 * 1024; // 32 KB
 });
 
-// ─── CACHING (IMemoryCache) ───────────────────────────────────────────────
+// ─── CACHING (IMemoryCache & Redis) ───────────────────────────────────────
 builder.Services.AddMemoryCache(options =>
 {
     options.SizeLimit = 1024; // MB equivalent entries
+});
+
+var redisConnectionString = builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379";
+builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
+    ConnectionMultiplexer.Connect(redisConnectionString));
+
+// ─── RATE LIMITING ────────────────────────────────────────────────────────
+builder.Services.AddRateLimiter(options =>
+{
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? httpContext.Request.Headers.Host.ToString(),
+            factory: partition => new FixedWindowRateLimiterOptions
+            {
+                AutoReplenishment = true,
+                PermitLimit = 100,
+                QueueLimit = 0,
+                Window = TimeSpan.FromMinutes(1)
+            }));
+            
+    options.AddPolicy("OtpRateLimit", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: partition => new FixedWindowRateLimiterOptions
+            {
+                AutoReplenishment = true,
+                PermitLimit = 5, // 5 requests per hour for OTP
+                QueueLimit = 0,
+                Window = TimeSpan.FromHours(1)
+            }));
+    options.RejectionStatusCode = 429;
 });
 
 // ─── CORS ─────────────────────────────────────────────────────────────────
@@ -134,12 +186,24 @@ builder.Services.AddCors(options =>
 });
 
 // ─── APPLICATION SERVICES ─────────────────────────────────────────────────
+builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IAuthService,  AuthService>();
 builder.Services.AddScoped<IQuizService,  QuizService>();
 builder.Services.AddScoped<IRoomService,  RoomService>();
+builder.Services.AddScoped<IGroupService, GroupService>();
+builder.Services.AddScoped<IQAService,    QAService>();
+
+// FuzzyMatchingService: stateless, dùng Singleton để tránh allocation mỗi request
+builder.Services.AddSingleton<FuzzyMatchingService>();
+
+// Queue Service for Answer processing
+builder.Services.AddSingleton<AnswerQueueService>();
 
 // Background Service: AI Job Worker (polls ai_jobs table every 10s)
 builder.Services.AddHostedService<AIJobWorker>();
+
+// Background Service: Answer Processing Worker (Message Queue simulation)
+builder.Services.AddHostedService<AnswerProcessingWorker>();
 
 // ─── LOGGING ──────────────────────────────────────────────────────────────
 builder.Services.AddLogging(logging =>
@@ -175,6 +239,8 @@ app.UseHttpsRedirection();
 // CORS must be before Auth
 app.UseCors("GamingEduFrontend");
 
+app.UseRateLimiter();
+
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -182,5 +248,7 @@ app.MapControllers();
 
 // ─── SIGNALR HUB ──────────────────────────────────────────────────────────
 app.MapHub<GameHub>("/hubs/game");
+app.MapHub<NotificationHub>("/hubs/notifications");
+app.MapHub<QAHub>("/hubs/qa");
 
 app.Run();

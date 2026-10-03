@@ -142,12 +142,10 @@ export default function Navbar({ user }: NavbarProps) {
                 )}
               </div>
             ) : (
-              <Link href="/auth/login">
-                <Button variant="primary" size="sm" id="btn-login-nav">
-                  <User size={15} />
-                  Đăng Nhập
-                </Button>
-              </Link>
+              <Button variant="primary" size="sm" id="btn-login-nav" href="/auth/login">
+                <User size={15} />
+                Đăng Nhập
+              </Button>
             )}
           </div>
         </div>

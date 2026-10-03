@@ -24,6 +24,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<Room>           Rooms           => Set<Room>();
     public DbSet<RoomPlayer>     RoomPlayers     => Set<RoomPlayer>();
     public DbSet<PlayerResponse> PlayerResponses => Set<PlayerResponse>();
+    public DbSet<QuestionQA>     QuestionsQA     => Set<QuestionQA>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -246,6 +247,28 @@ public class ApplicationDbContext : DbContext
             e.HasOne(pr => pr.Slide)
                 .WithMany(s => s.PlayerResponses)
                 .HasForeignKey(pr => pr.SlideId)
+                .OnDelete(DeleteBehavior.NoAction);
+        });
+
+        // ── questions_qa ───────────────────────────────────────────────
+        modelBuilder.Entity<QuestionQA>(e =>
+        {
+            e.ToTable("questions_qa");
+            e.HasKey(qa => qa.Id);
+            e.Property(qa => qa.Id).ValueGeneratedNever();
+            e.Property(qa => qa.Content).HasMaxLength(1000).IsRequired();
+            e.Property(qa => qa.Upvotes).HasDefaultValue(0);
+            e.Property(qa => qa.Status).HasMaxLength(50).HasDefaultValue("PENDING");
+            e.Property(qa => qa.CreatedAt).HasColumnType("datetime2").HasDefaultValueSql("GETUTCDATE()");
+
+            e.HasOne(qa => qa.Room)
+                .WithMany(r => r.Questions)
+                .HasForeignKey(qa => qa.RoomId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(qa => qa.Player)
+                .WithMany(rp => rp.Questions)
+                .HasForeignKey(qa => qa.PlayerId)
                 .OnDelete(DeleteBehavior.NoAction);
         });
 

@@ -1,7 +1,12 @@
+using System.Text.Json;
 using GamingEdu.API.Data;
 using GamingEdu.API.DTOs;
 using GamingEdu.API.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.SignalR;
+using GamingEdu.API.Hubs;
+using StackExchange.Redis;
+using ClosedXML.Excel;
 
 namespace GamingEdu.API.Services;
 
@@ -13,17 +18,34 @@ public interface IRoomService
     Task<IEnumerable<LeaderboardEntryDto>> GetLeaderboardAsync(Guid roomId);
     Task<AnswerResultDto> SubmitAnswerAsync(Guid roomPlayerId, SubmitAnswerRequest request);
     Task UpdateRoomStatusAsync(Guid roomId, string status);
+    Task<Dictionary<string, int>> GetWordCloudDataAsync(Guid roomId, Guid slideId);
+    Task InviteGroupAsync(Guid hostId, Guid roomId, Guid groupId);
+    Task RemovePlayerAsync(Guid roomId, Guid playerId);
+    Task SaveDraftAnswerAsync(Guid roomPlayerId, Guid slideId, string answerData);
+    Task<IEnumerable<LeaderboardEntryDto>> FinishRoomAsync(Guid roomId, Guid hostId);
+    Task<byte[]> ExportRoomReportAsync(Guid roomId, Guid hostId);
 }
 
 public class RoomService : IRoomService
 {
-    private readonly ApplicationDbContext _db;
-    private readonly ILogger<RoomService> _logger;
+    private readonly ApplicationDbContext  _db;
+    private readonly ILogger<RoomService>  _logger;
+    private readonly FuzzyMatchingService  _fuzzy;
+    private readonly IHubContext<NotificationHub> _notificationHub;
+    private readonly IConnectionMultiplexer _redis;
 
-    public RoomService(ApplicationDbContext db, ILogger<RoomService> logger)
+    public RoomService(
+        ApplicationDbContext db,
+        ILogger<RoomService> logger,
+        FuzzyMatchingService fuzzy,
+        IHubContext<NotificationHub> notificationHub,
+        IConnectionMultiplexer redis)
     {
         _db     = db;
         _logger = logger;
+        _fuzzy  = fuzzy;
+        _notificationHub = notificationHub;
+        _redis  = redis;
     }
 
     // ── CREATE ROOM ────────────────────────────────────────────────────
@@ -127,19 +149,61 @@ public class RoomService : IRoomService
         if (alreadyAnswered)
             throw new InvalidOperationException("Bạn đã trả lời câu hỏi này rồi.");
 
-        // ── Grade the answer ──────────────────────────────────────────
-        bool isCorrect = GradeAnswer(slide, request.AnswerData);
+        // ── Speed factor (dùng cho mọi loại câu hỏi) ─────────────────
+        double maxTime    = slide.TimeLimit * 1000.0; // ms
+        double elapsed    = Math.Min(request.ResponseTimeMs, maxTime);
+        double speedFactor = Math.Max(0.1, 1.0 - (elapsed / maxTime));
 
-        // Score formula: speed bonus (faster = more points, min 10% of total)
-        int scoreAwarded = 0;
-        string correctAnswer = GetCorrectAnswer(slide);
+        // ── Chấm điểm theo loại câu hỏi ──────────────────────────────
+        bool   isCorrect    = false;
+        int    scoreAwarded = 0;
+        string correctAnswer;
 
-        if (isCorrect)
+        if (slide.Type == "FILL_IN_BLANK")
         {
-            double maxTime = slide.TimeLimit * 1000.0; // ms
-            double elapsed = Math.Min(request.ResponseTimeMs, maxTime);
-            double speedFactor = Math.Max(0.1, 1.0 - (elapsed / maxTime));
-            scoreAwarded = (int)Math.Round(slide.Points * speedFactor);
+            // answerData = JSON array: ["đáp án blank 1", "đáp án blank 2", ...]
+            List<string> userAnswers;
+            try
+            {
+                userAnswers = JsonSerializer.Deserialize<List<string>>(request.AnswerData)
+                              ?? [];
+            }
+            catch
+            {
+                // Fallback: treat as single-blank answer
+                userAnswers = [request.AnswerData];
+            }
+
+            // Mỗi option có IsCorrect=true tương ứng 1 blank, theo OrderIndex
+            var correctOptions = slide.Options
+                .Where(o => o.IsCorrect)
+                .OrderBy(o => o.OrderIndex)
+                .ToList();
+
+            var keywordSets = correctOptions
+                .Select(o => (IList<string>)FuzzyMatchingService.ParseKeywords(o.BlankKeywords))
+                .ToList();
+
+            var (isFullyCorrect, scoreRatio, correctCount, totalBlanks) =
+                _fuzzy.GradeFillInBlank(userAnswers, keywordSets);
+
+            isCorrect    = isFullyCorrect;
+            scoreAwarded = (int)Math.Round(slide.Points * scoreRatio * speedFactor);
+            correctAnswer = string.Join(" | ", correctOptions
+                .Select(o => FuzzyMatchingService.ParseKeywords(o.BlankKeywords)
+                                .FirstOrDefault() ?? ""));
+
+            _logger.LogDebug(
+                "FILL_IN_BLANK: {Correct}/{Total} blanks correct, ratio={Ratio:P0}",
+                correctCount, totalBlanks, scoreRatio);
+        }
+        else
+        {
+            isCorrect    = GradeAnswerExact(slide, request.AnswerData);
+            correctAnswer = GetCorrectAnswer(slide);
+
+            if (isCorrect)
+                scoreAwarded = (int)Math.Round(slide.Points * speedFactor);
         }
 
         // Save response to player_responses table
@@ -161,29 +225,51 @@ public class RoomService : IRoomService
         _db.PlayerResponses.Add(response);
         await _db.SaveChangesAsync();
 
+        // Cập nhật điểm lên Redis Sorted Set cho realtime Leaderboard
+        var redisDb = _redis.GetDatabase();
+        var lbKey = $"room_leaderboard:{player.RoomId}";
+        await redisDb.SortedSetIncrementAsync(lbKey, $"{player.Id}|{player.Nickname}|{player.AvatarUrl}", scoreAwarded);
+
         return new AnswerResultDto(isCorrect, scoreAwarded, player.TotalScore, correctAnswer);
     }
 
     // ── LEADERBOARD ────────────────────────────────────────────────────
     public async Task<IEnumerable<LeaderboardEntryDto>> GetLeaderboardAsync(Guid roomId)
     {
+        var redisDb = _redis.GetDatabase();
+        var lbKey = $"room_leaderboard:{roomId}";
+        
+        // Lấy danh sách sắp xếp giảm dần từ Redis
+        var sortedPlayers = await redisDb.SortedSetRangeByRankWithScoresAsync(lbKey, 0, -1, StackExchange.Redis.Order.Descending);
+
+        if (sortedPlayers.Length > 0)
+        {
+            return sortedPlayers.Select((sp, index) => {
+                var parts = sp.Element.ToString().Split('|'); // id|nickname|avatarUrl
+                return new LeaderboardEntryDto(
+                    index + 1,
+                    parts.Length > 1 ? parts[1] : "Unknown",
+                    parts.Length > 2 ? parts[2] : "",
+                    (int)sp.Score
+                );
+            });
+        }
+
+        // Fallback đọc DB nếu Redis rỗng (do restart server)
         var players = await _db.RoomPlayers
             .AsNoTracking()
             .Where(rp => rp.RoomId == roomId)
             .OrderByDescending(rp => rp.TotalScore)
             .ToListAsync();
 
-        // Update ranks in DB
-        var updates = players.Select((p, idx) => new { Player = p, Rank = idx + 1 }).ToList();
-        foreach (var u in updates)
+        var result = new List<LeaderboardEntryDto>();
+        for (int i = 0; i < players.Count; i++)
         {
-            var tracked = await _db.RoomPlayers.FindAsync(u.Player.Id);
-            if (tracked != null) tracked.Rank = u.Rank;
+            result.Add(new LeaderboardEntryDto(i + 1, players[i].Nickname, players[i].AvatarUrl, players[i].TotalScore));
+            await redisDb.SortedSetAddAsync(lbKey, $"{players[i].Id}|{players[i].Nickname}|{players[i].AvatarUrl}", players[i].TotalScore);
         }
-        await _db.SaveChangesAsync();
 
-        return updates.Select(u => new LeaderboardEntryDto(
-            u.Rank, u.Player.Nickname, u.Player.AvatarUrl, u.Player.TotalScore));
+        return result;
     }
 
     // ── UPDATE ROOM STATUS ─────────────────────────────────────────────
@@ -199,32 +285,181 @@ public class RoomService : IRoomService
         await _db.SaveChangesAsync();
     }
 
+    // ── AUTO-SAVE DRAFT ────────────────────────────────────────────────
+    public async Task SaveDraftAnswerAsync(Guid roomPlayerId, Guid slideId, string answerData)
+    {
+        var redisDb = _redis.GetDatabase();
+        var draftKey = $"draft_answer:{roomPlayerId}:{slideId}";
+        await redisDb.StringSetAsync(draftKey, answerData, TimeSpan.FromHours(2));
+    }
+
+    // ── FINISH ROOM (PODIUM) ───────────────────────────────────────────
+    public async Task<IEnumerable<LeaderboardEntryDto>> FinishRoomAsync(Guid roomId, Guid hostId)
+    {
+        var room = await _db.Rooms.FindAsync(roomId) ?? throw new KeyNotFoundException("Không tìm thấy phòng.");
+        if (room.HostId != hostId) throw new UnauthorizedAccessException("Bạn không phải chủ phòng.");
+
+        await UpdateRoomStatusAsync(roomId, "FINISHED");
+
+        // Lấy top 3 từ Leaderboard (Redis hoặc DB)
+        var fullLeaderboard = await GetLeaderboardAsync(roomId);
+        return fullLeaderboard.Take(3);
+    }
+
+    // ── EXPORT REPORT ──────────────────────────────────────────────────
+    public async Task<byte[]> ExportRoomReportAsync(Guid roomId, Guid hostId)
+    {
+        var room = await _db.Rooms
+            .Include(r => r.Quiz)
+            .Include(r => r.Players)
+            .FirstOrDefaultAsync(r => r.Id == roomId) ?? throw new KeyNotFoundException("Không tìm thấy phòng.");
+            
+        if (room.HostId != hostId) throw new UnauthorizedAccessException("Bạn không phải chủ phòng.");
+
+        var players = room.Players.OrderByDescending(p => p.TotalScore).ToList();
+
+        using var workbook = new XLWorkbook();
+        var ws = workbook.Worksheets.Add("Kết quả phòng chơi");
+
+        // Header
+        ws.Cell(1, 1).Value = "Room PIN";
+        ws.Cell(1, 2).Value = room.PinCode;
+        ws.Cell(2, 1).Value = "Bộ đề";
+        ws.Cell(2, 2).Value = room.Quiz.Title;
+        ws.Cell(3, 1).Value = "Thời gian tạo";
+        ws.Cell(3, 2).Value = room.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss");
+
+        ws.Cell(5, 1).Value = "Hạng";
+        ws.Cell(5, 2).Value = "Người chơi";
+        ws.Cell(5, 3).Value = "Tổng điểm";
+
+        var headerRange = ws.Range("A5:C5");
+        headerRange.Style.Font.Bold = true;
+        headerRange.Style.Fill.BackgroundColor = XLColor.LightBlue;
+
+        // Data
+        int row = 6;
+        for (int i = 0; i < players.Count; i++)
+        {
+            ws.Cell(row, 1).Value = i + 1;
+            ws.Cell(row, 2).Value = players[i].Nickname;
+            ws.Cell(row, 3).Value = players[i].TotalScore;
+            row++;
+        }
+
+        ws.Columns().AdjustToContents();
+
+        using var stream = new MemoryStream();
+        workbook.SaveAs(stream);
+        return stream.ToArray();
+    }
+
     // ── HELPERS ────────────────────────────────────────────────────────
+    public async Task InviteGroupAsync(Guid hostId, Guid roomId, Guid groupId)
+    {
+        var room = await _db.Rooms.Include(r => r.Quiz).FirstOrDefaultAsync(r => r.Id == roomId)
+            ?? throw new KeyNotFoundException("Không tìm thấy phòng.");
+
+        if (room.HostId != hostId) throw new UnauthorizedAccessException("Bạn không phải chủ phòng.");
+
+        var group = await _db.Groups.Include(g => g.Members).FirstOrDefaultAsync(g => g.Id == groupId)
+            ?? throw new KeyNotFoundException("Không tìm thấy nhóm.");
+
+        if (group.HostId != hostId) throw new UnauthorizedAccessException("Bạn không phải chủ nhóm.");
+
+        // Lấy danh sách user ID đang ACTIVE trong nhóm
+        var activeMemberUserIds = group.Members.Where(m => m.Status == "ACTIVE").Select(m => m.UserId).ToList();
+
+        // Gửi push notification qua Hub cho từng member
+        foreach (var memberId in activeMemberUserIds)
+        {
+            await _notificationHub.Clients.Group($"user_{memberId}").SendAsync("NotificationReceived", new
+            {
+                Type = "GROUP_ROOM_INVITE",
+                Message = $"Chủ phòng {group.Name} đang mở phòng chơi bộ đề {room.Quiz.Title}. Tham gia ngay!",
+                RoomId = room.Id,
+                PinCode = room.PinCode
+            });
+        }
+    }
+
+    public async Task RemovePlayerAsync(Guid roomId, Guid playerId)
+    {
+        var player = await _db.RoomPlayers.FirstOrDefaultAsync(p => p.RoomId == roomId && p.Id == playerId);
+        if (player != null)
+        {
+            _db.RoomPlayers.Remove(player);
+            await _db.SaveChangesAsync();
+        }
+    }
+
+    public async Task<Dictionary<string, int>> GetWordCloudDataAsync(Guid roomId, Guid slideId)
+    {
+        var responses = await _db.PlayerResponses
+            .Include(pr => pr.RoomPlayer)
+            .Where(pr => pr.SlideId == slideId && pr.RoomPlayer.RoomId == roomId)
+            .Select(pr => pr.AnswerData)
+            .ToListAsync();
+
+        var wordCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var answer in responses)
+        {
+            if (string.IsNullOrWhiteSpace(answer)) continue;
+            // Phân tách từ khóa bằng dấu phẩy hoặc khoảng trắng (đơn giản)
+            var words = answer.Split(new[] { ',', ';', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)
+                              .Select(w => w.Trim())
+                              .Where(w => !string.IsNullOrEmpty(w));
+            
+            foreach (var word in words)
+            {
+                if (wordCounts.ContainsKey(word)) wordCounts[word]++;
+                else wordCounts[word] = 1;
+            }
+        }
+
+        return wordCounts.OrderByDescending(kvp => kvp.Value).ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+    }
     private static string GeneratePin()
         => Random.Shared.Next(100000, 999999).ToString();
 
-    private static bool GradeAnswer(Slide slide, string answerData)
+    /// <summary>
+    /// Chấm điểm chính xác cho QUIZ, MATCHING, POLL, WORD_CLOUD.
+    /// FILL_IN_BLANK được xử lý riêng bên trên với FuzzyMatchingService.
+    /// </summary>
+    private static bool GradeAnswerExact(Slide slide, string answerData)
     {
-        // QUIZ / FILL_IN_BLANK: compare submitted option ID or text
         if (slide.Type == "QUIZ")
         {
+            // answerData = GUID của option người dùng chọn
             if (Guid.TryParse(answerData, out var optionId))
                 return slide.Options.Any(o => o.Id == optionId && o.IsCorrect);
         }
-        else if (slide.Type == "FILL_IN_BLANK")
+        else if (slide.Type == "MATCHING")
         {
-            var keywords = slide.Options
-                .Where(o => o.IsCorrect)
-                .SelectMany(o => (o.BlankKeywords ?? "").Split(',', StringSplitOptions.TrimEntries))
-                .Select(k => k.ToLower());
-            return keywords.Contains(answerData.Trim().ToLower());
+            // answerData = JSON: [{"leftId":"...","rightContent":"..."}]
+            // Mỗi cặp ghép đúng → isCorrect
+            try
+            {
+                var pairs = JsonSerializer.Deserialize<List<MatchingPairAnswer>>(answerData);
+                if (pairs is null) return false;
+                return pairs.All(pair =>
+                    slide.Options.Any(o =>
+                        o.Id.ToString() == pair.LeftId &&
+                        FuzzyMatchingService.Normalize(o.MatchingPair) ==
+                        FuzzyMatchingService.Normalize(pair.RightContent)));
+            }
+            catch { return false; }
         }
-        // POLL and WORD_CLOUD — always "correct" (no right/wrong)
+        // POLL và WORD_CLOUD không có đáp án đúng/sai
         else if (slide.Type is "POLL" or "WORD_CLOUD")
             return true;
 
         return false;
     }
+
+    // DTO nội bộ cho MATCHING answer
+    private record MatchingPairAnswer(string LeftId, string RightContent);
 
     private static string GetCorrectAnswer(Slide slide)
     {

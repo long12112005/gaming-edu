@@ -1,6 +1,336 @@
-@GamingEdu.API_HostAddress = http://localhost:5173
+@HostAddress = https://localhost:7119
+# Lưu ý: Sửa lại port 7119 cho đúng với port HTTPS trong Properties/launchSettings.json của bạn
 
-GET {{GamingEdu.API_HostAddress}}/weatherforecast/
-Accept: application/json
+# ==========================================
+# 1. TEST ĐĂNG KÝ (GỬI OTP VÀ XÁC NHẬN)
+# ==========================================
+
+### 1.1 Gửi OTP Đăng ký
+# @name sendRegisterOtp
+POST {{HostAddress}}/api/auth/send-register-otp
+Content-Type: application/json
+
+{
+  "email": "testuser@gmail.com"
+}
+# KẾT QUẢ MONG ĐỢI: 200 OK. Kiểm tra tab Console/Terminal xem log báo email gửi đi chưa, hoặc check hộp thư thật nếu SMTP hoạt động.
+# LƯU Ý: Chạy file BE để thấy port đúng, thay thế port phía trên. Bạn sẽ phải vào Redis (ví dụ qua RedisInsight) hoặc Console log để lấy mã OTP 6 số.
 
 ###
+
+### 1.2 Đăng ký với OTP (Thay OTP bằng mã thật)
+# @name register
+POST {{HostAddress}}/api/auth/register
+Content-Type: application/json
+
+{
+  "nickname": "Player 1",
+  "email": "testuser@gmail.com",
+  "password": "Password123!",
+  "otp": "123456" 
+}
+# KẾT QUẢ MONG ĐỢI: 201 Created và trả về Token. Nếu nhập sai OTP sẽ báo 409 Conflict.
+
+
+# ==========================================
+# 2. TEST ĐĂNG NHẬP & CHỐNG BRUTE FORCE
+# ==========================================
+
+### 2.1 Đăng nhập đúng (Lấy Token)
+# @name login
+POST {{HostAddress}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "testuser@gmail.com",
+  "password": "Password123!"
+}
+# KẾT QUẢ MONG ĐỢI: 200 OK và trả về "token". Copy "token" dán vào biến authToken dưới đây:
+@authToken = eyJhbGci...
+
+###
+
+### 2.2 Đăng nhập sai 5 lần (Chống Brute-force)
+POST {{HostAddress}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "testuser@gmail.com",
+  "password": "WrongPassword"
+}
+# Thực hiện gọi API này 5 lần liên tiếp. Lần thứ 5 sẽ bị báo lỗi "Tài khoản bị khóa 15 phút do nhập sai mật khẩu quá 5 lần." với mã 401.
+
+
+# ==========================================
+# 3. TEST CẬP NHẬT THÔNG TIN VÀ XÓA TÀI KHOẢN (AUTH YÊU CẦU TOKEN)
+# ==========================================
+
+### 3.1 Cập nhật hồ sơ
+PUT {{HostAddress}}/api/users/profile
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "nickname": "Player 1 Updated",
+  "avatarUrl": "https://example.com/avatar.png"
+}
+# KẾT QUẢ MONG ĐỢI: 200 OK. Nếu dùng token cũ sau khi bị Single Session kick, sẽ bị 401.
+
+###
+
+### 3.2 Tự xóa tài khoản cá nhân
+DELETE {{HostAddress}}/api/users/me
+Authorization: Bearer {{authToken}}
+# KẾT QUẢ MONG ĐỢI: 200 OK. Trạng thái trong DB sẽ chuyển thành DELETED. API này tự động Kick phiên làm việc.
+
+
+# ==========================================
+# 4. TEST QUÊN MẬT KHẨU
+# ==========================================
+
+### 4.1 Gửi OTP Quên mật khẩu
+POST {{HostAddress}}/api/auth/forgot-password
+Content-Type: application/json
+
+{
+  "email": "testuser@gmail.com"
+}
+# KẾT QUẢ MONG ĐỢI: 200 OK. Tìm mã OTP trong log / email / redis.
+
+###
+
+### 4.2 Đặt lại mật khẩu (Thay OTP bằng mã thật)
+POST {{HostAddress}}/api/auth/reset-password
+Content-Type: application/json
+
+{
+  "email": "testuser@gmail.com",
+  "otp": "654321",
+  "newPassword": "NewPassword123!"
+}
+# KẾT QUẢ MONG ĐỢI: 200 OK. Hệ thống đổi mật khẩu và đá (kick) toàn bộ session cũ ra ngoài.
+
+
+# ==========================================
+# 5. TEST ADMIN QUẢN LÝ (Chỉ chạy được nếu IsAdmin = true)
+# ==========================================
+
+### 5.1 Khóa tài khoản
+PUT {{HostAddress}}/api/admin/users/11111111-2222-3333-4444-555555555555/lock?lockMinutes=30
+Authorization: Bearer {{authToken}}
+# KẾT QUẢ MONG ĐỢI: 200 OK nếu user gọi API này là Admin (IsAdmin=1). Nếu không sẽ bị 403 Forbidden. Đuổi user đó ra khỏi session.
+
+
+# ==========================================
+# 6. TEST QUẢN LÝ NHÓM / KHÔNG GIAN CHƠI
+# ==========================================
+
+### 6.1 Lấy danh sách nhóm của tôi
+GET {{HostAddress}}/api/groups
+Authorization: Bearer {{authToken}}
+# KẾT QUẢ MONG ĐỢI: 200 OK trả về mảng các nhóm bạn làm chủ hoặc đang là thành viên (ACTIVE).
+
+###
+
+### 6.2 Tạo nhóm mới
+# @name createGroup
+POST {{HostAddress}}/api/groups
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "name": "Nhóm ôn thi Toán 12",
+  "description": "Dành cho các bạn 2k7"
+}
+# KẾT QUẢ MONG ĐỢI: 201 Created trả về chi tiết nhóm. Lưu "id" của nhóm làm @groupId và mã "groupCode".
+@groupId = 11111111-2222-3333-4444-555555555555
+@groupCode = 123456
+
+###
+
+### 6.3 Xin gia nhập nhóm (User khác gọi API này)
+# Để test thực tế, bạn cần một Token của 1 tài khoản thứ 2
+POST {{HostAddress}}/api/groups/join
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "groupCode": "123456" 
+}
+# KẾT QUẢ MONG ĐỢI: 200 OK (Chờ duyệt). Host sẽ nhận được thông báo qua SignalR "NotificationReceived".
+
+###
+
+### 6.4 Lấy danh sách thành viên chờ duyệt/hiện tại của nhóm (Host gọi)
+GET {{HostAddress}}/api/groups/{{groupId}}/members
+Authorization: Bearer {{authToken}}
+# KẾT QUẢ MONG ĐỢI: Trả về danh sách, tìm thấy "id" của GroupMember để phục vụ bước 6.5 duyệt.
+@memberId = 22222222-3333-4444-5555-666666666666
+
+###
+
+### 6.5 Host Duyệt / Từ chối (Host gọi)
+PUT {{HostAddress}}/api/groups/{{groupId}}/members/{{memberId}}
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "isApproved": true
+}
+# KẾT QUẢ MONG ĐỢI: Trả về 200 OK. Member đó sẽ thành ACTIVE (nếu true) hoặc REJECTED (nếu false).
+
+###
+
+### 6.6 Host kick thành viên (Host gọi)
+DELETE {{HostAddress}}/api/groups/{{groupId}}/members/{{memberId}}
+Authorization: Bearer {{authToken}}
+# KẾT QUẢ MONG ĐỢI: Trả về 200 OK. Xóa hẳn dòng GroupMember.
+
+###
+
+### 6.7 Host giải tán nhóm (Host gọi)
+DELETE {{HostAddress}}/api/groups/{{groupId}}
+Authorization: Bearer {{authToken}}
+# KẾT QUẢ MONG ĐỢI: Trả về 200 OK. Status nhóm thành DISBANDED. Code cũ bị thêm prefix DISB_.
+
+
+# ==========================================
+# 7. TEST QUẢN LÝ BỘ CÂU HỎI (QUIZ / SLIDE BUILDER)
+# ==========================================
+
+### 7.1 Tạo Quiz mới
+# @name createQuiz
+POST {{HostAddress}}/api/quizzes
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "title": "Bộ đề Lịch Sử",
+  "topic": "History",
+  "isPublic": true
+}
+# KẾT QUẢ MONG ĐỢI: 201 Created. Lấy "id" của Quiz lưu vào biến @quizId
+@quizId = 11111111-2222-3333-4444-555555555555
+
+###
+
+### 7.2 Sửa Quiz
+PUT {{HostAddress}}/api/quizzes/{{quizId}}
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "title": "Bộ đề Lịch Sử (Đã sửa)"
+}
+# KẾT QUẢ MONG ĐỢI: 200 OK. Kiểm tra lại GET detail xem title có đổi chưa.
+
+###
+
+### 7.3 Duyệt Slide AI (Chuyển DRAFT -> PUBLISHED)
+# (Giả sử bạn đã có một Slide ID sinh bằng AI. Gán ID vào biến dưới)
+@slideId = 22222222-3333-4444-5555-666666666666
+PUT {{HostAddress}}/api/quizzes/{{quizId}}/slides/{{slideId}}/approve
+Authorization: Bearer {{authToken}}
+# KẾT QUẢ MONG ĐỢI: 200 OK.
+
+###
+
+### 7.4 Clone Quiz (Nhân bản bộ đề)
+POST {{HostAddress}}/api/quizzes/{{quizId}}/clone
+Authorization: Bearer {{authToken}}
+# KẾT QUẢ MONG ĐỢI: 201 Created. Trả về một Quiz mới với title có chữ "(Clone)" và toàn bộ slides bên trong được nhân bản (chuyển về không phải do AI tạo).
+
+###
+
+### 7.5 Xóa Quiz
+DELETE {{HostAddress}}/api/quizzes/{{quizId}}
+Authorization: Bearer {{authToken}}
+# KẾT QUẢ MONG ĐỢI: 200 OK. Dữ liệu bộ đề biến mất khỏi cơ sở dữ liệu. Lịch sử Cache bị xóa.
+
+
+# ==========================================
+# 8. TEST PHÒNG CHƠI / TƯƠNG TÁC (REST API)
+# ==========================================
+# LƯU Ý: Đa số các tính năng của phòng chơi (JoinRoom, KickPlayer, LockRoom, StartCountdown, NextSlide, SubmitAnswer) 
+# được thực hiện qua WebSockets (SignalR) tại /hubs/game nên KHÔNG THỂ test trực tiếp bằng file .http này.
+# Dưới đây chỉ là các API REST đi kèm.
+
+### 8.1 Tạo phòng chơi mới
+# @name createRoom
+POST {{HostAddress}}/api/rooms
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "quizId": "{{quizId}}",
+  "mode": "HOST_PACED"
+}
+# KẾT QUẢ MONG ĐỢI: 201 Created. Lấy "id" của Room lưu vào @roomId và mã PIN vào @pinCode.
+@roomId = 33333333-4444-5555-6666-777777777777
+@pinCode = 987654
+
+###
+
+### 8.2 Lấy thông tin phòng qua PIN (Dành cho Player nhập mã)
+GET {{HostAddress}}/api/rooms/pin/{{pinCode}}
+# KẾT QUẢ MONG ĐỢI: 200 OK trả về thông tin phòng và Quiz. (Dùng để xác nhận trước khi JoinRoom qua SignalR).
+
+###
+
+### 8.3 Host mời toàn bộ Group vào phòng chơi (Private Mode)
+# Yêu cầu: Bạn đã có @groupId từ phần 6.
+POST {{HostAddress}}/api/rooms/{{roomId}}/invite-group/{{groupId}}
+Authorization: Bearer {{authToken}}
+# KẾT QUẢ MONG ĐỢI: 200 OK. Các thành viên trong nhóm đang online sẽ nhận được Push Notification qua SignalR.
+
+###
+
+### 8.4 Lưu nháp đáp án (Auto-Save)
+PUT {{HostAddress}}/api/rooms/answers/draft
+Content-Type: application/json
+
+{
+  "roomPlayerId": "00000000-0000-0000-0000-000000000000",
+  "slideId": "00000000-0000-0000-0000-000000000000",
+  "answerData": "Nháp câu hỏi..."
+}
+# KẾT QUẢ MONG ĐỢI: 200 OK. Dữ liệu nháp được lưu lên Redis.
+
+###
+
+### 8.5 Kết thúc phòng chơi & Lấy bục vinh danh (Top 3)
+POST {{HostAddress}}/api/rooms/{{roomId}}/finish
+Authorization: Bearer {{authToken}}
+# KẾT QUẢ MONG ĐỢI: 200 OK. Trả về Top 3 người chơi có điểm cao nhất để diễn hoạt cảnh bục vinh danh (Podium).
+
+###
+
+### 8.6 Xuất báo cáo (Export Excel)
+GET {{HostAddress}}/api/rooms/{{roomId}}/export
+Authorization: Bearer {{authToken}}
+# KẾT QUẢ MONG ĐỢI: 200 OK. Hệ thống sẽ trả về file nhị phân (Binary) có định dạng .xlsx. Có thể mở trong Excel.
+
+###
+
+# ==============================================================================
+# 9. TƯƠNG TÁC BỔ TRỢ (Q&A) QUA SIGNALR
+# ==============================================================================
+# Bời vì Q&A sử dụng WebSocket / SignalR, bạn cần dùng client hỗ trợ WS (như Postman)
+# để test trực tiếp các Hub event tại: ws://localhost:xxxx/hubs/qa
+# 
+# Các Method có thể Invoke từ Client:
+# - JoinRoom(roomId) -> Tham gia phòng Q&A
+# - AskQuestion(playerId, { content: "Làm sao để giải câu 1?" }) -> Gửi câu hỏi
+# - UpvoteQuestion(questionId) -> Vote câu hỏi
+# - PinQuestion(questionId, true/false) -> Ghim câu hỏi (cần token Host)
+# - HideQuestion(questionId) -> Ẩn câu hỏi (cần token Host)
+# - ResolveQuestion(questionId) -> Đánh dấu giải quyết xong (cần token Host)
+#
+# Các Event Server sẽ Push về:
+# - LoadQuestions(questions)
+# - QuestionAdded(question)
+# - QuestionUpvoted({ questionId, upvotes })
+# - QuestionPinned({ questionId, isPinned })
+# - QuestionHidden(questionId)
+# - QuestionResolved(questionId)
+# - QAError(errorMessage)

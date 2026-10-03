@@ -628,11 +628,9 @@ export default function QuizEditorPage() {
             </div>
           </div>
 
-          <Link href={`/quiz/${quizId}`}>
-            <Button variant="outline" size="sm" id="btn-preview-quiz">
-              <Eye size={13} /> Xem Trước
-            </Button>
-          </Link>
+          <Button variant="outline" size="sm" id="btn-preview-quiz" href={`/quiz/${quizId}`}>
+            <Eye size={13} /> Xem Trước
+          </Button>
         </div>
       </header>
 

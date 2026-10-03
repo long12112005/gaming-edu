@@ -136,12 +136,10 @@ function QuizRow({
           {creating ? "Đang tạo..." : "Bắt Đầu"}
         </Button>
 
-        <Link href={`/quiz/${quiz.id}/edit`}>
-          <Button variant="outline" size="sm" id={`btn-edit-quiz-${quiz.id}`}>
-            <Pencil size={13} />
-            <span className="hidden sm:inline">Sửa</span>
-          </Button>
-        </Link>
+        <Button variant="outline" size="sm" id={`btn-edit-quiz-${quiz.id}`} href={`/quiz/${quiz.id}/edit`}>
+          <Pencil size={13} />
+          <span className="hidden sm:inline">Sửa</span>
+        </Button>
 
         {/* More menu */}
         <div className="relative">
@@ -395,16 +393,15 @@ export default function DashboardPage() {
                 Sẵn sàng tạo một trận đấu trí tuệ hôm nay?
               </p>
             </div>
-            <Link href="/quiz/create">
-              <Button
-                variant="primary"
-                size="md"
-                className="hidden sm:inline-flex"
-                id="btn-new-quiz"
-              >
-                <Plus size={16} /> Tạo Bộ Đề Mới
-              </Button>
-            </Link>
+            <Button
+              variant="primary"
+              size="md"
+              className="hidden sm:inline-flex"
+              id="btn-new-quiz"
+              href="/quiz/create"
+            >
+              <Plus size={16} /> Tạo Bộ Đề Mới
+            </Button>
           </div>
 
           {/* Stats Grid */}
@@ -493,11 +490,9 @@ export default function DashboardPage() {
           <div>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-800 text-gray-900">Bộ Đề Của Tôi</h2>
-              <Link href="/quiz/create">
-                <Button variant="outline" size="sm" id="btn-add-quiz">
-                  <Plus size={13} /> Thêm Mới
-                </Button>
-              </Link>
+              <Button variant="outline" size="sm" id="btn-add-quiz" href="/quiz/create">
+                <Plus size={13} /> Thêm Mới
+              </Button>
             </div>
 
             {loading ? (
@@ -518,11 +513,9 @@ export default function DashboardPage() {
                 <p className="text-sm text-gray-400 mb-5">
                   Tạo bộ đề đầu tiên của bạn ngay!
                 </p>
-                <Link href="/quiz/create">
-                  <Button variant="primary" size="md" id="btn-first-quiz">
-                    <Plus size={15} /> Tạo Bộ Đề
-                  </Button>
-                </Link>
+                <Button variant="primary" size="md" id="btn-first-quiz" href="/quiz/create">
+                  <Plus size={15} /> Tạo Bộ Đề
+                </Button>
               </div>
             ) : (
               <div className="space-y-3">

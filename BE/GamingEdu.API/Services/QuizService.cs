@@ -11,6 +11,10 @@ public interface IQuizService
     Task<IEnumerable<QuizSummaryDto>> GetPublicQuizzesAsync();
     Task<QuizDetailDto?> GetQuizDetailAsync(Guid quizId);
     Task<QuizSummaryDto> CreateQuizAsync(Guid creatorId, CreateQuizRequest request);
+    Task<QuizSummaryDto> UpdateQuizAsync(Guid creatorId, Guid quizId, UpdateQuizRequest request);
+    Task DeleteQuizAsync(Guid creatorId, Guid quizId);
+    Task<QuizSummaryDto> CloneQuizAsync(Guid userId, Guid originalQuizId);
+    Task ApproveAISlideAsync(Guid creatorId, Guid quizId, Guid slideId);
     Task InvalidatePublicQuizCacheAsync();
 }
 
@@ -73,7 +77,8 @@ public class QuizService : IQuizService
         var cacheOptions = new MemoryCacheEntryOptions()
             .SetSlidingExpiration(TimeSpan.FromMinutes(5))
             .SetAbsoluteExpiration(TimeSpan.FromMinutes(15))
-            .SetPriority(CacheItemPriority.Normal);
+            .SetPriority(CacheItemPriority.Normal)
+            .SetSize(1);
 
         _cache.Set(PublicQuizzesCacheKey, quizzes, cacheOptions);
         return quizzes;
@@ -129,7 +134,8 @@ public class QuizService : IQuizService
 
         var cacheOptions = new MemoryCacheEntryOptions()
             .SetSlidingExpiration(TimeSpan.FromMinutes(10))
-            .SetAbsoluteExpiration(TimeSpan.FromMinutes(30));
+            .SetAbsoluteExpiration(TimeSpan.FromMinutes(30))
+            .SetSize(1);
 
         _cache.Set(cacheKey, dto, cacheOptions);
         return dto;
@@ -162,6 +168,115 @@ public class QuizService : IQuizService
         return new QuizSummaryDto(
             quiz.Id, quiz.Title, quiz.CoverImageUrl, quiz.Topic, quiz.IsPublic,
             0, quiz.CreatedAt, creator.Nickname, creator.AvatarUrl);
+    }
+
+    // ── UPDATE QUIZ ─────────────────────────────────────────────────────
+    public async Task<QuizSummaryDto> UpdateQuizAsync(Guid creatorId, Guid quizId, UpdateQuizRequest request)
+    {
+        var quiz = await _db.Quizzes.Include(q => q.Creator).FirstOrDefaultAsync(q => q.Id == quizId)
+            ?? throw new KeyNotFoundException("Không tìm thấy bộ đề.");
+
+        if (quiz.CreatorId != creatorId) throw new UnauthorizedAccessException("Bạn không có quyền sửa bộ đề này.");
+
+        if (request.Title != null) quiz.Title = request.Title;
+        if (request.CoverImageUrl != null) quiz.CoverImageUrl = request.CoverImageUrl;
+        if (request.Topic != null) quiz.Topic = request.Topic;
+        if (request.IsPublic.HasValue) quiz.IsPublic = request.IsPublic.Value;
+
+        quiz.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+
+        await InvalidatePublicQuizCacheAsync();
+        _cache.Remove($"{QuizDetailPrefix}{quizId}"); // Invalidate specific quiz cache
+
+        return new QuizSummaryDto(
+            quiz.Id, quiz.Title, quiz.CoverImageUrl, quiz.Topic, quiz.IsPublic,
+            0, quiz.CreatedAt, quiz.Creator.Nickname, quiz.Creator.AvatarUrl);
+    }
+
+    // ── DELETE QUIZ ─────────────────────────────────────────────────────
+    public async Task DeleteQuizAsync(Guid creatorId, Guid quizId)
+    {
+        var quiz = await _db.Quizzes.FindAsync(quizId)
+            ?? throw new KeyNotFoundException("Không tìm thấy bộ đề.");
+
+        if (quiz.CreatorId != creatorId) throw new UnauthorizedAccessException("Bạn không có quyền xóa bộ đề này.");
+
+        _db.Quizzes.Remove(quiz);
+        await _db.SaveChangesAsync();
+
+        await InvalidatePublicQuizCacheAsync();
+        _cache.Remove($"{QuizDetailPrefix}{quizId}");
+    }
+
+    // ── CLONE QUIZ ─────────────────────────────────────────────────────
+    public async Task<QuizSummaryDto> CloneQuizAsync(Guid userId, Guid originalQuizId)
+    {
+        var original = await _db.Quizzes
+            .AsNoTracking()
+            .Include(q => q.Slides)
+                .ThenInclude(s => s.Options)
+            .FirstOrDefaultAsync(q => q.Id == originalQuizId)
+            ?? throw new KeyNotFoundException("Không tìm thấy bộ đề gốc.");
+
+        if (!original.IsPublic && original.CreatorId != userId)
+        {
+            throw new UnauthorizedAccessException("Bộ đề này không được phép nhân bản.");
+        }
+
+        var creator = await _db.Users.FindAsync(userId);
+        var newQuiz = new Quiz
+        {
+            Id = Guid.NewGuid(),
+            CreatorId = userId,
+            Title = original.Title + " (Clone)",
+            CoverImageUrl = original.CoverImageUrl,
+            Topic = original.Topic,
+            IsPublic = false, // Cloned quiz is private by default
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+            Slides = original.Slides.Select(s => new Slide
+            {
+                Id = Guid.NewGuid(),
+                Type = s.Type,
+                QuestionText = s.QuestionText,
+                TimeLimit = s.TimeLimit,
+                Points = s.Points,
+                Status = "PUBLISHED", // Inherit but auto publish
+                OrderIndex = s.OrderIndex,
+                IsAIGenerated = false, // It's cloned, not raw AI anymore
+                Options = s.Options.Select(o => new SlideOption
+                {
+                    Id = Guid.NewGuid(),
+                    Content = o.Content,
+                    IsCorrect = o.IsCorrect,
+                    MatchingPair = o.MatchingPair,
+                    BlankKeywords = o.BlankKeywords,
+                    OrderIndex = o.OrderIndex
+                }).ToList()
+            }).ToList()
+        };
+
+        _db.Quizzes.Add(newQuiz);
+        await _db.SaveChangesAsync();
+
+        return new QuizSummaryDto(
+            newQuiz.Id, newQuiz.Title, newQuiz.CoverImageUrl, newQuiz.Topic, newQuiz.IsPublic,
+            newQuiz.Slides.Count, newQuiz.CreatedAt, creator!.Nickname, creator.AvatarUrl);
+    }
+
+    // ── APPROVE AI SLIDE ───────────────────────────────────────────────
+    public async Task ApproveAISlideAsync(Guid creatorId, Guid quizId, Guid slideId)
+    {
+        var slide = await _db.Slides.Include(s => s.Quiz).FirstOrDefaultAsync(s => s.Id == slideId && s.QuizId == quizId)
+            ?? throw new KeyNotFoundException("Không tìm thấy slide.");
+
+        if (slide.Quiz.CreatorId != creatorId) throw new UnauthorizedAccessException("Bạn không có quyền sửa bộ đề này.");
+
+        slide.Status = "PUBLISHED";
+        await _db.SaveChangesAsync();
+
+        _cache.Remove($"{QuizDetailPrefix}{quizId}");
     }
 
     // ── CACHE INVALIDATION ──────────────────────────────────────────────

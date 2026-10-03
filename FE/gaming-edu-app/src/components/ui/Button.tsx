@@ -2,15 +2,17 @@
 
 import { cn } from "@/lib/utils";
 import { ButtonHTMLAttributes, forwardRef } from "react";
+import Link from "next/link";
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: "primary" | "yellow" | "outline" | "ghost" | "blue";
   size?: "sm" | "md" | "lg";
   loading?: boolean;
   fullWidth?: boolean;
+  href?: string;
 }
 
-const Button = forwardRef<HTMLButtonElement, ButtonProps>(
+const Button = forwardRef<HTMLButtonElement | HTMLAnchorElement, ButtonProps>(
   (
     {
       variant = "primary",
@@ -20,6 +22,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       className,
       children,
       disabled,
+      href,
       ...props
     },
     ref
@@ -45,18 +48,36 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       lg: "text-base px-8 py-4",
     };
 
+    const combinedClassName = cn(
+      base,
+      variants[variant],
+      sizes[size],
+      fullWidth && "w-full",
+      (disabled || loading) && "opacity-60 cursor-not-allowed hover:translate-y-0",
+      className
+    );
+
+    if (href) {
+      return (
+        <Link
+          href={href}
+          className={combinedClassName}
+          ref={ref as any}
+          {...(props as any)}
+        >
+          {loading && (
+            <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+          )}
+          {children}
+        </Link>
+      );
+    }
+
     return (
       <button
-        ref={ref}
+        ref={ref as React.Ref<HTMLButtonElement>}
         disabled={disabled || loading}
-        className={cn(
-          base,
-          variants[variant],
-          sizes[size],
-          fullWidth && "w-full",
-          (disabled || loading) && "opacity-60 cursor-not-allowed hover:translate-y-0",
-          className
-        )}
+        className={combinedClassName}
         {...props}
       >
         {loading && (

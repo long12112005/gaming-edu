@@ -272,6 +272,7 @@ public class Room
     public Quiz Quiz { get; set; } = null!;
 
     public ICollection<RoomPlayer> Players { get; set; } = [];
+    public ICollection<QuestionQA> Questions { get; set; } = [];
 }
 
 // ============================================================
@@ -304,6 +305,7 @@ public class RoomPlayer
     public User? User { get; set; }
 
     public ICollection<PlayerResponse> Responses { get; set; } = [];
+    public ICollection<QuestionQA> Questions { get; set; } = [];
 }
 
 // ============================================================
@@ -329,4 +331,34 @@ public class PlayerResponse
 
     [ForeignKey(nameof(SlideId))]
     public Slide Slide { get; set; } = null!;
+}
+
+// ============================================================
+// maps to: questions_qa table
+// ============================================================
+public class QuestionQA
+{
+    [Key]
+    public Guid Id { get; set; } = Guid.NewGuid();
+
+    public Guid RoomId { get; set; }
+    public Guid PlayerId { get; set; }
+
+    [Required, MaxLength(1000)]
+    public string Content { get; set; } = string.Empty;
+
+    public int Upvotes { get; set; } = 0;
+
+    [MaxLength(50)]
+    public string Status { get; set; } = "PENDING";
+    // PENDING | PINNED | HIDDEN | RESOLVED
+
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    // Navigation
+    [ForeignKey(nameof(RoomId))]
+    public Room Room { get; set; } = null!;
+
+    [ForeignKey(nameof(PlayerId))]
+    public RoomPlayer Player { get; set; } = null!;
 }

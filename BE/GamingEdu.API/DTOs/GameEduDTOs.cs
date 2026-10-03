@@ -4,10 +4,25 @@ namespace GamingEdu.API.DTOs;
 
 // ─── Auth DTOs ─────────────────────────────────────────────────────────────
 
+public record SendRegisterOtpRequest(
+    [Required, EmailAddress, MaxLength(255)] string Email
+);
+
 public record RegisterRequest(
     [Required, MaxLength(100)] string Nickname,
     [Required, EmailAddress, MaxLength(255)] string Email,
-    [Required, MinLength(6), MaxLength(100)] string Password
+    [Required, MinLength(6), MaxLength(100)] string Password,
+    [Required, MaxLength(6)] string Otp
+);
+
+public record ForgotPasswordRequest(
+    [Required, EmailAddress, MaxLength(255)] string Email
+);
+
+public record ResetPasswordRequest(
+    [Required, EmailAddress, MaxLength(255)] string Email,
+    [Required, MaxLength(6)] string Otp,
+    [Required, MinLength(6), MaxLength(100)] string NewPassword
 );
 
 public record LoginRequest(
@@ -39,6 +54,11 @@ public record UserQuotaDto(
     int AIUsedToday,
     int MaxRoomCapacity,
     DateOnly? ResetDate
+);
+
+public record UpdateProfileRequest(
+    [MaxLength(100)] string? Nickname,
+    [MaxLength(500)] string? AvatarUrl
 );
 
 // ─── Quiz DTOs ─────────────────────────────────────────────────────────────
@@ -73,6 +93,13 @@ public record CreateQuizRequest(
     bool IsPublic = false
 );
 
+public record UpdateQuizRequest(
+    [MaxLength(255)] string? Title,
+    string? CoverImageUrl,
+    string? Topic,
+    bool? IsPublic
+);
+
 // ─── Slide DTOs ────────────────────────────────────────────────────────────
 
 public record SlideDto(
@@ -95,6 +122,45 @@ public record SlideOptionDto(
     string? BlankKeywords,
     int OrderIndex
 );
+
+// ─── Slide Request DTOs ────────────────────────────────────────────────────
+
+public record SlideOptionRequest(
+    [System.ComponentModel.DataAnnotations.Required] string Content,
+    bool IsCorrect = false,
+    string? MatchingPair  = null,   // dành cho loại MATCHING
+    string? BlankKeywords = null    // dành cho loại FILL_IN_BLANK, format: "kw1,kw2"
+);
+
+public record CreateSlideRequest(
+    [System.ComponentModel.DataAnnotations.Required,
+     System.ComponentModel.DataAnnotations.MaxLength(50)]
+    string Type,                    // QUIZ | FILL_IN_BLANK | MATCHING | POLL | WORD_CLOUD
+
+    [System.ComponentModel.DataAnnotations.Required]
+    string QuestionText,
+
+    int TimeLimit = 30,             // giây
+    int Points = 1000,
+    string? Status = null,          // nếu null → DRAFT; AI slides luôn là DRAFT
+    int? OrderIndex = null,         // nếu null → tự động thêm vào cuối
+    bool IsAIGenerated = false,
+    List<SlideOptionRequest>? Options = null
+);
+
+public record UpdateSlideRequest(
+    string? Type          = null,
+    string? QuestionText  = null,
+    int?    TimeLimit     = null,
+    int?    Points        = null,
+    string? Status        = null,   // "DRAFT" | "PUBLISHED"
+    int?    OrderIndex    = null,
+    List<SlideOptionRequest>? Options = null  // null = giữ nguyên options cũ
+);
+
+public record SlideOrderItem(Guid SlideId, int OrderIndex);
+
+public record ApproveAllResult(int ApprovedCount);
 
 // ─── Room DTOs ─────────────────────────────────────────────────────────────
 
@@ -191,6 +257,46 @@ public record GroupDto(
     string HostNickname,
     int MemberCount,
     DateTime CreatedAt
+);
+
+public record GroupMemberDto(
+    Guid Id,
+    Guid UserId,
+    string Nickname,
+    string? AvatarUrl,
+    string Status,
+    DateTime JoinedAt
+);
+
+public record JoinGroupRequest(
+    [Required, MaxLength(10)] string GroupCode
+);
+
+public record RespondJoinRequest(
+    [Required] bool IsApproved // true = ACCEPT, false = REJECT
+);
+
+public record SaveDraftRequest(
+    [Required] Guid RoomPlayerId,
+    [Required] Guid SlideId,
+    [Required] string AnswerData
+);
+
+// ─── Q&A DTOs ──────────────────────────────────────────────────────────────
+public record QuestionQADto(
+    Guid Id,
+    Guid RoomId,
+    Guid PlayerId,
+    string PlayerName,
+    string? PlayerAvatar,
+    string Content,
+    int Upvotes,
+    string Status,
+    DateTime CreatedAt
+);
+
+public record AskQuestionRequest(
+    [Required] string Content
 );
 
 // ─── Common ────────────────────────────────────────────────────────────────

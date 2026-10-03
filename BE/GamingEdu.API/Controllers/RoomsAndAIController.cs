@@ -84,6 +84,66 @@ public class RoomsController : ControllerBase
         return Ok(new ApiResponse<IEnumerable<LeaderboardEntryDto>>(true, null, leaderboard));
     }
 
+    // POST /api/rooms/{id}/invite-group/{groupId}
+    /// <summary>Send SignalR invite to all members of a group to join the room.</summary>
+    [HttpPost("{id:guid}/invite-group/{groupId:guid}")]
+    public async Task<IActionResult> InviteGroup(Guid id, Guid groupId)
+    {
+        var userId = GetCurrentUserId();
+        if (userId is null) return Unauthorized();
+
+        try
+        {
+            await _roomService.InviteGroupAsync(userId.Value, id, groupId);
+            return Ok(new ApiResponse<string>(true, "Đã gửi lời mời đến tất cả thành viên trong nhóm.", null));
+        }
+        catch (UnauthorizedAccessException ex) { return StatusCode(403, new ApiResponse<string>(false, ex.Message, null)); }
+        catch (KeyNotFoundException ex) { return NotFound(new ApiResponse<string>(false, ex.Message, null)); }
+    }
+
+    // PUT /api/rooms/answers/draft
+    /// <summary>Auto-save draft answer every 30s.</summary>
+    [HttpPut("answers/draft")]
+    public async Task<IActionResult> SaveDraftAnswer([FromBody] SaveDraftRequest request)
+    {
+        await _roomService.SaveDraftAnswerAsync(request.RoomPlayerId, request.SlideId, request.AnswerData);
+        return Ok(new ApiResponse<string>(true, "Draft saved.", null));
+    }
+
+    // POST /api/rooms/{id}/finish
+    /// <summary>Finish the room and return top 3 for podium.</summary>
+    [HttpPost("{id:guid}/finish")]
+    public async Task<IActionResult> FinishRoom(Guid id)
+    {
+        var userId = GetCurrentUserId();
+        if (userId is null) return Unauthorized();
+
+        try
+        {
+            var top3 = await _roomService.FinishRoomAsync(id, userId.Value);
+            return Ok(new ApiResponse<IEnumerable<LeaderboardEntryDto>>(true, "Phòng đã kết thúc.", top3));
+        }
+        catch (UnauthorizedAccessException ex) { return StatusCode(403, new ApiResponse<string>(false, ex.Message, null)); }
+        catch (KeyNotFoundException ex) { return NotFound(new ApiResponse<string>(false, ex.Message, null)); }
+    }
+
+    // GET /api/rooms/{id}/export
+    /// <summary>Export room results to Excel.</summary>
+    [HttpGet("{id:guid}/export")]
+    public async Task<IActionResult> ExportRoomReport(Guid id)
+    {
+        var userId = GetCurrentUserId();
+        if (userId is null) return Unauthorized();
+
+        try
+        {
+            var fileBytes = await _roomService.ExportRoomReportAsync(id, userId.Value);
+            return File(fileBytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"Room_{id}_Report.xlsx");
+        }
+        catch (UnauthorizedAccessException ex) { return StatusCode(403, new ApiResponse<string>(false, ex.Message, null)); }
+        catch (KeyNotFoundException ex) { return NotFound(new ApiResponse<string>(false, ex.Message, null)); }
+    }
+
     private Guid? GetCurrentUserId()
     {
         var claim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;

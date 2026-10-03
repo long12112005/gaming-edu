@@ -229,9 +229,7 @@ export default function QuizDetailPage() {
         <X size={48} className="text-red-400" />
         <h1 className="text-2xl font-800 text-gray-900">Không tìm thấy bộ đề</h1>
         <p className="text-gray-500">Bộ đề này không tồn tại hoặc đã bị xóa.</p>
-        <Link href="/">
-          <Button variant="primary">Về Trang Chủ</Button>
-        </Link>
+        <Button variant="primary" href="/">Về Trang Chủ</Button>
       </div>
     );
   }
@@ -264,11 +262,9 @@ export default function QuizDetailPage() {
 
           <div className="flex items-center gap-2">
             {isLoggedIn && (
-              <Link href={`/quiz/${quizId}/edit`}>
-                <Button variant="outline" size="sm" id="btn-edit-quiz">
-                  <Pencil size={13} /> Chỉnh Sửa
-                </Button>
-              </Link>
+              <Button variant="outline" size="sm" id="btn-edit-quiz" href={`/quiz/${quizId}/edit`}>
+                <Pencil size={13} /> Chỉnh Sửa
+              </Button>
             )}
             <Button
               variant="primary"
@@ -419,11 +415,9 @@ export default function QuizDetailPage() {
                 </p>
               </div>
               {isLoggedIn && (
-                <Link href={`/quiz/${quizId}/edit`}>
-                  <Button variant="outline" size="sm" id="btn-edit-slides">
-                    <Pencil size={13} /> Thêm / Sửa
-                  </Button>
-                </Link>
+                <Button variant="outline" size="sm" id="btn-edit-slides" href={`/quiz/${quizId}/edit`}>
+                  <Pencil size={13} /> Thêm / Sửa
+                </Button>
               )}
             </div>
 
@@ -434,11 +428,9 @@ export default function QuizDetailPage() {
                   Chưa có câu hỏi nào
                 </p>
                 {isLoggedIn && (
-                  <Link href={`/quiz/${quizId}/edit`}>
-                    <Button variant="primary" size="sm">
+                    <Button variant="primary" size="sm" href={`/quiz/${quizId}/edit`}>
                       <Plus size={14} /> Thêm Câu Hỏi
                     </Button>
-                  </Link>
                 )}
               </div>
             ) : (

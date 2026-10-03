@@ -22,18 +22,22 @@ public class GameHub : Hub
     private readonly IRoomService _roomService;
     private readonly IQuizService _quizService;
     private readonly ILogger<GameHub> _logger;
+    private readonly AnswerQueueService _answerQueue;
 
     // In-memory room state (production: use Redis/distributed cache)
     private static readonly Dictionary<string, int> RoomSlideIndex = new();
+    private static readonly HashSet<string> LockedRooms = new();
 
     public GameHub(
         IRoomService roomService,
         IQuizService quizService,
-        ILogger<GameHub> logger)
+        ILogger<GameHub> logger,
+        AnswerQueueService answerQueue)
     {
         _roomService = roomService;
         _quizService  = quizService;
         _logger       = logger;
+        _answerQueue  = answerQueue;
     }
 
     // ── CLIENT CONNECTIONS ─────────────────────────────────────────────
@@ -61,6 +65,12 @@ public class GameHub : Hub
             Guid? userId = null;
             var userIdClaim = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (Guid.TryParse(userIdClaim, out var parsed)) userId = parsed;
+
+            if (LockedRooms.Contains(request.PinCode))
+            {
+                await SendErrorAsync("Phòng này đã bị khóa. Không thể tham gia.");
+                return;
+            }
 
             var (room, player) = await _roomService.JoinRoomAsync(userId, request);
 
@@ -136,16 +146,61 @@ public class GameHub : Hub
             {
                 RoomId  = roomId,
                 Mode    = "HOST_PACED",
-                Message = "Trò chơi bắt đầu! Sẵn sàng chưa?",
+                Message = "Trò chơi bắt đầu!",
             });
 
-            // Small delay then send first slide
-            await Task.Delay(2000);
+            // Gửi luôn slide đầu tiên (nếu client tự xử lý UI, hoặc đã gọi StartCountdown trước)
             await Clients.Group(groupName).SendAsync("SlideStarted", slideDto);
         }
         catch (Exception ex)
         {
             await SendErrorAsync(ex.Message);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // ── COUNTDOWN ──────────────────────────────────────────────────────
+    // ═══════════════════════════════════════════════════════════════════
+    [Authorize]
+    public async Task StartCountdown(int seconds = 3)
+    {
+        var groupName = Context.Items["GroupName"] as string;
+        if (!string.IsNullOrEmpty(groupName))
+        {
+            await Clients.Group(groupName).SendAsync("CountdownStarted", seconds);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // ── KICK PLAYER & LOCK ROOM ────────────────────────────────────────
+    // ═══════════════════════════════════════════════════════════════════
+    [Authorize]
+    public async Task LockRoom(bool isLocked)
+    {
+        var pinCode = Context.Items["PinCode"] as string;
+        if (!string.IsNullOrEmpty(pinCode))
+        {
+            if (isLocked) LockedRooms.Add(pinCode);
+            else LockedRooms.Remove(pinCode);
+            
+            var groupName = Context.Items["GroupName"] as string;
+            await Clients.Group(groupName!).SendAsync("RoomLockedStatusChanged", isLocked);
+        }
+    }
+
+    [Authorize]
+    public async Task KickPlayer(Guid playerIdToKick)
+    {
+        var roomId = Context.Items["RoomId"] as Guid?;
+        if (roomId == null) return;
+
+        // Xóa player khỏi Database (tùy chọn: đánh dấu BANNED)
+        await _roomService.RemovePlayerAsync(roomId.Value, playerIdToKick);
+
+        var groupName = Context.Items["GroupName"] as string;
+        if (!string.IsNullOrEmpty(groupName))
+        {
+            await Clients.Group(groupName).SendAsync("PlayerKicked", playerIdToKick);
         }
     }
 
@@ -197,18 +252,23 @@ public class GameHub : Hub
                 return;
             }
 
-            // Grade answer and save response to player_responses table
-            var result = await _roomService.SubmitAnswerAsync(playerId, request);
-
-            // Send personal result back to the submitting player only
-            await Clients.Caller.SendAsync("AnswerResult", result);
-
-            // Broadcast updated leaderboard to the whole room
+            // Thay vì gọi _roomService.SubmitAnswerAsync đồng bộ tại đây, 
+            // đẩy vào Message Queue (Channel) để Worker chạy ngầm xử lý.
             var roomId = (Guid)Context.Items["RoomId"]!;
-            var leaderboard = await _roomService.GetLeaderboardAsync(roomId);
-            var groupName   = Context.Items["GroupName"] as string ?? "";
+            var groupName = Context.Items["GroupName"] as string ?? "";
 
-            await Clients.Group(groupName).SendAsync("LeaderboardUpdated", leaderboard);
+            var payload = new AnswerQueuePayload(
+                playerId, 
+                roomId, 
+                Context.ConnectionId, 
+                groupName, 
+                request
+            );
+
+            await _answerQueue.QueueAnswerAsync(payload);
+
+            // Báo lại cho user biết đã ghi nhận và đang chờ kết quả
+            await Clients.Caller.SendAsync("AnswerAccepted", new { request.SlideId, Message = "Đã nhận câu trả lời, đang chấm..." });
         }
         catch (Exception ex)
         {
