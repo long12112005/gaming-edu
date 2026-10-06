@@ -1,72 +1,76 @@
 using GamingEdu.API.Data;
 using GamingEdu.API.Models;
 using Microsoft.EntityFrameworkCore;
+using RabbitMQ.Client;
+using RabbitMQ.Client.Events;
+using System.Text;
 
 namespace GamingEdu.API.Services;
 
 /// <summary>
-/// Hosted background service that polls ai_jobs table for PENDING jobs,
+/// Hosted background service that consumes AI jobs from RabbitMQ,
 /// processes them (simulated AI generation), and updates status to COMPLETED/FAILED.
 /// </summary>
 public class AIJobWorker : BackgroundService
 {
+    private readonly IConnectionFactory _factory;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<AIJobWorker> _logger;
-    private readonly TimeSpan _pollInterval = TimeSpan.FromSeconds(10);
 
-    public AIJobWorker(IServiceScopeFactory scopeFactory, ILogger<AIJobWorker> logger)
+    public AIJobWorker(IConnectionFactory factory, IServiceScopeFactory scopeFactory, ILogger<AIJobWorker> logger)
     {
+        _factory = factory;
         _scopeFactory = scopeFactory;
         _logger       = logger;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("AI Job Worker started. Polling every {Interval}s",
-            _pollInterval.TotalSeconds);
+        _logger.LogInformation("AI Job Worker started. Listening to RabbitMQ.");
 
-        while (!stoppingToken.IsCancellationRequested)
+        var connection = await _factory.CreateConnectionAsync(stoppingToken);
+        var channel = await connection.CreateChannelAsync(cancellationToken: stoppingToken);
+        
+        await channel.QueueDeclareAsync(queue: "ai_jobs_queue", durable: true, exclusive: false, autoDelete: false, cancellationToken: stoppingToken);
+
+        var consumer = new AsyncEventingBasicConsumer(channel);
+        consumer.ReceivedAsync += async (model, ea) =>
         {
-            try
+            var body = ea.Body.ToArray();
+            var message = Encoding.UTF8.GetString(body);
+            
+            // Expected message is the Job ID (Guid)
+            if (Guid.TryParse(message.Trim('"'), out var jobId))
             {
-                await ProcessPendingJobsAsync(stoppingToken);
+                try
+                {
+                    using var scope = _scopeFactory.CreateScope();
+                    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+                    
+                    var job = await db.AIJobs.FindAsync(new object[] { jobId }, stoppingToken);
+                    if (job != null && job.Status == "PENDING")
+                    {
+                        await ProcessSingleJobAsync(db, job, stoppingToken);
+                    }
+                    
+                    await channel.BasicAckAsync(ea.DeliveryTag, false, cancellationToken: stoppingToken);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error processing AI job");
+                    await channel.BasicNackAsync(ea.DeliveryTag, false, true, cancellationToken: stoppingToken);
+                }
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            else
             {
-                _logger.LogError(ex, "Unhandled error in AI Job Worker");
+                await channel.BasicAckAsync(ea.DeliveryTag, false, cancellationToken: stoppingToken); // discard invalid message
             }
+        };
 
-            await Task.Delay(_pollInterval, stoppingToken);
-        }
-
-        _logger.LogInformation("AI Job Worker stopped.");
-    }
-
-    private async Task ProcessPendingJobsAsync(CancellationToken ct)
-    {
-        // Use a new scope per cycle (DbContext is scoped, not singleton)
-        using var scope = _scopeFactory.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-
-        // Query PENDING jobs from ai_jobs table (idx_ai_jobs_status index used)
-        var pendingJobs = await db.AIJobs
-            .Where(j => j.Status == "PENDING")
-            .OrderBy(j => j.CreatedAt)
-            .Take(5) // process up to 5 per cycle to avoid blocking
-            .ToListAsync(ct);
-
-        if (!pendingJobs.Any())
-        {
-            _logger.LogDebug("No PENDING AI jobs found.");
-            return;
-        }
-
-        _logger.LogInformation("Processing {Count} pending AI jobs", pendingJobs.Count);
-
-        foreach (var job in pendingJobs)
-        {
-            await ProcessSingleJobAsync(db, job, ct);
-        }
+        await channel.BasicConsumeAsync(queue: "ai_jobs_queue", autoAck: false, consumer: consumer, cancellationToken: stoppingToken);
+        
+        // Block this task until the application stops
+        await Task.Delay(Timeout.InfiniteTimeSpan, stoppingToken);
     }
 
     private async Task ProcessSingleJobAsync(ApplicationDbContext db, AIJob job, CancellationToken ct)

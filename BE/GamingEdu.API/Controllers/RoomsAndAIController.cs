@@ -161,8 +161,13 @@ public class RoomsController : ControllerBase
 public class AIJobsController : ControllerBase
 {
     private readonly ApplicationDbContext _db;
+    private readonly RabbitMQPublisher _mqPublisher;
 
-    public AIJobsController(ApplicationDbContext db) => _db = db;
+    public AIJobsController(ApplicationDbContext db, RabbitMQPublisher mqPublisher)
+    {
+        _db = db;
+        _mqPublisher = mqPublisher;
+    }
 
     // POST /api/aijobs
     /// <summary>Queue an AI quiz generation job. Maps to ai_jobs table.</summary>
@@ -196,6 +201,9 @@ public class AIJobsController : ControllerBase
         _db.AIJobs.Add(job);
         await _db.SaveChangesAsync();
 
+        // Đẩy Message vào RabbitMQ thay vì chờ Worker Polling DB
+        await _mqPublisher.PublishAsync("ai_jobs_queue", job.Id.ToString());
+
         var dto = new AIJobStatusDto(
             job.Id, job.Status, job.FileUrl,
             job.CreatedAt, job.CompletedAt, job.ErrorMessage);
@@ -220,6 +228,26 @@ public class AIJobsController : ControllerBase
             job.CreatedAt, job.CompletedAt, job.ErrorMessage);
 
         return Ok(new ApiResponse<AIJobStatusDto>(true, null, dto));
+    }
+
+    // PUT /api/aijobs/slides/{slideId}/approve
+    /// <summary>Approve an AI generated slide (change DRAFT to PUBLISHED).</summary>
+    [HttpPut("slides/{slideId:guid}/approve")]
+    public async Task<IActionResult> ApproveSlide(Guid slideId)
+    {
+        var userId = GetCurrentUserId();
+        if (userId == null) return Unauthorized();
+
+        var slide = await _db.Slides.Include(s => s.Quiz).FirstOrDefaultAsync(s => s.Id == slideId);
+        if (slide == null) return NotFound(new ApiResponse<string>(false, "Không tìm thấy Slide.", null));
+
+        if (slide.Quiz.HostId != userId.Value)
+            return StatusCode(403, new ApiResponse<string>(false, "Bạn không có quyền duyệt Slide này.", null));
+
+        slide.Status = "PUBLISHED";
+        await _db.SaveChangesAsync();
+
+        return Ok(new ApiResponse<string>(true, "Đã duyệt Slide thành công.", null));
     }
 
     private Guid? GetCurrentUserId()

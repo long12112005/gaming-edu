@@ -142,6 +142,18 @@ var redisConnectionString = builder.Configuration.GetConnectionString("Redis") ?
 builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
     ConnectionMultiplexer.Connect(redisConnectionString));
 
+// ─── RABBITMQ ─────────────────────────────────────────────────────────────
+builder.Services.AddSingleton<RabbitMQ.Client.IConnectionFactory>(sp =>
+{
+    return new RabbitMQ.Client.ConnectionFactory
+    {
+        HostName = builder.Configuration["RabbitMQ:HostName"] ?? "localhost",
+        UserName = builder.Configuration["RabbitMQ:UserName"] ?? "guest",
+        Password = builder.Configuration["RabbitMQ:Password"] ?? "guest",
+    };
+});
+builder.Services.AddSingleton<RabbitMQPublisher>();
+
 // ─── RATE LIMITING ────────────────────────────────────────────────────────
 builder.Services.AddRateLimiter(options =>
 {
