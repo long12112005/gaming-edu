@@ -10,6 +10,7 @@ namespace GamingEdu.API.Services;
 public interface IGroupService
 {
     Task<GroupDto> CreateGroupAsync(Guid hostId, CreateGroupRequest request);
+    Task<GroupDto> UpdateGroupAsync(Guid hostId, Guid groupId, UpdateGroupRequest request);
     Task RequestJoinGroupAsync(Guid userId, string groupCode);
     Task ApproveOrRejectJoinRequestAsync(Guid hostId, Guid groupId, Guid memberId, bool isApproved);
     Task RemoveMemberAsync(Guid hostId, Guid groupId, Guid memberId);
@@ -56,6 +57,25 @@ public class GroupService : IGroupService
         await _db.SaveChangesAsync();
 
         return new GroupDto(group.Id, group.Name, group.Description, group.GroupCode, group.Status, host.Nickname, 0, group.CreatedAt);
+    }
+
+    // 2.1.2 Cập nhật thông tin nhóm
+    public async Task<GroupDto> UpdateGroupAsync(Guid hostId, Guid groupId, UpdateGroupRequest request)
+    {
+        var group = await _db.Groups.Include(g => g.Host).FirstOrDefaultAsync(g => g.Id == groupId) 
+            ?? throw new KeyNotFoundException("Không tìm thấy nhóm.");
+            
+        if (group.HostId != hostId) throw new UnauthorizedAccessException("Bạn không có quyền sửa nhóm này.");
+
+        if (!string.IsNullOrWhiteSpace(request.Name)) group.Name = request.Name.Trim();
+        if (request.Description != null) group.Description = request.Description.Trim();
+
+        group.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+
+        var memberCount = await _db.GroupMembers.CountAsync(m => m.GroupId == groupId && m.Status == "ACTIVE");
+
+        return new GroupDto(group.Id, group.Name, group.Description, group.GroupCode, group.Status, group.Host.Nickname, memberCount, group.CreatedAt);
     }
 
     // 2.2 Yêu cầu gia nhập nhóm

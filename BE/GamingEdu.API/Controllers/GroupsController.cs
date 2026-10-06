@@ -34,6 +34,20 @@ public class GroupsController : ControllerBase
         return CreatedAtAction(nameof(GetMyGroups), new ApiResponse<GroupDto>(true, "Nhóm đã được tạo thành công.", group));
     }
 
+    [HttpPut("{groupId}")]
+    public async Task<IActionResult> UpdateGroup(Guid groupId, [FromBody] UpdateGroupRequest request)
+    {
+        try
+        {
+            var group = await _groupService.UpdateGroupAsync(GetCurrentUserId(), groupId, request);
+            return Ok(new ApiResponse<GroupDto>(true, "Đã cập nhật thông tin nhóm.", group));
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new ApiResponse<string>(false, ex.Message, null));
+        }
+    }
+
     [HttpPost("join")]
     public async Task<IActionResult> RequestJoinGroup([FromBody] JoinGroupRequest request)
     {

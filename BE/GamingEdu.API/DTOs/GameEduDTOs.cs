@@ -248,6 +248,11 @@ public record CreateGroupRequest(
     string? Description
 );
 
+public record UpdateGroupRequest(
+    [MaxLength(255)] string? Name,
+    string? Description
+);
+
 public record GroupDto(
     Guid Id,
     string Name,
