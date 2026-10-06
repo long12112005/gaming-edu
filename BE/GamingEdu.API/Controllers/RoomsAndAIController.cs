@@ -21,11 +21,13 @@ public class RoomsController : ControllerBase
 {
     private readonly IRoomService _roomService;
     private readonly ApplicationDbContext _db;
+    private readonly IReportService _reportService;
 
-    public RoomsController(IRoomService roomService, ApplicationDbContext db)
+    public RoomsController(IRoomService roomService, ApplicationDbContext db, IReportService reportService)
     {
-        _roomService = roomService;
-        _db          = db;
+        _roomService   = roomService;
+        _db            = db;
+        _reportService = reportService;
     }
 
     // POST /api/rooms
@@ -137,7 +139,7 @@ public class RoomsController : ControllerBase
 
         try
         {
-            var fileBytes = await _roomService.ExportRoomReportAsync(id, userId.Value);
+            var fileBytes = await _reportService.GenerateRoomReportAsync(id, userId.Value);
             return File(fileBytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"Room_{id}_Report.xlsx");
         }
         catch (UnauthorizedAccessException ex) { return StatusCode(403, new ApiResponse<string>(false, ex.Message, null)); }

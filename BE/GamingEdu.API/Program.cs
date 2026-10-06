@@ -204,6 +204,7 @@ builder.Services.AddScoped<IQuizService,  QuizService>();
 builder.Services.AddScoped<IRoomService,  RoomService>();
 builder.Services.AddScoped<IGroupService, GroupService>();
 builder.Services.AddScoped<IQAService,    QAService>();
+builder.Services.AddScoped<IReportService, ReportService>();
 
 // FuzzyMatchingService: stateless, dùng Singleton để tránh allocation mỗi request
 builder.Services.AddSingleton<FuzzyMatchingService>();

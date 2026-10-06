@@ -23,7 +23,6 @@ public interface IRoomService
     Task RemovePlayerAsync(Guid roomId, Guid playerId);
     Task SaveDraftAnswerAsync(Guid roomPlayerId, Guid slideId, string answerData);
     Task<IEnumerable<LeaderboardEntryDto>> FinishRoomAsync(Guid roomId, Guid hostId);
-    Task<byte[]> ExportRoomReportAsync(Guid roomId, Guid hostId);
 }
 
 public class RoomService : IRoomService
@@ -323,53 +322,7 @@ public class RoomService : IRoomService
         return fullLeaderboard.Take(3);
     }
 
-    // ── EXPORT REPORT ──────────────────────────────────────────────────
-    public async Task<byte[]> ExportRoomReportAsync(Guid roomId, Guid hostId)
-    {
-        var room = await _db.Rooms
-            .Include(r => r.Quiz)
-            .Include(r => r.Players)
-            .FirstOrDefaultAsync(r => r.Id == roomId) ?? throw new KeyNotFoundException("Không tìm thấy phòng.");
-            
-        if (room.HostId != hostId) throw new UnauthorizedAccessException("Bạn không phải chủ phòng.");
 
-        var players = room.Players.OrderByDescending(p => p.TotalScore).ToList();
-
-        using var workbook = new XLWorkbook();
-        var ws = workbook.Worksheets.Add("Kết quả phòng chơi");
-
-        // Header
-        ws.Cell(1, 1).Value = "Room PIN";
-        ws.Cell(1, 2).Value = room.PinCode;
-        ws.Cell(2, 1).Value = "Bộ đề";
-        ws.Cell(2, 2).Value = room.Quiz.Title;
-        ws.Cell(3, 1).Value = "Thời gian tạo";
-        ws.Cell(3, 2).Value = room.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss");
-
-        ws.Cell(5, 1).Value = "Hạng";
-        ws.Cell(5, 2).Value = "Người chơi";
-        ws.Cell(5, 3).Value = "Tổng điểm";
-
-        var headerRange = ws.Range("A5:C5");
-        headerRange.Style.Font.Bold = true;
-        headerRange.Style.Fill.BackgroundColor = XLColor.LightBlue;
-
-        // Data
-        int row = 6;
-        for (int i = 0; i < players.Count; i++)
-        {
-            ws.Cell(row, 1).Value = i + 1;
-            ws.Cell(row, 2).Value = players[i].Nickname;
-            ws.Cell(row, 3).Value = players[i].TotalScore;
-            row++;
-        }
-
-        ws.Columns().AdjustToContents();
-
-        using var stream = new MemoryStream();
-        workbook.SaveAs(stream);
-        return stream.ToArray();
-    }
 
     // ── HELPERS ────────────────────────────────────────────────────────
     public async Task InviteGroupAsync(Guid hostId, Guid roomId, Guid groupId)
