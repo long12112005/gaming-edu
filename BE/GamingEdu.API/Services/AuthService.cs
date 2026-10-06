@@ -148,9 +148,9 @@ public class AuthService : IAuthService
                 user.LockedUntil = DateTime.UtcNow.AddMinutes(15);
                 await _db.SaveChangesAsync();
                 await _redis.KeyDeleteAsync(attemptKey);
-                throw new UnauthorizedAccessException("Tài khoản bị khóa 15 phút do nhập sai mật khẩu quá 5 lần.");
+                throw new UnauthorizedAccessException("Tài khoản bị khóa 15 phút do nhập sai mật khẩu quá 5 lần. Vui lòng thử lại sau.");
             }
-            throw new UnauthorizedAccessException("Email hoặc mật khẩu không đúng.");
+            throw new UnauthorizedAccessException($"Mật khẩu không đúng. Bạn còn {5 - attempts} lần thử trước khi bị khóa tài khoản.");
         }
 
         await _redis.KeyDeleteAsync(attemptKey); // Xóa bộ đếm sai mật khẩu

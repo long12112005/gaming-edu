@@ -26,11 +26,12 @@ public class EmailService : IEmailService
         {
             var host = _config["Smtp:Host"] ?? "smtp.gmail.com";
             var port = int.Parse(_config["Smtp:Port"] ?? "587");
-            var user = _config["Smtp:User"] ?? "your-email@gmail.com";
-            var pass = _config["Smtp:Pass"] ?? "your-app-password";
+            var user = _config["Smtp:User"] ?? throw new InvalidOperationException("Missing Smtp:User in config");
+            var pass = _config["Smtp:Pass"] ?? throw new InvalidOperationException("Missing Smtp:Pass in config");
+            var fromName = _config["Smtp:FromName"] ?? "Gaming Edu";
 
             var message = new MimeMessage();
-            message.From.Add(new MailboxAddress("Gaming Edu", user));
+            message.From.Add(new MailboxAddress(fromName, user));
             message.To.Add(new MailboxAddress("", toEmail));
             message.Subject = subject;
 

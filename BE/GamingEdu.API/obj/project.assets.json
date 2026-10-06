@@ -5848,28 +5848,25 @@
     ]
   },
   "packageFolders": {
-    "C:\\Users\\LONG\\.nuget\\packages\\": {}
+    "C:\\Users\\Admin\\.nuget\\packages\\": {}
   },
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "C:\\Users\\LONG\\gaming-edu\\BE\\GamingEdu.API\\GamingEdu.API.csproj",
+      "projectUniqueName": "D:\\gaming-edu\\BE\\GamingEdu.API\\GamingEdu.API.csproj",
       "projectName": "GamingEdu.API",
-      "projectPath": "C:\\Users\\LONG\\gaming-edu\\BE\\GamingEdu.API\\GamingEdu.API.csproj",
-      "packagesPath": "C:\\Users\\LONG\\.nuget\\packages\\",
-      "outputPath": "C:\\Users\\LONG\\gaming-edu\\BE\\GamingEdu.API\\obj\\",
+      "projectPath": "D:\\gaming-edu\\BE\\GamingEdu.API\\GamingEdu.API.csproj",
+      "packagesPath": "C:\\Users\\Admin\\.nuget\\packages\\",
+      "outputPath": "D:\\gaming-edu\\BE\\GamingEdu.API\\obj\\",
       "projectStyle": "PackageReference",
       "configFilePaths": [
-        "C:\\Users\\LONG\\gaming-edu\\BE\\GamingEdu.API\\NuGet.Config",
-        "C:\\Users\\LONG\\AppData\\Roaming\\NuGet\\NuGet.Config",
-        "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
-        "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
+        "D:\\gaming-edu\\BE\\GamingEdu.API\\NuGet.Config",
+        "C:\\Users\\Admin\\AppData\\Roaming\\NuGet\\NuGet.Config"
       ],
       "originalTargetFrameworks": [
         "net8.0"
       ],
       "sources": {
-        "C:\\Program Files\\dotnet\\library-packs": {},
         "https://api.nuget.org/v3/index.json": {}
       },
       "frameworks": {
