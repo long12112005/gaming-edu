@@ -243,7 +243,7 @@ public class AIJobsController : ControllerBase
         var slide = await _db.Slides.Include(s => s.Quiz).FirstOrDefaultAsync(s => s.Id == slideId);
         if (slide == null) return NotFound(new ApiResponse<string>(false, "Không tìm thấy Slide.", null));
 
-        if (slide.Quiz.HostId != userId.Value)
+        if (slide.Quiz.CreatorId != userId.Value)
             return StatusCode(403, new ApiResponse<string>(false, "Bạn không có quyền duyệt Slide này.", null));
 
         slide.Status = "PUBLISHED";
