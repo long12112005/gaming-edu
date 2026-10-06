@@ -197,6 +197,7 @@ public record AnswerResultDto(
     bool IsCorrect,
     int ScoreAwarded,
     int TotalScore,
+    int CurrentRank,
     string CorrectAnswer
 );
 

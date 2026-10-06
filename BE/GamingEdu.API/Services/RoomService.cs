@@ -219,18 +219,22 @@ public class RoomService : IRoomService
             AnsweredAt     = DateTime.UtcNow,
         };
 
-        // Update total_score in room_players table
-        player.TotalScore += scoreAwarded;
-
+        // Chỉ lưu log response vào DB, KHÔNG cập nhật TotalScore đồng bộ vào DB
         _db.PlayerResponses.Add(response);
         await _db.SaveChangesAsync();
 
-        // Cập nhật điểm lên Redis Sorted Set cho realtime Leaderboard
+        // 1. Dùng ZINCRBY (SortedSetIncrementAsync) để cộng điểm
         var redisDb = _redis.GetDatabase();
         var lbKey = $"room_leaderboard:{player.RoomId}";
-        await redisDb.SortedSetIncrementAsync(lbKey, $"{player.Id}|{player.Nickname}|{player.AvatarUrl}", scoreAwarded);
+        var memberName = $"{player.Id}|{player.Nickname}|{player.AvatarUrl}";
+        
+        double newScore = await redisDb.SortedSetIncrementAsync(lbKey, memberName, scoreAwarded);
 
-        return new AnswerResultDto(isCorrect, scoreAwarded, player.TotalScore, correctAnswer);
+        // 2. Dùng ZREVRANK (SortedSetRankAsync với Order.Descending) để lấy thứ hạng realtime
+        long? rank = await redisDb.SortedSetRankAsync(lbKey, memberName, StackExchange.Redis.Order.Descending);
+        int currentRank = (int)(rank ?? 0) + 1;
+
+        return new AnswerResultDto(isCorrect, scoreAwarded, (int)newScore, currentRank, correctAnswer);
     }
 
     // ── LEADERBOARD ────────────────────────────────────────────────────
@@ -239,7 +243,6 @@ public class RoomService : IRoomService
         var redisDb = _redis.GetDatabase();
         var lbKey = $"room_leaderboard:{roomId}";
         
-        // Lấy danh sách sắp xếp giảm dần từ Redis
         var sortedPlayers = await redisDb.SortedSetRangeByRankWithScoresAsync(lbKey, 0, -1, StackExchange.Redis.Order.Descending);
 
         if (sortedPlayers.Length > 0)
@@ -255,21 +258,21 @@ public class RoomService : IRoomService
             });
         }
 
-        // Fallback đọc DB nếu Redis rỗng (do restart server)
+        // Fallback đọc DB nếu Redis rỗng (do restart server hoặc mới tạo phòng)
         var players = await _db.RoomPlayers
             .AsNoTracking()
             .Where(rp => rp.RoomId == roomId)
-            .OrderByDescending(rp => rp.TotalScore)
             .ToListAsync();
 
         var result = new List<LeaderboardEntryDto>();
-        for (int i = 0; i < players.Count; i++)
+        foreach (var p in players)
         {
-            result.Add(new LeaderboardEntryDto(i + 1, players[i].Nickname, players[i].AvatarUrl, players[i].TotalScore));
-            await redisDb.SortedSetAddAsync(lbKey, $"{players[i].Id}|{players[i].Nickname}|{players[i].AvatarUrl}", players[i].TotalScore);
+            // Dùng ZADD (SortedSetAddAsync) đẩy vào Redis
+            await redisDb.SortedSetAddAsync(lbKey, $"{p.Id}|{p.Nickname}|{p.AvatarUrl}", p.TotalScore);
         }
-
-        return result;
+        
+        // Gọi lại chính hàm này để lấy thứ hạng đã được Redis tính toán chuẩn xác
+        return await GetLeaderboardAsync(roomId);
     }
 
     // ── UPDATE ROOM STATUS ─────────────────────────────────────────────
@@ -301,8 +304,22 @@ public class RoomService : IRoomService
 
         await UpdateRoomStatusAsync(roomId, "FINISHED");
 
-        // Lấy top 3 từ Leaderboard (Redis hoặc DB)
-        var fullLeaderboard = await GetLeaderboardAsync(roomId);
+        // Lấy top từ Leaderboard (Redis ZSET)
+        var fullLeaderboard = (await GetLeaderboardAsync(roomId)).ToList();
+        
+        // Sync điểm từ Redis về DB khi kết thúc game
+        var roomPlayers = await _db.RoomPlayers.Where(rp => rp.RoomId == roomId).ToListAsync();
+        foreach (var rp in roomPlayers)
+        {
+            var lbEntry = fullLeaderboard.FirstOrDefault(l => l.Nickname == rp.Nickname);
+            if (lbEntry != null)
+            {
+                rp.TotalScore = lbEntry.TotalScore;
+                rp.Rank = lbEntry.Rank;
+            }
+        }
+        await _db.SaveChangesAsync();
+
         return fullLeaderboard.Take(3);
     }
 

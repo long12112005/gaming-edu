@@ -165,10 +165,44 @@ public class GameHub : Hub
     public async Task StartCountdown(int seconds = 3)
     {
         var groupName = Context.Items["GroupName"] as string;
-        if (!string.IsNullOrEmpty(groupName))
+        if (string.IsNullOrEmpty(groupName)) return;
+
+        // Báo bắt đầu đếm
+        await Clients.Group(groupName).SendAsync("CountdownStarted", seconds);
+
+        var hubContext = Context.GetHttpContext()?.RequestServices.GetRequiredService<IHubContext<GameHub>>();
+        if (hubContext == null) return;
+
+        // Chạy ngầm bộ đếm trên server độc lập (tránh blocking thread của Hub)
+        _ = Task.Run(async () =>
         {
-            await Clients.Group(groupName).SendAsync("CountdownStarted", seconds);
-        }
+            for (int i = seconds; i > 0; i--)
+            {
+                await hubContext.Clients.Group(groupName).SendAsync("TimeTick", i);
+                await Task.Delay(1000);
+            }
+            await hubContext.Clients.Group(groupName).SendAsync("TimeOut");
+        });
+    }
+
+    [Authorize]
+    public async Task StartSlideTimer(int timeLimitSeconds, Guid slideId)
+    {
+        var groupName = Context.Items["GroupName"] as string;
+        if (string.IsNullOrEmpty(groupName)) return;
+
+        var hubContext = Context.GetHttpContext()?.RequestServices.GetRequiredService<IHubContext<GameHub>>();
+        if (hubContext == null) return;
+
+        _ = Task.Run(async () =>
+        {
+            for (int i = timeLimitSeconds; i > 0; i--)
+            {
+                await hubContext.Clients.Group(groupName).SendAsync("SlideTimeTick", new { SlideId = slideId, Remaining = i });
+                await Task.Delay(1000);
+            }
+            await hubContext.Clients.Group(groupName).SendAsync("SlideTimeOut", slideId);
+        });
     }
 
     // ═══════════════════════════════════════════════════════════════════
