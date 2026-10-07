@@ -13,6 +13,11 @@ using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Services.Configure<HostOptions>(hostOptions =>
+{
+    hostOptions.BackgroundServiceExceptionBehavior = BackgroundServiceExceptionBehavior.Ignore;
+});
+
 // ─── CONTROLLERS + JSON ───────────────────────────────────────────────────
 builder.Services.AddControllers()
     .AddJsonOptions(opt =>
@@ -109,9 +114,9 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 var jti = ctx.Principal?.FindFirst(JwtRegisteredClaimNames.Jti)?.Value;
                 if (userId != null && jti != null)
                 {
-                    var redis = ctx.HttpContext.RequestServices.GetRequiredService<IConnectionMultiplexer>().GetDatabase();
-                    var activeSession = await redis.StringGetAsync($"session:{userId}");
-                    if (!activeSession.HasValue || activeSession.ToString() != jti)
+                    var cache = ctx.HttpContext.RequestServices.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>();
+                    cache.TryGetValue($"session:{userId}", out object? activeSessionObj);
+                    if (activeSessionObj as string != jti)
                     {
                         ctx.Fail("Phiên đăng nhập không hợp lệ hoặc bạn đã đăng nhập ở nơi khác.");
                     }
@@ -132,26 +137,10 @@ builder.Services.AddSignalR(options =>
     options.MaximumReceiveMessageSize = 32 * 1024; // 32 KB
 });
 
-// ─── CACHING (IMemoryCache & Redis) ───────────────────────────────────────
-builder.Services.AddMemoryCache(options =>
-{
-    options.SizeLimit = 1024; // MB equivalent entries
-});
+// ─── CACHING (IMemoryCache) ───────────────────────────────────────────────
+builder.Services.AddMemoryCache();
 
-var redisConnectionString = builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379";
-builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
-    ConnectionMultiplexer.Connect(redisConnectionString));
-
-// ─── RABBITMQ ─────────────────────────────────────────────────────────────
-builder.Services.AddSingleton<RabbitMQ.Client.IConnectionFactory>(sp =>
-{
-    return new RabbitMQ.Client.ConnectionFactory
-    {
-        HostName = builder.Configuration["RabbitMQ:HostName"] ?? "localhost",
-        UserName = builder.Configuration["RabbitMQ:UserName"] ?? "guest",
-        Password = builder.Configuration["RabbitMQ:Password"] ?? "guest",
-    };
-});
+// ─── RABBITMQ (Mocked) ────────────────────────────────────────────────────
 builder.Services.AddSingleton<RabbitMQPublisher>();
 
 // ─── RATE LIMITING ────────────────────────────────────────────────────────
@@ -174,7 +163,7 @@ builder.Services.AddRateLimiter(options =>
             factory: partition => new FixedWindowRateLimiterOptions
             {
                 AutoReplenishment = true,
-                PermitLimit = 5, // 5 requests per hour for OTP
+                PermitLimit = 100, // Increased for dev
                 QueueLimit = 0,
                 Window = TimeSpan.FromHours(1)
             }));

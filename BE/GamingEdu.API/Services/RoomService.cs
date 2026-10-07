@@ -5,7 +5,6 @@ using GamingEdu.API.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.SignalR;
 using GamingEdu.API.Hubs;
-using StackExchange.Redis;
 using ClosedXML.Excel;
 
 namespace GamingEdu.API.Services;
@@ -31,20 +30,17 @@ public class RoomService : IRoomService
     private readonly ILogger<RoomService>  _logger;
     private readonly FuzzyMatchingService  _fuzzy;
     private readonly IHubContext<NotificationHub> _notificationHub;
-    private readonly IConnectionMultiplexer _redis;
 
     public RoomService(
         ApplicationDbContext db,
         ILogger<RoomService> logger,
         FuzzyMatchingService fuzzy,
-        IHubContext<NotificationHub> notificationHub,
-        IConnectionMultiplexer redis)
+        IHubContext<NotificationHub> notificationHub)
     {
         _db     = db;
         _logger = logger;
         _fuzzy  = fuzzy;
         _notificationHub = notificationHub;
-        _redis  = redis;
     }
 
     // ── CREATE ROOM ────────────────────────────────────────────────────
@@ -218,60 +214,34 @@ public class RoomService : IRoomService
             AnsweredAt     = DateTime.UtcNow,
         };
 
-        // Chỉ lưu log response vào DB, KHÔNG cập nhật TotalScore đồng bộ vào DB
+        // Cập nhật điểm đồng bộ vào DB vì không dùng Redis nữa
+        player.TotalScore += scoreAwarded;
         _db.PlayerResponses.Add(response);
         await _db.SaveChangesAsync();
 
-        // 1. Dùng ZINCRBY (SortedSetIncrementAsync) để cộng điểm
-        var redisDb = _redis.GetDatabase();
-        var lbKey = $"room_leaderboard:{player.RoomId}";
-        var memberName = $"{player.Id}|{player.Nickname}|{player.AvatarUrl}";
-        
-        double newScore = await redisDb.SortedSetIncrementAsync(lbKey, memberName, scoreAwarded);
+        // Tính thứ hạng ngay từ DB
+        var currentRank = await _db.RoomPlayers
+            .Where(rp => rp.RoomId == player.RoomId && rp.TotalScore > player.TotalScore)
+            .CountAsync() + 1;
 
-        // 2. Dùng ZREVRANK (SortedSetRankAsync với Order.Descending) để lấy thứ hạng realtime
-        long? rank = await redisDb.SortedSetRankAsync(lbKey, memberName, StackExchange.Redis.Order.Descending);
-        int currentRank = (int)(rank ?? 0) + 1;
-
-        return new AnswerResultDto(isCorrect, scoreAwarded, (int)newScore, currentRank, correctAnswer);
+        return new AnswerResultDto(isCorrect, scoreAwarded, player.TotalScore, currentRank, correctAnswer);
     }
 
     // ── LEADERBOARD ────────────────────────────────────────────────────
     public async Task<IEnumerable<LeaderboardEntryDto>> GetLeaderboardAsync(Guid roomId)
     {
-        var redisDb = _redis.GetDatabase();
-        var lbKey = $"room_leaderboard:{roomId}";
-        
-        var sortedPlayers = await redisDb.SortedSetRangeByRankWithScoresAsync(lbKey, 0, -1, StackExchange.Redis.Order.Descending);
-
-        if (sortedPlayers.Length > 0)
-        {
-            return sortedPlayers.Select((sp, index) => {
-                var parts = sp.Element.ToString().Split('|'); // id|nickname|avatarUrl
-                return new LeaderboardEntryDto(
-                    index + 1,
-                    parts.Length > 1 ? parts[1] : "Unknown",
-                    parts.Length > 2 ? parts[2] : "",
-                    (int)sp.Score
-                );
-            });
-        }
-
-        // Fallback đọc DB nếu Redis rỗng (do restart server hoặc mới tạo phòng)
         var players = await _db.RoomPlayers
             .AsNoTracking()
             .Where(rp => rp.RoomId == roomId)
+            .OrderByDescending(rp => rp.TotalScore)
             .ToListAsync();
 
-        var result = new List<LeaderboardEntryDto>();
-        foreach (var p in players)
-        {
-            // Dùng ZADD (SortedSetAddAsync) đẩy vào Redis
-            await redisDb.SortedSetAddAsync(lbKey, $"{p.Id}|{p.Nickname}|{p.AvatarUrl}", p.TotalScore);
-        }
-        
-        // Gọi lại chính hàm này để lấy thứ hạng đã được Redis tính toán chuẩn xác
-        return await GetLeaderboardAsync(roomId);
+        return players.Select((p, index) => new LeaderboardEntryDto(
+            index + 1,
+            p.Nickname,
+            p.AvatarUrl,
+            p.TotalScore
+        ));
     }
 
     // ── UPDATE ROOM STATUS ─────────────────────────────────────────────
@@ -288,11 +258,10 @@ public class RoomService : IRoomService
     }
 
     // ── AUTO-SAVE DRAFT ────────────────────────────────────────────────
-    public async Task SaveDraftAnswerAsync(Guid roomPlayerId, Guid slideId, string answerData)
+    public Task SaveDraftAnswerAsync(Guid roomPlayerId, Guid slideId, string answerData)
     {
-        var redisDb = _redis.GetDatabase();
-        var draftKey = $"draft_answer:{roomPlayerId}:{slideId}";
-        await redisDb.StringSetAsync(draftKey, answerData, TimeSpan.FromHours(2));
+        // Mock save draft since we removed Redis
+        return Task.CompletedTask;
     }
 
     // ── FINISH ROOM (PODIUM) ───────────────────────────────────────────

@@ -1,76 +1,48 @@
 using GamingEdu.API.Data;
 using GamingEdu.API.Models;
 using Microsoft.EntityFrameworkCore;
-using RabbitMQ.Client;
-using RabbitMQ.Client.Events;
-using System.Text;
 
 namespace GamingEdu.API.Services;
 
 /// <summary>
-/// Hosted background service that consumes AI jobs from RabbitMQ,
+/// Hosted background service that polls AI jobs from DB (Mocking RabbitMQ),
 /// processes them (simulated AI generation), and updates status to COMPLETED/FAILED.
 /// </summary>
 public class AIJobWorker : BackgroundService
 {
-    private readonly IConnectionFactory _factory;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<AIJobWorker> _logger;
 
-    public AIJobWorker(IConnectionFactory factory, IServiceScopeFactory scopeFactory, ILogger<AIJobWorker> logger)
+    public AIJobWorker(IServiceScopeFactory scopeFactory, ILogger<AIJobWorker> logger)
     {
-        _factory = factory;
         _scopeFactory = scopeFactory;
         _logger       = logger;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("AI Job Worker started. Listening to RabbitMQ.");
+        _logger.LogInformation("AI Job Worker started. Polling DB every 10s.");
 
-        var connection = await _factory.CreateConnectionAsync(stoppingToken);
-        var channel = await connection.CreateChannelAsync(cancellationToken: stoppingToken);
-        
-        await channel.QueueDeclareAsync(queue: "ai_jobs_queue", durable: true, exclusive: false, autoDelete: false, cancellationToken: stoppingToken);
-
-        var consumer = new AsyncEventingBasicConsumer(channel);
-        consumer.ReceivedAsync += async (model, ea) =>
+        while (!stoppingToken.IsCancellationRequested)
         {
-            var body = ea.Body.ToArray();
-            var message = Encoding.UTF8.GetString(body);
-            
-            // Expected message is the Job ID (Guid)
-            if (Guid.TryParse(message.Trim('"'), out var jobId))
+            try
             {
-                try
-                {
-                    using var scope = _scopeFactory.CreateScope();
-                    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-                    
-                    var job = await db.AIJobs.FindAsync(new object[] { jobId }, stoppingToken);
-                    if (job != null && job.Status == "PENDING")
-                    {
-                        await ProcessSingleJobAsync(db, job, stoppingToken);
-                    }
-                    
-                    await channel.BasicAckAsync(ea.DeliveryTag, false, cancellationToken: stoppingToken);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Error processing AI job");
-                    await channel.BasicNackAsync(ea.DeliveryTag, false, true, cancellationToken: stoppingToken);
-                }
-            }
-            else
-            {
-                await channel.BasicAckAsync(ea.DeliveryTag, false, cancellationToken: stoppingToken); // discard invalid message
-            }
-        };
+                using var scope = _scopeFactory.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
-        await channel.BasicConsumeAsync(queue: "ai_jobs_queue", autoAck: false, consumer: consumer, cancellationToken: stoppingToken);
-        
-        // Block this task until the application stops
-        await Task.Delay(Timeout.InfiniteTimeSpan, stoppingToken);
+                var job = await db.AIJobs.FirstOrDefaultAsync(j => j.Status == "PENDING", stoppingToken);
+                if (job != null)
+                {
+                    await ProcessSingleJobAsync(db, job, stoppingToken);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error processing AI job polling");
+            }
+
+            await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
+        }
     }
 
     private async Task ProcessSingleJobAsync(ApplicationDbContext db, AIJob job, CancellationToken ct)

@@ -24,29 +24,7 @@ public class EmailService : IEmailService
     {
         try
         {
-            var host = _config["Smtp:Host"] ?? "smtp.gmail.com";
-            var port = int.Parse(_config["Smtp:Port"] ?? "587");
-            var user = _config["Smtp:User"] ?? throw new InvalidOperationException("Missing Smtp:User in config");
-            var pass = _config["Smtp:Pass"] ?? throw new InvalidOperationException("Missing Smtp:Pass in config");
-            var fromName = _config["Smtp:FromName"] ?? "Gaming Edu";
-
-            var message = new MimeMessage();
-            message.From.Add(new MailboxAddress(fromName, user));
-            message.To.Add(new MailboxAddress("", toEmail));
-            message.Subject = subject;
-
-            message.Body = new TextPart("html")
-            {
-                Text = body
-            };
-
-            using var client = new SmtpClient();
-            await client.ConnectAsync(host, port, SecureSocketOptions.StartTls);
-            await client.AuthenticateAsync(user, pass);
-            await client.SendAsync(message);
-            await client.DisconnectAsync(true);
-
-            _logger.LogInformation("Email sent to {Email}", toEmail);
+            _logger.LogInformation("MOCK EMAIL SENDED: \nTo: {Email}\nSubject: {Subject}\nBody: {Body}", toEmail, subject, body);
         }
         catch (Exception ex)
         {

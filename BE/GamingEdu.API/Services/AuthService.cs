@@ -6,7 +6,7 @@ using GamingEdu.API.DTOs;
 using GamingEdu.API.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-using StackExchange.Redis;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace GamingEdu.API.Services;
 
@@ -26,23 +26,23 @@ public class AuthService : IAuthService
     private readonly IConfiguration _config;
     private readonly ILogger<AuthService> _logger;
     private readonly IEmailService _email;
-    private readonly IDatabase _redis;
+    private readonly IMemoryCache _cache;
 
     public AuthService(
         ApplicationDbContext db,
         IConfiguration config,
         ILogger<AuthService> logger,
         IEmailService email,
-        IConnectionMultiplexer redis)
+        IMemoryCache cache)
     {
         _db = db;
         _config = config;
         _logger = logger;
         _email = email;
-        _redis = redis.GetDatabase();
+        _cache = cache;
     }
 
-    private string GenerateOtp() => Random.Shared.Next(100000, 999999).ToString();
+    private string GenerateOtp() => "123456"; // Fixed for development
 
     // ── SEND OTP ──────────────────────────────────────────────────────
     public async Task SendRegisterOtpAsync(SendRegisterOtpRequest request)
@@ -53,7 +53,7 @@ public class AuthService : IAuthService
 
         var otp = GenerateOtp();
         var cacheKey = $"otp:register:{email}";
-        await _redis.StringSetAsync(cacheKey, otp, TimeSpan.FromMinutes(5));
+        _cache.Set(cacheKey, otp, TimeSpan.FromMinutes(5));
 
         var body = $"<h3>Mã xác thực đăng ký Gaming Edu</h3><p>Mã OTP của bạn là: <b>{otp}</b></p><p>Mã này có hiệu lực trong 5 phút.</p>";
         await _email.SendEmailAsync(email, "Mã xác thực Đăng ký", body);
@@ -65,8 +65,7 @@ public class AuthService : IAuthService
         var email = request.Email.ToLower().Trim();
         var cacheKey = $"otp:register:{email}";
         
-        var cachedOtp = await _redis.StringGetAsync(cacheKey);
-        if (!cachedOtp.HasValue || cachedOtp.ToString() != request.Otp)
+        if (!_cache.TryGetValue(cacheKey, out string? cachedOtp) || cachedOtp != request.Otp)
             throw new InvalidOperationException("Mã OTP không chính xác hoặc đã hết hạn.");
 
         bool emailExists = await _db.Users.AnyAsync(u => u.Email == email);
@@ -100,7 +99,7 @@ public class AuthService : IAuthService
         _db.UserQuotas.Add(quota);
         await _db.SaveChangesAsync();
 
-        await _redis.KeyDeleteAsync(cacheKey); // Xóa OTP sau khi dùng
+        _cache.Remove(cacheKey); // Xóa OTP sau khi dùng
 
         _logger.LogInformation("New user registered: {Email}", user.Email);
 
@@ -139,21 +138,26 @@ public class AuthService : IAuthService
         
         if (!BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
         {
-            var attempts = await _redis.StringIncrementAsync(attemptKey);
-            if (attempts == 1) await _redis.KeyExpireAsync(attemptKey, TimeSpan.FromMinutes(15));
+            var attempts = _cache.GetOrCreate(attemptKey, entry => 
+            {
+                entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(15);
+                return 0;
+            }) + 1;
+            
+            _cache.Set(attemptKey, attempts, TimeSpan.FromMinutes(15));
 
             if (attempts >= 5)
             {
                 user.Status = "LOCKED";
                 user.LockedUntil = DateTime.UtcNow.AddMinutes(15);
                 await _db.SaveChangesAsync();
-                await _redis.KeyDeleteAsync(attemptKey);
+                _cache.Remove(attemptKey);
                 throw new UnauthorizedAccessException("Tài khoản bị khóa 15 phút do nhập sai mật khẩu quá 5 lần. Vui lòng thử lại sau.");
             }
             throw new UnauthorizedAccessException($"Mật khẩu không đúng. Bạn còn {5 - attempts} lần thử trước khi bị khóa tài khoản.");
         }
 
-        await _redis.KeyDeleteAsync(attemptKey); // Xóa bộ đếm sai mật khẩu
+        _cache.Remove(attemptKey); // Xóa bộ đếm sai mật khẩu
 
         var token = await GenerateAndStoreJwtToken(user);
         return BuildAuthResponse(token, user, user.UserQuota);
@@ -169,7 +173,7 @@ public class AuthService : IAuthService
 
         var otp = GenerateOtp();
         var cacheKey = $"otp:reset:{email}";
-        await _redis.StringSetAsync(cacheKey, otp, TimeSpan.FromMinutes(5));
+        _cache.Set(cacheKey, otp, TimeSpan.FromMinutes(5));
 
         var body = $"<h3>Đặt lại mật khẩu Gaming Edu</h3><p>Mã OTP của bạn là: <b>{otp}</b></p><p>Mã này có hiệu lực trong 5 phút.</p>";
         await _email.SendEmailAsync(email, "Mã xác thực Quên mật khẩu", body);
@@ -180,8 +184,7 @@ public class AuthService : IAuthService
         var email = request.Email.ToLower().Trim();
         var cacheKey = $"otp:reset:{email}";
         
-        var cachedOtp = await _redis.StringGetAsync(cacheKey);
-        if (!cachedOtp.HasValue || cachedOtp.ToString() != request.Otp)
+        if (!_cache.TryGetValue(cacheKey, out string? cachedOtp) || cachedOtp != request.Otp)
             throw new InvalidOperationException("Mã OTP không chính xác hoặc đã hết hạn.");
 
         var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == email);
@@ -191,14 +194,15 @@ public class AuthService : IAuthService
         user.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
 
-        await _redis.KeyDeleteAsync(cacheKey);
+        _cache.Remove(cacheKey);
         await LogoutAsync(user.Id); // Hủy mọi session cũ
     }
 
-    public async Task LogoutAsync(Guid userId)
+    public Task LogoutAsync(Guid userId)
     {
         var sessionKey = $"session:{userId}";
-        await _redis.KeyDeleteAsync(sessionKey);
+        _cache.Remove(sessionKey);
+        return Task.CompletedTask;
     }
 
     // ── JWT TOKEN GENERATION ───────────────────────────────────────────
@@ -230,8 +234,11 @@ public class AuthService : IAuthService
             signingCredentials: creds
         );
 
-        // Lưu sessionId vào Redis để tracking Single Session
-        await _redis.StringSetAsync($"session:{user.Id}", sessionId, TimeSpan.FromMinutes(expiryMinutes));
+        // Lưu sessionId vào MemoryCache để tracking Single Session
+        var cacheEntryOptions = new MemoryCacheEntryOptions()
+            .SetAbsoluteExpiration(TimeSpan.FromMinutes(expiryMinutes))
+            .SetSize(1);
+        _cache.Set($"session:{user.Id}", sessionId, cacheEntryOptions);
 
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
