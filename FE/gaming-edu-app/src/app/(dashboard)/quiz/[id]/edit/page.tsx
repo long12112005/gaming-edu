@@ -20,10 +20,9 @@ import {
   ChevronUp,
   AlertCircle,
   Bot,
-  FileText
+  FileText,
+  Gamepad2
 } from "lucide-react";
-import Button from "@/components/ui/Button";
-import Input from "@/components/ui/Input";
 import { api } from "@/lib/api";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -57,10 +56,10 @@ const slideTypes: { type: SlideType; label: string; icon: string }[] = [
 ];
 
 const optionBgColors = [
-  "bg-red-500",
-  "bg-blue-500",
-  "bg-yellow-500",
-  "bg-green-500",
+  "bg-red-500 shadow-[0_4px_0_#991b1b]",
+  "bg-blue-500 shadow-[0_4px_0_#1e3a8a]",
+  "bg-yellow-500 shadow-[0_4px_0_#854d0e]",
+  "bg-green-500 shadow-[0_4px_0_#14532d]",
 ];
 
 // ─── Generate temp ID ──────────────────────────────────────────────────────────
@@ -104,12 +103,12 @@ function OptionRow({
   const isCorrectable = slideType === "QUIZ" || slideType === "FILL_IN_BLANK";
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-3 mb-3">
       {/* Letter badge */}
       <div
-        className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-800 text-white flex-shrink-0 ${
+        className={`w-12 h-12 rounded-[16px] flex items-center justify-center text-xl font-black text-white flex-shrink-0 ${
           optionBgColors[idx % 4]
-        }`}
+        } translate-y-[-2px]`}
       >
         {letters[idx]}
       </div>
@@ -117,11 +116,10 @@ function OptionRow({
       {/* Text Input */}
       <input
         type="text"
-        placeholder={`Đáp án ${letters[idx]}`}
+        placeholder={`Nhập đáp án ${letters[idx]}`}
         value={opt.content}
         onChange={(e) => onChange(e.target.value)}
-        className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-violet-500 focus:ring-4 focus:ring-violet-500/10 outline-none transition-all font-500 text-gray-900"
-        id={`input-option-${opt.id}`}
+        className="flex-1 px-4 py-3 h-12 text-base font-bold border-4 border-gray-100 rounded-[20px] bg-gray-50 focus:bg-white focus:border-violet-400 focus:shadow-[0_4px_12px_rgba(124,58,237,0.1)] outline-none transition-all text-gray-900 placeholder-gray-400"
       />
 
       {/* Correct toggle */}
@@ -130,14 +128,13 @@ function OptionRow({
           type="button"
           onClick={onToggleCorrect}
           title={opt.isCorrect ? "Đáp án đúng" : "Đánh dấu đúng"}
-          className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 transition-all border-2 ${
+          className={`w-12 h-12 rounded-[16px] flex items-center justify-center flex-shrink-0 transition-all border-4 ${
             opt.isCorrect
-              ? "bg-emerald-500 border-emerald-500 text-white"
-              : "border-gray-300 text-gray-400 hover:border-emerald-400 hover:text-emerald-500"
+              ? "bg-emerald-500 border-emerald-600 shadow-[0_4px_0_#047857] text-white translate-y-[-4px]"
+              : "bg-gray-100 border-gray-200 text-gray-400 hover:border-emerald-200 hover:text-emerald-500 hover:bg-emerald-50"
           }`}
-          id={`btn-correct-${opt.id}`}
         >
-          <Check size={14} />
+          <Check size={20} className={opt.isCorrect ? "stroke-[4px]" : "stroke-[3px]"} />
         </button>
       )}
 
@@ -145,10 +142,9 @@ function OptionRow({
       <button
         type="button"
         onClick={onDelete}
-        className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all"
-        id={`btn-delete-opt-${opt.id}`}
+        className="w-12 h-12 rounded-[16px] border-4 border-transparent flex items-center justify-center flex-shrink-0 text-gray-400 hover:text-red-500 hover:bg-red-50 hover:border-red-100 transition-all"
       >
-        <X size={14} />
+        <X size={20} className="stroke-[3px]" />
       </button>
     </div>
   );
@@ -201,78 +197,76 @@ function SlideCard({
 
   return (
     <div
-      className={`bg-white rounded-2xl border shadow-sm transition-all animate-fade-in-up ${
-        slide.isExpanded ? "border-violet-300" : "border-gray-100"
+      className={`bg-white rounded-[32px] border-4 shadow-[0_8px_24px_rgba(0,0,0,0.04)] transition-all duration-300 animate-fade-in-up ${
+        slide.isExpanded ? "border-violet-300 shadow-[0_12px_32px_rgba(124,58,237,0.1)] scale-[1.01]" : "border-gray-100 hover:border-gray-200"
       }`}
-      id={`slide-card-${slide.id}`}
     >
       {/* Card Header */}
       <div
-        className="flex items-center gap-3 p-4 cursor-pointer select-none"
+        className="flex items-center gap-4 p-5 cursor-pointer select-none"
         onClick={() => onUpdate({ isExpanded: !slide.isExpanded })}
       >
-        <GripVertical size={16} className="text-gray-300 flex-shrink-0" />
-        <div className="w-7 h-7 bg-gray-100 rounded-lg flex items-center justify-center text-xs font-800 text-gray-500 flex-shrink-0">
+        <GripVertical size={24} className="text-gray-300 hover:text-gray-500 transition-colors flex-shrink-0 cursor-grab" />
+        <div className="w-10 h-10 bg-gray-100 rounded-[16px] shadow-[inset_0_-2px_0_rgba(0,0,0,0.05)] flex items-center justify-center text-sm font-black text-gray-500 flex-shrink-0">
           {index + 1}
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-600 text-gray-500">
+          <div className="flex items-center gap-3">
+            <span className="text-xs font-bold text-gray-600 bg-gray-100 px-3 py-1 rounded-[12px]">
               {slideTypes.find((t) => t.type === slide.type)?.icon}{" "}
               {slideTypes.find((t) => t.type === slide.type)?.label}
             </span>
             <span
-              className={`text-xs font-700 px-2 py-0.5 rounded-full ${
+              className={`text-xs font-black px-3 py-1 rounded-[12px] border-2 ${
                 slide.status === "PUBLISHED"
-                  ? "bg-emerald-100 text-emerald-700"
-                  : "bg-gray-100 text-gray-600"
+                  ? "bg-emerald-100 text-emerald-700 border-emerald-200"
+                  : "bg-gray-100 text-gray-500 border-gray-200"
               }`}
             >
-              {slide.status === "PUBLISHED" ? "✓ Published" : "Draft"}
+              {slide.status === "PUBLISHED" ? "✓ PUBLISHED" : "DRAFT"}
             </span>
             {hasError && (
-              <AlertCircle size={13} className="text-amber-500" />
+              <AlertCircle size={18} className="text-amber-500" />
             )}
           </div>
-          <p className="text-sm font-700 text-gray-900 truncate mt-0.5">
+          <p className="text-lg font-black text-gray-900 truncate mt-2">
             {slide.questionText || (
-              <span className="text-gray-400 font-400 italic">
-                Chưa có câu hỏi...
+              <span className="text-gray-400 font-bold italic">
+                Chưa nhập câu hỏi...
               </span>
             )}
           </p>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 w-10 h-10 justify-center bg-gray-50 rounded-full">
           {slide.isExpanded ? (
-            <ChevronUp size={15} className="text-gray-400" />
+            <ChevronUp size={20} className="text-gray-500" />
           ) : (
-            <ChevronDown size={15} className="text-gray-400" />
+            <ChevronDown size={20} className="text-gray-500" />
           )}
         </div>
       </div>
 
       {/* Expanded Body */}
       {slide.isExpanded && (
-        <div className="border-t border-gray-100 p-5 space-y-5">
+        <div className="border-t-4 border-gray-50 p-6 space-y-6">
           {/* Type + Config Row */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 bg-gray-50 p-5 rounded-[24px]">
             {/* Type selector */}
-            <div className="col-span-2">
-              <label className="text-xs font-700 text-gray-600 block mb-1.5 uppercase tracking-wide">
+            <div className="md:col-span-2">
+              <label className="text-xs font-black text-gray-500 block mb-2 uppercase tracking-wider">
                 Loại câu hỏi
               </label>
-              <div className="flex gap-1.5 flex-wrap">
+              <div className="flex gap-2 flex-wrap">
                 {slideTypes.map((t) => (
                   <button
                     key={t.type}
                     type="button"
                     onClick={() => onUpdate({ type: t.type })}
-                    className={`text-xs font-700 px-2.5 py-1.5 rounded-lg border transition-all ${
+                    className={`text-xs font-bold px-3 py-2 rounded-[12px] border-2 transition-all ${
                       slide.type === t.type
-                        ? "border-violet-500 bg-violet-50 text-violet-700"
-                        : "border-gray-200 text-gray-600 hover:border-gray-300"
+                        ? "border-violet-500 bg-violet-100 text-violet-700 shadow-[0_2px_0_#8b5cf6] translate-y-[-2px]"
+                        : "border-gray-200 bg-white text-gray-600 hover:border-gray-300"
                     }`}
-                    id={`btn-type-${t.type}-slide-${slide.id}`}
                   >
                     {t.icon} {t.label}
                   </button>
@@ -282,42 +276,34 @@ function SlideCard({
 
             {/* Time Limit */}
             <div>
-              <label className="text-xs font-700 text-gray-600 block mb-1.5 uppercase tracking-wide">
-                <Clock size={11} className="inline mr-1" />
-                Thời gian (s)
+              <label className="text-xs font-black text-gray-500 block mb-2 uppercase tracking-wider flex items-center gap-1">
+                <Clock size={14} /> Thời gian
               </label>
               <select
                 value={slide.timeLimit}
                 onChange={(e) =>
                   onUpdate({ timeLimit: Number(e.target.value) })
                 }
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-violet-500 focus:ring-4 focus:ring-violet-500/10 outline-none transition-all font-600"
-                id={`sel-time-${slide.id}`}
+                className="w-full px-4 py-2.5 h-11 text-sm border-4 border-gray-200 rounded-[16px] bg-white focus:bg-white focus:border-violet-400 outline-none transition-all font-bold text-gray-800"
               >
                 {[10, 15, 20, 30, 45, 60, 90, 120].map((t) => (
-                  <option key={t} value={t}>
-                    {t}s
-                  </option>
+                  <option key={t} value={t}>{t} giây</option>
                 ))}
               </select>
             </div>
 
             {/* Points */}
             <div>
-              <label className="text-xs font-700 text-gray-600 block mb-1.5 uppercase tracking-wide">
-                <Zap size={11} className="inline mr-1" />
-                Điểm thưởng
+              <label className="text-xs font-black text-gray-500 block mb-2 uppercase tracking-wider flex items-center gap-1">
+                <Zap size={14} /> Điểm
               </label>
               <select
                 value={slide.points}
                 onChange={(e) => onUpdate({ points: Number(e.target.value) })}
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-violet-500 focus:ring-4 focus:ring-violet-500/10 outline-none transition-all font-600"
-                id={`sel-points-${slide.id}`}
+                className="w-full px-4 py-2.5 h-11 text-sm border-4 border-gray-200 rounded-[16px] bg-white focus:bg-white focus:border-violet-400 outline-none transition-all font-bold text-gray-800"
               >
                 {[500, 1000, 1500, 2000].map((p) => (
-                  <option key={p} value={p}>
-                    {p} pts
-                  </option>
+                  <option key={p} value={p}>{p} pts</option>
                 ))}
               </select>
             </div>
@@ -325,7 +311,7 @@ function SlideCard({
 
           {/* Question Text */}
           <div>
-            <label className="text-xs font-700 text-gray-600 block mb-1.5 uppercase tracking-wide">
+            <label className="text-sm font-black text-gray-800 block mb-2">
               Nội Dung Câu Hỏi
             </label>
             <textarea
@@ -333,34 +319,30 @@ function SlideCard({
               onChange={(e) => onUpdate({ questionText: e.target.value })}
               placeholder="Nhập câu hỏi của bạn vào đây..."
               rows={3}
-              className="w-full px-4 py-3 text-sm border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-violet-500 focus:ring-4 focus:ring-violet-500/10 outline-none transition-all resize-none font-500 text-gray-900"
-              id={`textarea-question-${slide.id}`}
+              className="w-full px-5 py-4 text-lg border-4 border-gray-100 rounded-[24px] bg-gray-50 focus:bg-white focus:border-violet-400 focus:shadow-[0_8px_24px_rgba(124,58,237,0.1)] outline-none transition-all resize-none font-bold text-gray-900 placeholder-gray-400"
             />
           </div>
 
-          {/* Options (for QUIZ / POLL types) */}
+          {/* Options */}
           {(slide.type === "QUIZ" || slide.type === "POLL") && (
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-xs font-700 text-gray-600 uppercase tracking-wide">
-                  Đáp Án{" "}
+            <div className="bg-white p-5 rounded-[24px] border-4 border-gray-100">
+              <div className="flex items-center justify-between mb-4">
+                <label className="text-sm font-black text-gray-800">
+                  Các Lựa Chọn Đáp Án{" "}
                   {slide.type === "QUIZ" && (
-                    <span className="text-gray-400 font-500 normal-case tracking-normal">
-                      (bấm ✓ để chọn đáp án đúng)
-                    </span>
+                    <span className="text-gray-400 font-bold ml-2 text-xs">(Đánh dấu ✔️ cho câu đúng)</span>
                   )}
                 </label>
                 <button
                   type="button"
                   onClick={addOption}
                   disabled={slide.options.length >= 6}
-                  className="text-xs font-700 text-violet-600 hover:text-violet-800 flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed"
-                  id={`btn-add-opt-${slide.id}`}
+                  className="text-xs font-black text-violet-600 hover:text-white bg-violet-50 hover:bg-violet-500 flex items-center gap-1.5 px-3 py-2 rounded-[12px] transition-colors disabled:opacity-50"
                 >
-                  <Plus size={12} /> Thêm đáp án
+                  <Plus size={14} className="stroke-[3px]" /> Thêm Lựa Chọn
                 </button>
               </div>
-              <div className="space-y-2">
+              <div>
                 {slide.options.map((opt, optIdx) => (
                   <OptionRow
                     key={opt.id}
@@ -378,8 +360,8 @@ function SlideCard({
 
           {/* FILL_IN_BLANK hint */}
           {slide.type === "FILL_IN_BLANK" && (
-            <div>
-              <label className="text-xs font-700 text-gray-600 block mb-1.5 uppercase tracking-wide">
+            <div className="bg-white p-5 rounded-[24px] border-4 border-gray-100">
+              <label className="text-sm font-black text-gray-800 block mb-2">
                 Từ khóa đáp án đúng
               </label>
               <input
@@ -389,22 +371,21 @@ function SlideCard({
                 onChange={(e) =>
                   updateOption(0, { content: e.target.value, isCorrect: true })
                 }
-                className="w-full px-4 py-3 text-sm border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-violet-500 focus:ring-4 focus:ring-violet-500/10 outline-none transition-all font-500"
-                id={`input-fill-blank-${slide.id}`}
+                className="w-full px-5 py-4 text-base border-4 border-gray-100 rounded-[20px] bg-gray-50 focus:bg-white focus:border-violet-400 outline-none transition-all font-bold"
               />
             </div>
           )}
 
           {/* WORD_CLOUD hint */}
           {slide.type === "WORD_CLOUD" && (
-            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-sm text-emerald-700">
-              ☁️ Người chơi sẽ nhập từ bất kỳ. Hệ thống tạo đám mây từ tự động.
+            <div className="bg-emerald-50 border-4 border-emerald-200 rounded-[24px] p-5 text-base font-bold text-emerald-800 flex items-center gap-3">
+              <span className="text-3xl">☁️</span> Người chơi sẽ nhập từ bất kỳ. Hệ thống tạo đám mây từ tự động.
             </div>
           )}
 
           {/* Action bar */}
-          <div className="flex items-center justify-between pt-2 border-t border-gray-100">
-            <div className="flex items-center gap-2">
+          <div className="flex items-center justify-between pt-6 border-t-4 border-gray-50">
+            <div>
               <button
                 type="button"
                 onClick={() =>
@@ -413,38 +394,35 @@ function SlideCard({
                       slide.status === "PUBLISHED" ? "DRAFT" : "PUBLISHED",
                   })
                 }
-                className={`text-xs font-700 px-3 py-1.5 rounded-lg border transition-all ${
+                className={`text-sm font-black px-4 py-3 rounded-[16px] border-4 transition-all ${
                   slide.status === "PUBLISHED"
-                    ? "border-emerald-400 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                    : "border-gray-300 text-gray-600 hover:border-violet-400 hover:text-violet-600"
+                    ? "border-emerald-500 bg-emerald-100 text-emerald-700 shadow-[0_4px_0_#10b981] translate-y-[-2px]"
+                    : "border-gray-200 bg-white text-gray-500 hover:border-gray-300"
                 }`}
-                id={`btn-toggle-status-${slide.id}`}
               >
                 {slide.status === "PUBLISHED"
-                  ? "✓ Published – Bỏ publish"
-                  : "○ Draft – Publish ngay"}
+                  ? "✓ ĐÃ XUẤT BẢN"
+                  : "○ BẢN NHÁP"}
               </button>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-4">
               <button
                 type="button"
                 onClick={onDelete}
-                className="text-xs font-600 text-red-500 hover:text-red-700 flex items-center gap-1 px-2 py-1.5 hover:bg-red-50 rounded-lg transition-colors"
-                id={`btn-delete-slide-${slide.id}`}
+                className="text-sm font-black text-red-500 hover:text-red-600 bg-red-50 hover:bg-red-100 flex items-center gap-2 px-4 py-3 rounded-[16px] transition-colors"
               >
-                <Trash2 size={12} /> Xóa
+                <Trash2 size={16} className="stroke-[3px]" /> Xóa
               </button>
-              <Button
-                variant="primary"
-                size="sm"
-                loading={slide.isSaving}
+              <button
+                type="button"
                 onClick={onSave}
-                id={`btn-save-slide-${slide.id}`}
+                disabled={slide.isSaving}
+                className="text-sm font-black text-white bg-violet-600 flex items-center gap-2 px-6 py-3 rounded-[16px] shadow-[0_4px_0_#5b21b6] active:translate-y-[4px] active:shadow-none hover:bg-violet-500 transition-all disabled:opacity-70 disabled:cursor-not-allowed"
               >
-                <Save size={13} />
+                <Save size={18} className="stroke-[3px]" />
                 {slide.isSaving ? "Đang lưu..." : "Lưu Câu Hỏi"}
-              </Button>
+              </button>
             </div>
           </div>
         </div>
@@ -462,7 +440,6 @@ export default function QuizEditorPage() {
   const [quiz, setQuiz] = useState<any>(null);
   const [slides, setSlides] = useState<SlideDraft[]>([]);
   const [loadingQuiz, setLoadingQuiz] = useState(true);
-  const [savingAll, setSavingAll] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: "ok" | "err" } | null>(null);
 
   // AI Modal States
@@ -494,14 +471,12 @@ export default function QuizEditorPage() {
     }
   };
 
-  // Auth guard
   useEffect(() => {
     if (!Cookies.get("token")) {
       router.push("/login");
     }
   }, [router]);
 
-  // Load quiz detail
   const loadQuizDetail = () => {
     api
       .get(`/quizzes/${quizId}`)
@@ -509,7 +484,6 @@ export default function QuizEditorPage() {
         if (res.data.success) {
           const q = res.data.data;
           setQuiz(q);
-          // Convert server slides to draft format
           const draftSlides: SlideDraft[] = (q.slides ?? []).map(
             (s: any, idx: number) => ({
               id: s.id,
@@ -537,7 +511,6 @@ export default function QuizEditorPage() {
     loadQuizDetail();
   }, [quizId]);
 
-  // AI Polling logic
   useEffect(() => {
     if (aiStatus !== "polling" || !aiJobId) return;
     const interval = setInterval(async () => {
@@ -548,7 +521,7 @@ export default function QuizEditorPage() {
           setAiStatus("completed");
           setAiModalOpen(false);
           showToast("Đã sinh đề thành công!", "ok");
-          loadQuizDetail(); // Reload to see new slides
+          loadQuizDetail();
           clearInterval(interval);
         } else if (job.status === "FAILED") {
           setAiStatus("error");
@@ -588,7 +561,6 @@ export default function QuizEditorPage() {
 
   const addNewSlide = (type: SlideType = "QUIZ") => {
     const newSlide = blankSlide(type);
-    // Collapse all others
     setSlides((prev) => [
       ...prev.map((s) => ({ ...s, isExpanded: false })),
       newSlide,
@@ -598,21 +570,16 @@ export default function QuizEditorPage() {
   const deleteSlide = (id: string) => {
     if (!confirm("Xóa câu hỏi này?")) return;
     setSlides((prev) => prev.filter((s) => s.id !== id));
-    // TODO: if slide is saved in DB, call api.delete
   };
 
-  // Save a single slide (create or update)
   const saveSlide = async (id: string) => {
     const slide = slides.find((s) => s.id === id);
     if (!slide) return;
-
     if (!slide.questionText.trim()) {
       showToast("Vui lòng nhập nội dung câu hỏi", "err");
       return;
     }
-
     updateSlide(id, { isSaving: true });
-
     const payload = {
       quizId,
       type: slide.type,
@@ -631,17 +598,13 @@ export default function QuizEditorPage() {
     };
 
     try {
-      // If slide id starts with "new-", it's not in DB yet
       if (slide.id.startsWith("new-")) {
         const res = await api.post(`/quizzes/${quizId}/slides`, payload);
         if (res.data.success) {
           const savedSlide = res.data.data;
-          // Replace temp id with real id
           setSlides((prev) =>
             prev.map((s) =>
-              s.id === id
-                ? { ...s, id: savedSlide.id ?? id, isSaving: false }
-                : s
+              s.id === id ? { ...s, id: savedSlide.id ?? id, isSaving: false } : s
             )
           );
           showToast("Câu hỏi đã được thêm thành công!");
@@ -653,19 +616,16 @@ export default function QuizEditorPage() {
       }
     } catch (err: any) {
       updateSlide(id, { isSaving: false });
-      showToast(
-        err.response?.data?.message ?? "Lỗi khi lưu câu hỏi",
-        "err"
-      );
+      showToast(err.response?.data?.message ?? "Lỗi khi lưu câu hỏi", "err");
     }
   };
 
   if (loadingQuiz) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-[#F4F1FA] flex items-center justify-center font-sans">
         <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-violet-600 border-t-transparent rounded-full animate-spin" />
-          <p className="text-gray-500 font-600">Đang tải bộ đề...</p>
+          <div className="w-16 h-16 border-8 border-violet-200 border-t-violet-600 rounded-full animate-spin" />
+          <p className="text-gray-900 font-black text-xl">Đang tải trình chỉnh sửa...</p>
         </div>
       </div>
     );
@@ -674,74 +634,73 @@ export default function QuizEditorPage() {
   const publishedCount = slides.filter((s) => s.status === "PUBLISHED").length;
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* ── HEADER ────────────────────────────────────────────────────── */}
-      <header className="bg-white border-b border-gray-100 sticky top-0 z-50 shadow-sm">
-        <div className="max-w-4xl mx-auto px-4 h-14 flex items-center gap-3">
+    <div className="min-h-screen bg-[#F4F1FA] font-sans pb-20">
+      {/* ── HEADER (Claymorphism) ────────────────────────────────────── */}
+      <header className="bg-white border-b-4 border-violet-100 sticky top-0 z-40 shadow-sm">
+        <div className="max-w-5xl mx-auto px-6 h-20 flex items-center gap-4">
           <button
             onClick={() => router.back()}
-            className="p-2 rounded-lg hover:bg-gray-100 text-gray-600 transition-colors"
-            id="btn-back"
+            className="w-10 h-10 rounded-[12px] bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-600 transition-colors"
           >
-            <ArrowLeft size={18} />
+            <ArrowLeft size={20} className="stroke-[3px]" />
           </button>
 
-          <div className="flex items-center gap-2 mr-auto">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center">
-              <Trophy size={14} className="text-white" />
+          <div className="flex items-center gap-3 mr-auto">
+            <div className="w-10 h-10 rounded-[12px] bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center shadow-[0_4px_8px_rgba(124,58,237,0.3)]">
+              <Gamepad2 size={20} className="text-white" />
             </div>
             <div className="flex flex-col">
-              <span className="text-sm font-800 text-gray-900 leading-tight truncate max-w-[180px] sm:max-w-xs">
+              <span className="text-lg font-black text-gray-900 leading-tight truncate max-w-[200px] sm:max-w-md">
                 {quiz?.title ?? "Bộ đề chưa đặt tên"}
               </span>
-              <span className="text-xs text-gray-500">
-                {slides.length} câu hỏi &bull; {publishedCount} đã publish
+              <span className="text-sm font-bold text-gray-500">
+                {slides.length} câu hỏi &bull; <span className="text-emerald-500">{publishedCount} đã xuất bản</span>
               </span>
             </div>
           </div>
 
-          <Button variant="outline" size="sm" id="btn-preview-quiz" href={`/quiz/${quizId}`}>
-            <Eye size={13} /> Xem Trước
-          </Button>
+          <Link 
+            href={`/quiz/${quizId}`}
+            className="hidden sm:flex items-center gap-2 px-6 py-2.5 bg-gray-900 text-white font-bold rounded-[16px] shadow-[0_4px_0_#1f2937] active:translate-y-[4px] active:shadow-none hover:bg-black transition-all"
+          >
+            <Eye size={18} className="stroke-[3px]" /> Xem Trước
+          </Link>
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto px-4 py-8">
+      <main className="max-w-4xl mx-auto px-4 sm:px-6 py-8">
         {/* Info bar */}
-        <div className="bg-violet-50 border border-violet-200 rounded-2xl p-4 mb-6 flex items-center gap-3 animate-fade-in-up">
-          <div className="w-9 h-9 bg-violet-600 rounded-xl flex items-center justify-center flex-shrink-0">
-            <Zap size={16} className="text-white" />
+        <div className="bg-white border-4 border-violet-200 rounded-[32px] p-6 mb-8 flex items-center gap-5 shadow-[4px_4px_0_#ddd6fe] animate-fade-in-up">
+          <div className="w-12 h-12 bg-violet-600 rounded-[16px] flex items-center justify-center flex-shrink-0 shadow-sm">
+            <Zap size={24} className="text-white" />
           </div>
           <div>
-            <div className="font-700 text-violet-900 text-sm">
-              Chế độ chỉnh sửa câu hỏi
+            <div className="font-black text-gray-900 text-lg mb-1">
+              Chế độ chỉnh sửa thông minh
             </div>
-            <div className="text-xs text-violet-700">
-              Thêm, sửa, xóa câu hỏi. Nhấn{" "}
-              <strong>Lưu Câu Hỏi</strong> để lưu từng câu. Publish câu hỏi
-              trước khi bắt đầu trò chơi.
+            <div className="text-sm font-bold text-gray-500">
+              Bạn đang ở giao diện tạo nội dung. Nhấn <span className="text-violet-600">Lưu Câu Hỏi</span> cho từng câu sau khi sửa xong.
             </div>
           </div>
         </div>
 
         {/* Slides */}
-        <div className="space-y-3 mb-6">
+        <div className="space-y-6 mb-10">
           {slides.length === 0 ? (
-            <div className="bg-white rounded-2xl border-2 border-dashed border-gray-200 p-10 text-center animate-fade-in-up">
-              <div className="text-4xl mb-3">📝</div>
-              <p className="font-700 text-gray-700 mb-1">
-                Chưa có câu hỏi nào
+            <div className="bg-white rounded-[40px] border-4 border-dashed border-gray-300 p-16 text-center animate-fade-in-up">
+              <div className="text-6xl mb-6">📝</div>
+              <p className="font-black text-2xl text-gray-900 mb-2">
+                Trang giấy trắng!
               </p>
-              <p className="text-sm text-gray-500 mb-5">
-                Thêm câu hỏi đầu tiên của bộ đề này
+              <p className="text-base font-bold text-gray-500 mb-8">
+                Bắt đầu thêm câu hỏi đầu tiên của bạn vào bộ đề này ngay.
               </p>
-              <Button
-                variant="primary"
+              <button
                 onClick={() => addNewSlide("QUIZ")}
-                id="btn-add-first-slide"
+                className="inline-flex items-center gap-2 px-8 py-4 bg-violet-600 text-white font-black text-lg rounded-[20px] shadow-[0_6px_0_#5b21b6] active:translate-y-[6px] active:shadow-none hover:bg-violet-500 transition-all"
               >
-                <Plus size={15} /> Thêm Câu Hỏi
-              </Button>
+                <Plus size={20} className="stroke-[4px]" /> Thêm Câu Hỏi
+              </button>
             </div>
           ) : (
             slides.map((slide, idx) => (
@@ -758,11 +717,11 @@ export default function QuizEditorPage() {
         </div>
 
         {/* Add new slide panel */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 animate-fade-in-up">
-          <p className="text-sm font-700 text-gray-700 mb-3">
-            Thêm câu hỏi mới
+        <div className="bg-white rounded-[40px] border-4 border-gray-100 shadow-[0_8px_24px_rgba(0,0,0,0.03)] p-8 animate-fade-in-up flex flex-col items-center">
+          <p className="text-lg font-black text-gray-900 mb-5">
+            Thêm khối nội dung mới
           </p>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap justify-center gap-3">
             <button
               type="button"
               onClick={() => {
@@ -770,10 +729,9 @@ export default function QuizEditorPage() {
                 setAiStatus("idle");
                 setAiFileUrl("");
               }}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl border-2 border-transparent bg-gradient-to-r from-pink-500 to-violet-500 hover:from-pink-600 hover:to-violet-600 shadow-md hover:shadow-lg text-sm font-800 text-white transition-all transform hover:-translate-y-0.5"
-              id="btn-add-slide-ai"
+              className="flex items-center gap-2 px-6 py-3 rounded-[20px] bg-gradient-to-r from-pink-500 to-violet-500 shadow-[0_6px_0_#7c3aed] active:translate-y-[6px] active:shadow-none hover:brightness-110 text-base font-black text-white transition-all mr-2"
             >
-              <Bot size={16} /> Sinh Đề AI
+              <Bot size={20} /> Sinh Đề Bằng AI ✨
             </button>
 
             {slideTypes.map((t) => (
@@ -781,105 +739,110 @@ export default function QuizEditorPage() {
                 key={t.type}
                 type="button"
                 onClick={() => addNewSlide(t.type)}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl border-2 border-dashed border-gray-200 hover:border-violet-400 hover:bg-violet-50 text-sm font-600 text-gray-700 hover:text-violet-700 transition-all"
-                id={`btn-add-slide-${t.type}`}
+                className="flex items-center gap-2 px-5 py-3 rounded-[20px] border-4 border-gray-200 hover:border-violet-400 hover:bg-violet-50 text-sm font-black text-gray-600 hover:text-violet-700 transition-all bg-gray-50"
               >
-                <span>{t.icon}</span> {t.label}
+                <span className="text-lg">{t.icon}</span> {t.label}
               </button>
             ))}
           </div>
         </div>
       </main>
 
-      {/* AI Modal */}
+      {/* AI Modal (Claymorphism) */}
       {aiModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl relative overflow-hidden animate-fade-in-up">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-[40px] w-full max-w-lg p-8 shadow-[0_24px_64px_rgba(0,0,0,0.2)] border-4 border-white relative overflow-hidden animate-fade-in-up">
             <button
               onClick={() => {
                 if (aiStatus !== "polling") setAiModalOpen(false);
               }}
-              className="absolute top-4 right-4 w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 transition-colors"
+              className="absolute top-6 right-6 w-10 h-10 rounded-[16px] bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 transition-colors"
             >
-              <X size={16} />
+              <X size={20} className="stroke-[3px]" />
             </button>
             
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-pink-100 to-violet-100 flex items-center justify-center mb-4">
-              <Bot size={28} className="text-violet-600" />
+            <div className="w-20 h-20 rounded-[24px] bg-gradient-to-br from-pink-100 to-violet-100 flex items-center justify-center mb-6 border-4 border-pink-200 shadow-sm">
+              <Bot size={40} className="text-violet-600" />
             </div>
             
-            <h3 className="text-xl font-900 text-gray-900 mb-2">Sinh đề tự động bằng AI</h3>
-            <p className="text-sm text-gray-500 mb-6">
-              Hệ thống sẽ tự động đọc tài liệu của bạn (PDF/DOCX - URL) và sinh ra các câu hỏi trắc nghiệm, điền khuyết.
+            <h3 className="text-3xl font-black text-gray-900 mb-2 tracking-tight">Sinh Đề Tự Động</h3>
+            <p className="text-base font-bold text-gray-500 mb-8">
+              Cung cấp tài liệu (PDF/Word), Robot của chúng tôi sẽ phân tích và tạo ra câu hỏi siêu tốc.
             </p>
 
-            <div className="space-y-4">
+            <div className="space-y-6">
               {aiError && (
-                <div className="p-3 bg-red-50 text-red-600 text-sm font-600 rounded-xl">
+                <div className="p-4 bg-red-100 text-red-600 text-sm font-bold rounded-[20px] border-2 border-red-200 text-center">
                   {aiError}
                 </div>
               )}
 
-              <div>
-                <label className="block text-sm font-700 text-gray-700 mb-1.5">Tải tài liệu từ máy</label>
+              <div className="bg-gray-50 p-5 rounded-[24px] border-4 border-gray-100">
+                <label className="block text-sm font-black text-gray-900 mb-3">Tải File Lên (PDF, DOCX)</label>
                 <input
                   type="file"
                   accept=".pdf,.docx,.txt"
                   onChange={handleFileUpload}
                   disabled={aiStatus === "polling" || isUploading}
-                  className="w-full text-sm text-gray-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-700 file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100 cursor-pointer transition-colors"
+                  className="w-full text-sm font-bold text-gray-500 file:mr-4 file:py-3 file:px-6 file:rounded-[16px] file:border-0 file:text-sm file:font-black file:bg-violet-100 file:text-violet-700 hover:file:bg-violet-200 cursor-pointer transition-colors outline-none"
                 />
-                {isUploading && <p className="text-xs text-violet-600 mt-2 font-600 animate-pulse">Đang tải file lên...</p>}
+                {isUploading && <p className="text-sm text-violet-600 mt-3 font-bold animate-pulse">Đang tải file...</p>}
               </div>
 
-              <div className="flex items-center gap-3 my-4">
-                 <div className="h-px bg-gray-100 flex-1"></div>
-                 <span className="text-xs text-gray-400 font-700 uppercase tracking-widest">Hoặc nhập URL</span>
-                 <div className="h-px bg-gray-100 flex-1"></div>
+              <div className="flex items-center gap-3">
+                 <div className="h-1 bg-gray-100 flex-1 rounded-full"></div>
+                 <span className="text-xs text-gray-400 font-black uppercase tracking-widest">Hoặc Nhập URL</span>
+                 <div className="h-1 bg-gray-100 flex-1 rounded-full"></div>
               </div>
 
               <div>
-                <label className="block text-sm font-700 text-gray-700 mb-1.5">Đường dẫn tài liệu trực tuyến</label>
-                <Input
-                  icon={FileText}
-                  type="url"
-                  placeholder="https://example.com/tai-lieu.pdf"
-                  value={aiFileUrl}
-                  onChange={(e) => setAiFileUrl(e.target.value)}
-                  disabled={aiStatus === "polling" || isUploading}
-                />
+                <label className="block text-sm font-black text-gray-900 mb-3">Đường dẫn tài liệu</label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                    <FileText size={20} className="text-gray-400" />
+                  </div>
+                  <input
+                    type="url"
+                    placeholder="https://truong.edu.vn/tai-lieu.pdf"
+                    value={aiFileUrl}
+                    onChange={(e) => setAiFileUrl(e.target.value)}
+                    disabled={aiStatus === "polling" || isUploading}
+                    className="w-full pl-12 pr-4 py-4 text-base font-bold border-4 border-gray-100 rounded-[20px] bg-gray-50 focus:bg-white focus:border-violet-400 outline-none transition-all placeholder-gray-400"
+                  />
+                </div>
               </div>
 
               {aiStatus === "polling" ? (
-                <div className="bg-violet-50 rounded-xl p-4 flex flex-col items-center justify-center py-8">
-                  <div className="w-10 h-10 border-4 border-violet-600 border-t-transparent rounded-full animate-spin mb-3" />
-                  <p className="font-700 text-violet-800">Robot đang phân tích tài liệu...</p>
-                  <p className="text-xs text-violet-600 mt-1">Vui lòng không đóng cửa sổ này</p>
+                <div className="bg-violet-50 rounded-[24px] p-6 border-4 border-violet-100 flex flex-col items-center justify-center py-10 mt-6">
+                  <div className="w-12 h-12 border-4 border-violet-300 border-t-violet-600 rounded-full animate-spin mb-4" />
+                  <p className="font-black text-violet-900 text-lg">Đang đọc tài liệu...</p>
+                  <p className="text-sm font-bold text-violet-600 mt-1">Đừng đóng cửa sổ này nhé!</p>
                 </div>
               ) : (
-                <Button 
-                  variant="primary" 
-                  fullWidth 
-                  size="lg" 
-                  className="font-800"
+                <button 
                   onClick={handleStartAIJob}
+                  className="w-full py-5 bg-gradient-to-r from-violet-600 to-indigo-600 text-white font-black text-xl rounded-[20px] shadow-[0_6px_0_#4c1d95] active:translate-y-[6px] active:shadow-none hover:brightness-110 transition-all mt-6 uppercase tracking-wider flex justify-center items-center gap-2"
                 >
-                  <Bot size={16} /> Bắt đầu tạo câu hỏi
-                </Button>
+                  <Bot size={24} /> Bắt Đầu Tạo Câu Hỏi
+                </button>
               )}
             </div>
           </div>
         </div>
       )}
 
-      {/* Toast notification */}
+      {/* Toast notification (Clay) */}
       {toast && (
         <div
-          className={`fixed bottom-6 right-6 px-5 py-3 rounded-2xl shadow-lg text-sm font-700 text-white flex items-center gap-2 animate-fade-in-up z-50 ${
-            toast.type === "ok" ? "bg-emerald-600" : "bg-red-600"
+          className={`fixed bottom-8 left-1/2 transform -translate-x-1/2 px-6 py-4 rounded-[20px] shadow-[0_12px_24px_rgba(0,0,0,0.15)] text-base font-black text-white flex items-center gap-3 animate-fade-in-up z-50 border-4 ${
+            toast.type === "ok" ? "bg-emerald-500 border-emerald-600" : "bg-red-500 border-red-600"
           }`}
         >
-          {toast.type === "ok" ? <Check size={15} /> : <X size={15} />}
+          {toast.type === "ok" ? (
+            <div className="w-8 h-8 bg-emerald-600 rounded-full flex items-center justify-center"><Check size={18} className="stroke-[3px]" /></div>
+          ) : (
+            <div className="w-8 h-8 bg-red-600 rounded-full flex items-center justify-center"><X size={18} className="stroke-[3px]" /></div>
+          )}
           {toast.msg}
         </div>
       )}
