@@ -24,7 +24,7 @@ function QuizCard({ quiz, index }: { quiz: Quiz; index: number }) {
   const handlePlayNow = async () => {
     const token = Cookies.get("token");
     if (!token) {
-      router.push("/auth/login");
+      router.push("/login");
       return;
     }
     

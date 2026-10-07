@@ -19,6 +19,8 @@ import {
   ChevronDown,
   ChevronUp,
   AlertCircle,
+  Bot,
+  FileText
 } from "lucide-react";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
@@ -463,15 +465,44 @@ export default function QuizEditorPage() {
   const [savingAll, setSavingAll] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: "ok" | "err" } | null>(null);
 
+  // AI Modal States
+  const [aiModalOpen, setAiModalOpen] = useState(false);
+  const [aiFileUrl, setAiFileUrl] = useState("");
+  const [aiJobId, setAiJobId] = useState<string | null>(null);
+  const [aiStatus, setAiStatus] = useState<"idle" | "polling" | "completed" | "error">("idle");
+  const [aiError, setAiError] = useState("");
+  const [isUploading, setIsUploading] = useState(false);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploading(true);
+    setAiError("");
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await api.post("/upload", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      if (res.data.success) {
+        setAiFileUrl("http://localhost:5000" + res.data.data);
+      }
+    } catch (err: any) {
+      setAiError(err.response?.data?.message || "Không thể tải file lên.");
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   // Auth guard
   useEffect(() => {
     if (!Cookies.get("token")) {
-      router.push("/auth/login");
+      router.push("/login");
     }
   }, [router]);
 
   // Load quiz detail
-  useEffect(() => {
+  const loadQuizDetail = () => {
     api
       .get(`/quizzes/${quizId}`)
       .then((res) => {
@@ -493,7 +524,6 @@ export default function QuizEditorPage() {
                 isCorrect: o.isCorrect ?? false,
               })),
               isExpanded: idx === 0,
-              isSaving: false,
             })
           );
           setSlides(draftSlides);
@@ -501,7 +531,49 @@ export default function QuizEditorPage() {
       })
       .catch(console.error)
       .finally(() => setLoadingQuiz(false));
+  };
+
+  useEffect(() => {
+    loadQuizDetail();
   }, [quizId]);
+
+  // AI Polling logic
+  useEffect(() => {
+    if (aiStatus !== "polling" || !aiJobId) return;
+    const interval = setInterval(async () => {
+      try {
+        const res = await api.get(`/aijobs/${aiJobId}`);
+        const job = res.data.data;
+        if (job.status === "COMPLETED") {
+          setAiStatus("completed");
+          setAiModalOpen(false);
+          showToast("Đã sinh đề thành công!", "ok");
+          loadQuizDetail(); // Reload to see new slides
+          clearInterval(interval);
+        } else if (job.status === "FAILED") {
+          setAiStatus("error");
+          setAiError(job.errorMessage || "Có lỗi khi sinh đề.");
+          clearInterval(interval);
+        }
+      } catch (e) {
+        console.error("Polling error", e);
+      }
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [aiStatus, aiJobId]);
+
+  const handleStartAIJob = async () => {
+    if (!aiFileUrl.trim()) return setAiError("Vui lòng nhập URL tài liệu");
+    setAiError("");
+    setAiStatus("polling");
+    try {
+      const res = await api.post("/aijobs", { quizId, fileUrl: aiFileUrl });
+      setAiJobId(res.data.data.id);
+    } catch (e: any) {
+      setAiStatus("error");
+      setAiError(e.response?.data?.message || "Lỗi tạo AI Job");
+    }
+  };
 
   const showToast = (msg: string, type: "ok" | "err" = "ok") => {
     setToast({ msg, type });
@@ -691,6 +763,19 @@ export default function QuizEditorPage() {
             Thêm câu hỏi mới
           </p>
           <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setAiModalOpen(true);
+                setAiStatus("idle");
+                setAiFileUrl("");
+              }}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl border-2 border-transparent bg-gradient-to-r from-pink-500 to-violet-500 hover:from-pink-600 hover:to-violet-600 shadow-md hover:shadow-lg text-sm font-800 text-white transition-all transform hover:-translate-y-0.5"
+              id="btn-add-slide-ai"
+            >
+              <Bot size={16} /> Sinh Đề AI
+            </button>
+
             {slideTypes.map((t) => (
               <button
                 key={t.type}
@@ -705,6 +790,87 @@ export default function QuizEditorPage() {
           </div>
         </div>
       </main>
+
+      {/* AI Modal */}
+      {aiModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl relative overflow-hidden animate-fade-in-up">
+            <button
+              onClick={() => {
+                if (aiStatus !== "polling") setAiModalOpen(false);
+              }}
+              className="absolute top-4 right-4 w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 transition-colors"
+            >
+              <X size={16} />
+            </button>
+            
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-pink-100 to-violet-100 flex items-center justify-center mb-4">
+              <Bot size={28} className="text-violet-600" />
+            </div>
+            
+            <h3 className="text-xl font-900 text-gray-900 mb-2">Sinh đề tự động bằng AI</h3>
+            <p className="text-sm text-gray-500 mb-6">
+              Hệ thống sẽ tự động đọc tài liệu của bạn (PDF/DOCX - URL) và sinh ra các câu hỏi trắc nghiệm, điền khuyết.
+            </p>
+
+            <div className="space-y-4">
+              {aiError && (
+                <div className="p-3 bg-red-50 text-red-600 text-sm font-600 rounded-xl">
+                  {aiError}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-700 text-gray-700 mb-1.5">Tải tài liệu từ máy</label>
+                <input
+                  type="file"
+                  accept=".pdf,.docx,.txt"
+                  onChange={handleFileUpload}
+                  disabled={aiStatus === "polling" || isUploading}
+                  className="w-full text-sm text-gray-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-700 file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100 cursor-pointer transition-colors"
+                />
+                {isUploading && <p className="text-xs text-violet-600 mt-2 font-600 animate-pulse">Đang tải file lên...</p>}
+              </div>
+
+              <div className="flex items-center gap-3 my-4">
+                 <div className="h-px bg-gray-100 flex-1"></div>
+                 <span className="text-xs text-gray-400 font-700 uppercase tracking-widest">Hoặc nhập URL</span>
+                 <div className="h-px bg-gray-100 flex-1"></div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-700 text-gray-700 mb-1.5">Đường dẫn tài liệu trực tuyến</label>
+                <Input
+                  icon={FileText}
+                  type="url"
+                  placeholder="https://example.com/tai-lieu.pdf"
+                  value={aiFileUrl}
+                  onChange={(e) => setAiFileUrl(e.target.value)}
+                  disabled={aiStatus === "polling" || isUploading}
+                />
+              </div>
+
+              {aiStatus === "polling" ? (
+                <div className="bg-violet-50 rounded-xl p-4 flex flex-col items-center justify-center py-8">
+                  <div className="w-10 h-10 border-4 border-violet-600 border-t-transparent rounded-full animate-spin mb-3" />
+                  <p className="font-700 text-violet-800">Robot đang phân tích tài liệu...</p>
+                  <p className="text-xs text-violet-600 mt-1">Vui lòng không đóng cửa sổ này</p>
+                </div>
+              ) : (
+                <Button 
+                  variant="primary" 
+                  fullWidth 
+                  size="lg" 
+                  className="font-800"
+                  onClick={handleStartAIJob}
+                >
+                  <Bot size={16} /> Bắt đầu tạo câu hỏi
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Toast notification */}
       {toast && (

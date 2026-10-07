@@ -26,6 +26,8 @@ import Button from "@/components/ui/Button";
 import { api } from "@/lib/api";
 import { Quiz } from "@/types/database";
 import { formatNumber } from "@/lib/utils";
+import { useAuthStore } from "@/store/useAuthStore";
+import { useQuery } from "@tanstack/react-query";
 
 // ─── Stat Card ───────────────────────────────────────────────────────────────
 function StatCard({
@@ -182,28 +184,23 @@ function QuizRow({
 // ─── Main Dashboard Page ──────────────────────────────────────────────────────
 export default function DashboardPage() {
   const router = useRouter();
-  const [user, setUser] = useState<any>(null);
-  const [quizzes, setQuizzes] = useState<Quiz[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { user, isAuthenticated, logout } = useAuthStore();
   const [creatingRoom, setCreatingRoom] = useState(false);
 
   useEffect(() => {
-    const token = Cookies.get("token");
-    const userCookie = Cookies.get("user");
-    if (!token || !userCookie) {
-      router.push("/auth/login");
-      return;
+    if (!isAuthenticated) {
+      router.push("/login");
     }
-    const parsedUser = JSON.parse(userCookie);
-    setUser(parsedUser);
+  }, [isAuthenticated, router]);
 
-    // Load public quizzes as a placeholder (ideally: GET /api/quizzes/mine)
-    api
-      .get("/quizzes")
-      .then((res) => setQuizzes(res.data.data || []))
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, [router]);
+  const { data: quizzes = [], isLoading: loading, refetch } = useQuery({
+    queryKey: ["quizzes"],
+    queryFn: async () => {
+      const res = await api.get("/quizzes"); // Replace with /quizzes/mine if endpoint exists
+      return res.data.data || [];
+    },
+    enabled: isAuthenticated,
+  });
 
   const handleCreateRoom = async (quiz: Quiz) => {
     setCreatingRoom(true);
@@ -223,17 +220,19 @@ export default function DashboardPage() {
     }
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (!confirm("Bạn chắc chắn muốn xóa bộ đề này?")) return;
-    setQuizzes((prev) => prev.filter((q) => q.id !== id));
-    // TODO: api.delete(`/quizzes/${id}`)
+    try {
+      await api.delete(`/quizzes/${id}`);
+      refetch();
+    } catch (e) {
+      alert("Xóa bộ đề thất bại.");
+    }
   };
 
   const handleLogout = () => {
-    ["token", "user", "guest_nickname"].forEach((key) => {
-      document.cookie = `${key}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
-    });
-    router.push("/");
+    logout();
+    router.push("/login");
   };
 
   const aiUsed = user?.ai_used_today ?? 0;

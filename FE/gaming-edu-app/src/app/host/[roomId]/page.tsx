@@ -1,13 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
-import {
-  HubConnection,
-  HubConnectionBuilder,
-  LogLevel,
-} from "@microsoft/signalr";
 import Cookies from "js-cookie";
+import confetti from "canvas-confetti";
+import { useGameHub } from "@/hooks/useGameHub";
+import { useQAHub } from "@/hooks/useQAHub";
 import {
   Users,
   Play,
@@ -20,13 +17,17 @@ import {
   Crown,
   LogOut,
   Zap,
+  MessageCircle,
+  Pin,
+  CheckCircle,
+  EyeOff,
 } from "lucide-react";
 import Button from "@/components/ui/Button";
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+import { api } from "@/lib/api";
 
-type HostState = "LOBBY" | "PLAYING" | "ENDED";
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
 // ─── Leaderboard Entry ─────────────────────────────────────────────────────────
 function LeaderboardEntry({
@@ -114,101 +115,115 @@ export default function HostLobbyPage() {
   const router = useRouter();
   const roomId = params.roomId as string;
 
-  const [connection, setConnection] = useState<HubConnection | null>(null);
-  const [hostState, setHostState] = useState<HostState>("LOBBY");
+  const {
+    isConnected,
+    gameState,
+    players,
+    currentSlide,
+    leaderboard,
+    joinRoom,
+    startGame: hubStartGame,
+    nextSlide: hubNextSlide,
+    endGame: hubEndGame,
+  } = useGameHub();
+
+  const {
+    questions,
+    pinQuestion,
+    hideQuestion,
+    resolveQuestion,
+  } = useQAHub(roomId);
+
   const [pinCode, setPinCode] = useState("");
-  const [players, setPlayers] = useState<any[]>([]);
-  const [leaderboard, setLeaderboard] = useState<any[]>([]);
-  const [currentSlide, setCurrentSlide] = useState<any>(null);
-  const [currentSlideIdx, setCurrentSlideIdx] = useState(0);
   const [copied, setCopied] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [showQA, setShowQA] = useState(false);
 
   // ── Init SignalR ─────────────────────────────────────────────────────────
   useEffect(() => {
     const token = Cookies.get("token");
     if (!token) {
-      router.push("/auth/login");
+      router.push("/login");
       return;
     }
-
-    const newConnection = new HubConnectionBuilder()
-      .withUrl(`${API_BASE_URL}/hubs/game`, {
-        accessTokenFactory: () => token,
-      })
-      .configureLogging(LogLevel.Warning)
-      .withAutomaticReconnect()
-      .build();
-
-    setConnection(newConnection);
   }, [router]);
 
-  // ── Connect & setup events ────────────────────────────────────────────────
   useEffect(() => {
-    if (!connection) return;
+    if (isConnected) {
+      const urlParams = new URLSearchParams(window.location.search);
+      const pin = urlParams.get("pin");
+      if (pin) {
+        setPinCode(pin);
+        const userStr = Cookies.get("user");
+        const user = userStr ? JSON.parse(userStr) : null;
+        joinRoom(pin, user?.nickname ?? "Host");
+      }
+    }
+  }, [isConnected, joinRoom]);
 
-    connection
-      .start()
-      .then(() => {
-        const urlParams = new URLSearchParams(window.location.search);
-        const pin = urlParams.get("pin");
-        if (pin) {
-          setPinCode(pin);
-          const user = Cookies.get("user")
-            ? JSON.parse(Cookies.get("user")!)
-            : null;
-          connection.invoke("JoinRoom", {
-            pinCode: pin,
-            nickname: user?.nickname ?? "Host",
-          });
+  useEffect(() => {
+    if (gameState === "FINISHED") {
+      const duration = 3000;
+      const end = Date.now() + duration;
+
+      const frame = () => {
+        confetti({
+          particleCount: 5,
+          angle: 60,
+          spread: 55,
+          origin: { x: 0 },
+          colors: ['#7c3aed', '#f59e0b', '#10b981']
+        });
+        confetti({
+          particleCount: 5,
+          angle: 120,
+          spread: 55,
+          origin: { x: 1 },
+          colors: ['#7c3aed', '#f59e0b', '#10b981']
+        });
+
+        if (Date.now() < end) {
+          requestAnimationFrame(frame);
         }
-      })
-      .catch(console.error);
-
-    connection.on("PlayerJoined", (player) => {
-      setPlayers((prev) => {
-        if (prev.some((p) => p.playerId === player.playerId)) return prev;
-        return [...prev, player];
-      });
-    });
-
-    connection.on("SlideStarted", (slide) => {
-      setCurrentSlide(slide);
-      setCurrentSlideIdx(slide.slideIndex ?? 0);
-    });
-
-    connection.on("LeaderboardUpdated", (data) => {
-      setLeaderboard(data);
-    });
-
-    connection.on("GameEnded", (data) => {
-      setLeaderboard(data.leaderboard ?? []);
-      setHostState("ENDED");
-    });
-
-    return () => {
-      connection.stop();
-    };
-  }, [connection]);
+      };
+      frame();
+    }
+  }, [gameState]);
 
   // ── Actions ──────────────────────────────────────────────────────────────
-  const startGame = () => {
-    if (!connection || players.length === 0) return;
+  const startGame = async () => {
+    if (players.length === 0) return;
     setStarting(true);
-    connection.invoke("StartGame", roomId).catch(console.error);
-    setHostState("PLAYING");
+    await hubStartGame(roomId);
     setTimeout(() => setStarting(false), 2000);
   };
 
   const nextSlide = () => {
-    if (!connection) return;
-    connection.invoke("NextSlide", roomId).catch(console.error);
+    hubNextSlide(roomId);
   };
 
   const endGame = () => {
-    if (!connection) return;
     if (!confirm("Bạn chắc chắn muốn kết thúc trò chơi?")) return;
-    connection.invoke("EndGame", roomId).catch(console.error);
+    hubEndGame(roomId);
+  };
+
+  const exportReport = async () => {
+    setExporting(true);
+    try {
+      const res = await api.get(`/rooms/${roomId}/export`, { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `Room_${roomId}_Report.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (e) {
+      alert("Xuất báo cáo thất bại.");
+    } finally {
+      setExporting(false);
+    }
   };
 
   const copyPin = () => {
@@ -223,7 +238,7 @@ export default function HostLobbyPage() {
       ? `${window.location.origin}/play?pin=${pinCode}`
       : "";
 
-  if (!pinCode && connection) {
+  if (!pinCode) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="flex flex-col items-center gap-4 text-center p-6">
@@ -260,10 +275,11 @@ export default function HostLobbyPage() {
                 Bảng Điều Khiển Host
               </div>
               <div className="text-xs text-gray-500">
-                {hostState === "LOBBY" && "Đang chờ người chơi..."}
-                {hostState === "PLAYING" &&
-                  `Câu ${currentSlideIdx + 1} đang chạy`}
-                {hostState === "ENDED" && "Trò chơi đã kết thúc"}
+                {gameState === "WAITING" && "Đang chờ người chơi..."}
+                {gameState === "STARTING" && "Đang bắt đầu..."}
+                {(gameState === "PLAYING" || gameState === "LEADERBOARD") &&
+                  `Câu ${currentSlide?.index !== undefined ? currentSlide.index + 1 : "?"} đang chạy`}
+                {gameState === "FINISHED" && "Trò chơi đã kết thúc"}
               </div>
             </div>
           </div>
@@ -283,7 +299,7 @@ export default function HostLobbyPage() {
         {/* ════════════════════════════════════════════════════════════
             LOBBY STATE
         ════════════════════════════════════════════════════════════ */}
-        {hostState === "LOBBY" && (
+        {gameState === "WAITING" && (
           <div className="space-y-6 animate-fade-in-up">
             {/* PIN Display Card */}
             <div className="bg-hero-gradient rounded-3xl p-6 md:p-10 text-center relative overflow-hidden">
@@ -405,13 +421,13 @@ export default function HostLobbyPage() {
         {/* ════════════════════════════════════════════════════════════
             PLAYING STATE
         ════════════════════════════════════════════════════════════ */}
-        {hostState === "PLAYING" && (
+        {(gameState === "PLAYING" || gameState === "LEADERBOARD" || gameState === "STARTING") && (
           <div className="flex flex-col items-center gap-6 animate-fade-in-up">
             {/* Current Question Display */}
             {currentSlide ? (
               <div className="w-full max-w-2xl bg-white rounded-3xl shadow-lg border border-gray-100 p-6 md:p-10 text-center">
                 <div className="text-sm font-700 text-gray-500 uppercase tracking-widest mb-4">
-                  Câu {currentSlideIdx + 1}
+                  Câu {currentSlide?.index !== undefined ? currentSlide.index + 1 : "?"}
                 </div>
                 <h2 className="text-2xl md:text-3xl font-900 text-gray-900 mb-8 leading-tight">
                   {currentSlide.questionText}
@@ -508,7 +524,7 @@ export default function HostLobbyPage() {
         {/* ════════════════════════════════════════════════════════════
             ENDED STATE
         ════════════════════════════════════════════════════════════ */}
-        {hostState === "ENDED" && (
+        {gameState === "FINISHED" && (
           <div className="flex flex-col items-center gap-6 animate-fade-in-up">
             {/* Podium header */}
             <div className="bg-hero-gradient rounded-3xl p-8 text-center w-full max-w-2xl relative overflow-hidden">
@@ -554,24 +570,107 @@ export default function HostLobbyPage() {
               <Button
                 variant="primary"
                 size="lg"
-                onClick={() => router.push("/dashboard")}
+                onClick={exportReport}
+                loading={exporting}
                 className="font-800"
-                id="btn-back-dashboard"
+                id="btn-export-report"
               >
-                Về Dashboard <ArrowRight size={16} />
+                Xuất Báo Cáo Excel
               </Button>
               <Button
                 variant="outline"
                 size="lg"
-                onClick={() => router.push("/")}
-                id="btn-back-home"
+                onClick={() => router.push("/dashboard")}
+                id="btn-back-dashboard"
               >
-                Về Trang Chủ
+                Về Dashboard <ArrowRight size={16} className="ml-1" />
               </Button>
             </div>
           </div>
         )}
       </main>
+
+      {/* Q&A Floating Button for Host */}
+      <button
+         onClick={() => setShowQA(true)}
+         className="fixed bottom-6 right-6 w-14 h-14 bg-violet-600 text-white rounded-full shadow-xl flex items-center justify-center hover:bg-violet-700 transition-colors z-40"
+      >
+         <MessageCircle size={24} />
+         {questions.filter(q => !q.isResolved).length > 0 && (
+            <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full text-xs font-bold flex items-center justify-center">
+               {questions.filter(q => !q.isResolved).length}
+            </span>
+         )}
+      </button>
+
+      {/* Host Q&A Modal */}
+      {showQA && (
+         <div className="fixed inset-0 z-50 flex flex-col bg-gray-50/95 backdrop-blur-sm animate-fade-in-up md:p-10">
+            <div className="bg-white max-w-3xl w-full mx-auto flex-1 rounded-2xl shadow-2xl overflow-hidden flex flex-col border border-gray-100">
+               <div className="bg-white p-5 shadow-sm flex items-center justify-between border-b border-gray-100">
+                  <h3 className="font-bold text-gray-800 text-xl flex items-center gap-2">
+                     <MessageCircle size={24} className="text-violet-600" />
+                     Quản Lý Hỏi Đáp
+                  </h3>
+                  <button onClick={() => setShowQA(false)} className="p-2 text-gray-500 hover:bg-gray-100 rounded-full">
+                     <X size={20} />
+                  </button>
+               </div>
+
+               <div className="flex-1 overflow-y-auto p-5 space-y-4">
+                  {questions.length === 0 ? (
+                     <div className="text-center text-gray-400 mt-10">
+                        Chưa có câu hỏi nào từ người chơi.
+                     </div>
+                  ) : (
+                     questions
+                        .sort((a, b) => (b.isPinned ? 1 : 0) - (a.isPinned ? 1 : 0) || b.upvotes - a.upvotes)
+                        .map(q => (
+                        <div key={q.id} className={`bg-white p-5 rounded-xl shadow-sm border ${q.isPinned ? 'border-amber-300 bg-amber-50' : 'border-gray-200'} ${q.isResolved ? 'opacity-50 grayscale' : ''}`}>
+                           <div className="flex items-center justify-between mb-3">
+                              <div className="flex items-center gap-2">
+                                 <div className="font-bold text-gray-900">{q.playerNickname}</div>
+                                 <div className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">{q.upvotes} votes</div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                 <button 
+                                    onClick={() => pinQuestion(q.id, !q.isPinned)}
+                                    title={q.isPinned ? "Bỏ ghim" : "Ghim câu hỏi"}
+                                    className={`p-1.5 rounded-lg transition-colors ${q.isPinned ? 'bg-amber-100 text-amber-700' : 'hover:bg-gray-100 text-gray-500'}`}
+                                 >
+                                    <Pin size={16} />
+                                 </button>
+                                 {!q.isResolved && (
+                                    <button 
+                                       onClick={() => resolveQuestion(q.id)}
+                                       title="Đánh dấu đã trả lời"
+                                       className="p-1.5 hover:bg-green-100 text-green-600 rounded-lg transition-colors"
+                                    >
+                                       <CheckCircle size={16} />
+                                    </button>
+                                 )}
+                                 <button 
+                                    onClick={() => hideQuestion(q.id)}
+                                    title="Ẩn câu hỏi"
+                                    className="p-1.5 hover:bg-red-100 text-red-600 rounded-lg transition-colors"
+                                 >
+                                    <EyeOff size={16} />
+                                 </button>
+                              </div>
+                           </div>
+                           <p className="text-gray-800">{q.content}</p>
+                           {q.isResolved && (
+                              <div className="mt-2 text-xs font-bold text-green-600 flex items-center gap-1">
+                                 <CheckCircle size={12} /> Đã trả lời
+                              </div>
+                           )}
+                        </div>
+                     ))
+                  )}
+               </div>
+            </div>
+         </div>
+      )}
     </div>
   );
 }

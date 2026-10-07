@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import QueryProvider from "@/components/providers/QueryProvider";
 
 export const metadata: Metadata = {
   title: "Gaming Edu – Học Tập Vui Hơn",
@@ -20,7 +21,11 @@ export default function RootLayout({
 }) {
   return (
     <html lang="vi" className="h-full">
-      <body className="min-h-full antialiased" suppressHydrationWarning>{children}</body>
+      <body className="min-h-full antialiased bg-gray-50 text-gray-900" suppressHydrationWarning>
+        <QueryProvider>
+          {children}
+        </QueryProvider>
+      </body>
     </html>
   );
 }

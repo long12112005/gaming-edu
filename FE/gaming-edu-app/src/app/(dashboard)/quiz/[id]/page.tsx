@@ -191,7 +191,7 @@ export default function QuizDetailPage() {
 
   const handleStartGame = async () => {
     if (!isLoggedIn) {
-      router.push("/auth/login");
+      router.push("/login");
       return;
     }
     setCreating(true);
@@ -270,7 +270,7 @@ export default function QuizDetailPage() {
               variant="primary"
               size="sm"
               onClick={() =>
-                isLoggedIn ? setShowModeModal(true) : router.push("/auth/login")
+                isLoggedIn ? setShowModeModal(true) : router.push("/login")
               }
               disabled={publishedSlides.length === 0}
               id="btn-start-quiz"
@@ -376,7 +376,7 @@ export default function QuizDetailPage() {
                 size="lg"
                 fullWidth
                 onClick={() =>
-                  isLoggedIn ? setShowModeModal(true) : router.push("/auth/login")
+                  isLoggedIn ? setShowModeModal(true) : router.push("/login")
                 }
                 disabled={publishedSlides.length === 0 || creating}
                 className="font-800"
