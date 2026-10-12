@@ -6,7 +6,7 @@ import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import { AuthFormState } from "@/types/database";
 import { useRouter } from "next/navigation";
-import { api } from "@/lib/api";
+import { AuthAPI } from "@/lib/api";
 import Cookies from "js-cookie";
 
 type AuthTab = "login" | "register";
@@ -47,12 +47,15 @@ export default function AuthPage() {
     email: "",
     password: "",
   });
-  const [registerForm, setRegisterForm] = useState<AuthFormState>({
+  const [registerForm, setRegisterForm] = useState<AuthFormState & { otp: string; confirmPassword?: string; nickname?: string }>({
     nickname: "",
     email: "",
     password: "",
+    confirmPassword: "",
+    otp: "",
   });
-  const [errors, setErrors] = useState<Partial<AuthFormState>>({});
+  const [registerStep, setRegisterStep] = useState(1);
+  const [errors, setErrors] = useState<Partial<AuthFormState & { otp: string; confirmPassword?: string; nickname?: string }>>({});
 
   const validateLogin = () => {
     const e: Partial<AuthFormState> = {};
@@ -63,10 +66,15 @@ export default function AuthPage() {
   };
 
   const validateRegister = () => {
-    const e: Partial<AuthFormState> = {};
-    if (!registerForm.nickname || registerForm.nickname.length < 2) e.nickname = "Biệt danh ít nhất 2 ký tự";
-    if (!registerForm.email.includes("@")) e.email = "Email không hợp lệ";
-    if (registerForm.password.length < 6) e.password = "Mật khẩu ít nhất 6 ký tự";
+    const e: Partial<AuthFormState & { otp: string; confirmPassword?: string; nickname?: string }> = {};
+    if (registerStep === 1) {
+      if (!registerForm.nickname || registerForm.nickname.length < 2) e.nickname = "Biệt danh ít nhất 2 ký tự";
+      if (!registerForm.email.includes("@")) e.email = "Email không hợp lệ";
+      if (registerForm.password.length < 6) e.password = "Mật khẩu ít nhất 6 ký tự";
+      if (registerForm.password !== registerForm.confirmPassword) e.confirmPassword = "Mật khẩu không khớp";
+    } else {
+      if (!registerForm.otp || registerForm.otp.length !== 6) e.otp = "OTP phải gồm 6 chữ số";
+    }
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -80,18 +88,40 @@ export default function AuthPage() {
     setIsLoading(true);
     try {
       if (activeTab === "login") {
-        const { data } = await api.post("/auth/login", loginForm);
-        Cookies.set("token", data.data.token, { expires: 1 }); // 1 day
-        Cookies.set("user", JSON.stringify(data.data.user), { expires: 1 });
-        router.push("/");
+        const res: any = await AuthAPI.login(loginForm);
+        if (res.success && res.data) {
+          Cookies.set("token", res.data.token, { expires: 1 }); // 1 day
+          Cookies.set("user", JSON.stringify(res.data.user), { expires: 1 });
+          router.push("/dashboard");
+        } else {
+          setGlobalError(res.message || "Đăng nhập thất bại");
+        }
       } else {
-        const { data } = await api.post("/auth/register", registerForm);
-        Cookies.set("token", data.data.token, { expires: 1 });
-        Cookies.set("user", JSON.stringify(data.data.user), { expires: 1 });
-        router.push("/");
+        if (registerStep === 1) {
+          const res: any = await AuthAPI.sendRegisterOtp({ email: registerForm.email });
+          if (res.success) {
+            setRegisterStep(2);
+          } else {
+            setGlobalError(res.message || "Không thể gửi OTP");
+          }
+        } else {
+          const res: any = await AuthAPI.register({ 
+            email: registerForm.email, 
+            password: registerForm.password,
+            otp: registerForm.otp, 
+            nickname: registerForm.nickname! 
+          });
+          if (res.success && res.data) {
+            Cookies.set("token", res.data.token, { expires: 1 });
+            Cookies.set("user", JSON.stringify(res.data.user), { expires: 1 });
+            router.push("/dashboard");
+          } else {
+            setGlobalError(res.message || "Đăng ký thất bại");
+          }
+        }
       }
     } catch (error: any) {
-      setGlobalError(error.response?.data?.message || "Có lỗi xảy ra, vui lòng thử lại sau.");
+      setGlobalError(error.message || "Có lỗi xảy ra, vui lòng thử lại sau.");
     } finally {
       setIsLoading(false);
     }
@@ -212,6 +242,7 @@ export default function AuthPage() {
                   aria-selected={activeTab === tab}
                   onClick={() => {
                     setActiveTab(tab);
+                    setRegisterStep(1);
                     setErrors({});
                   }}
                   id={`tab-${tab}`}
@@ -234,16 +265,16 @@ export default function AuthPage() {
                 </div>
               )}
 
-              {/* Nickname (Register only) — maps to users.nickname */}
-              {activeTab === "register" && (
+              {/* Nickname (Register Step 1) */}
+              {activeTab === "register" && registerStep === 1 && (
                 <div className="animate-fade-in-up">
                   <label className="text-sm font-600 text-gray-700 block mb-1.5">
-                    Biệt danh (Tên nhân vật)
+                    Biệt danh hiệp sĩ
                   </label>
                   <Input
                     icon={User}
                     type="text"
-                    placeholder="Họp Sĩ Ánh Sáng"
+                    placeholder="Hiệp sĩ Ánh sáng"
                     value={registerForm.nickname ?? ""}
                     onChange={(e) =>
                       setRegisterForm({ ...registerForm, nickname: e.target.value })
@@ -255,74 +286,138 @@ export default function AuthPage() {
                 </div>
               )}
 
-              {/* Email — maps to users.email */}
-              <div>
-                <label className="text-sm font-600 text-gray-700 block mb-1.5">
-                  Địa chỉ Email
-                </label>
-                <Input
-                  icon={Mail}
-                  type="email"
-                  placeholder="Email@gmail.com"
-                  value={activeTab === "login" ? loginForm.email : registerForm.email}
-                  onChange={(e) =>
-                    activeTab === "login"
-                      ? setLoginForm({ ...loginForm, email: e.target.value })
-                      : setRegisterForm({ ...registerForm, email: e.target.value })
-                  }
-                  error={errors.email}
-                  id="input-email"
-                  autoComplete="email"
-                />
-              </div>
-
-              {/* Password — maps to users.password_hash */}
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-sm font-600 text-gray-700">Mật Khẩu</label>
-                  {activeTab === "login" && (
-                    <button
-                      type="button"
-                      className="text-xs text-violet-600 hover:text-violet-800 font-600 transition-colors"
-                      id="btn-forgot-password"
-                    >
-                      Quên mật khẩu?
-                    </button>
-                  )}
+              {/* Email */}
+              {!(activeTab === "register" && registerStep === 2) && (
+                <div className="animate-fade-in-up">
+                  <label className="text-sm font-600 text-gray-700 block mb-1.5">
+                    Địa chỉ Email
+                  </label>
+                  <Input
+                    icon={Mail}
+                    type="email"
+                    placeholder="Email@gmail.com"
+                    value={activeTab === "login" ? loginForm.email : registerForm.email}
+                    onChange={(e) =>
+                      activeTab === "login"
+                        ? setLoginForm({ ...loginForm, email: e.target.value })
+                        : setRegisterForm({ ...registerForm, email: e.target.value })
+                    }
+                    error={errors.email}
+                    id="input-email"
+                    autoComplete="email"
+                  />
                 </div>
-                <Input
-                  icon={Lock}
-                  type="password"
-                  showPasswordToggle
-                  placeholder="••••••••"
-                  value={activeTab === "login" ? loginForm.password : registerForm.password}
-                  onChange={(e) =>
-                    activeTab === "login"
-                      ? setLoginForm({ ...loginForm, password: e.target.value })
-                      : setRegisterForm({ ...registerForm, password: e.target.value })
-                  }
-                  error={errors.password}
-                  id="input-password"
-                  autoComplete={activeTab === "login" ? "current-password" : "new-password"}
-                />
-              </div>
+              )}
+
+              {/* Password */}
+              {!(activeTab === "register" && registerStep === 2) && (
+                <div className="animate-fade-in-up">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-sm font-600 text-gray-700">Mật Khẩu</label>
+                    {activeTab === "login" && (
+                      <button
+                        type="button"
+                        onClick={() => router.push("/auth/forgot-password")}
+                        className="text-xs text-violet-600 hover:text-violet-800 font-600 transition-colors"
+                        id="btn-forgot-password"
+                      >
+                        Quên mật khẩu?
+                      </button>
+                    )}
+                  </div>
+                  <Input
+                    icon={Lock}
+                    type="password"
+                    showPasswordToggle
+                    placeholder="••••••••"
+                    value={activeTab === "login" ? loginForm.password : registerForm.password}
+                    onChange={(e) =>
+                      activeTab === "login"
+                        ? setLoginForm({ ...loginForm, password: e.target.value })
+                        : setRegisterForm({ ...registerForm, password: e.target.value })
+                    }
+                    error={errors.password}
+                    id="input-password"
+                    autoComplete={activeTab === "login" ? "current-password" : "new-password"}
+                  />
+                </div>
+              )}
+
+              {/* Confirm Password (Register Step 1 only) */}
+              {activeTab === "register" && registerStep === 1 && (
+                <div className="animate-fade-in-up">
+                  <label className="text-sm font-600 text-gray-700 block mb-1.5">
+                    Nhập lại Mật Khẩu
+                  </label>
+                  <Input
+                    icon={Lock}
+                    type="password"
+                    showPasswordToggle
+                    placeholder="••••••••"
+                    value={registerForm.confirmPassword ?? ""}
+                    onChange={(e) =>
+                      setRegisterForm({ ...registerForm, confirmPassword: e.target.value })
+                    }
+                    error={errors.confirmPassword}
+                    id="input-confirm-password"
+                    autoComplete="new-password"
+                  />
+                </div>
+              )}
+
+              {/* OTP (Register Step 2 only) */}
+              {activeTab === "register" && registerStep === 2 && (
+                <div className="animate-fade-in-up">
+                  <label className="text-sm font-600 text-gray-700 block mb-1.5">
+                    Mã xác nhận (OTP)
+                  </label>
+                  <Input
+                    icon={Lock}
+                    type="text"
+                    placeholder="Nhập 6 số OTP"
+                    maxLength={6}
+                    value={registerForm.otp}
+                    onChange={(e) =>
+                      setRegisterForm({ ...registerForm, otp: e.target.value })
+                    }
+                    error={errors.otp}
+                    id="input-register-otp"
+                  />
+                  <p className="mt-1.5 text-xs text-gray-500">Mã OTP đã được gửi đến {registerForm.email}</p>
+                </div>
+              )}
 
               {/* Submit Button */}
-              <Button
-                type="submit"
-                variant="primary"
-                fullWidth
-                size="lg"
-                loading={isLoading}
-                className="mt-6 rounded-xl font-800"
-                id={`btn-submit-${activeTab}`}
-              >
-                {isLoading
-                  ? "Đang xử lý..."
-                  : activeTab === "login"
-                  ? "Bắt Đầu Ngay! 🚀"
-                  : "Khởi Tạo Anh Hùng"}
-              </Button>
+              <div className="flex gap-3 mt-6">
+                {activeTab === "register" && registerStep === 2 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-1/3 rounded-xl font-800"
+                    onClick={() => setRegisterStep(1)}
+                    disabled={isLoading}
+                  >
+                    Quay lại
+                  </Button>
+                )}
+                <Button
+                  type="submit"
+                  variant="primary"
+                  fullWidth
+                  size="lg"
+                  loading={isLoading}
+                  className={`${activeTab === "register" && registerStep === 2 ? "w-2/3" : "w-full"} rounded-xl font-800`}
+                  id={`btn-submit-${activeTab}`}
+                >
+                  {isLoading
+                    ? "Đang xử lý..."
+                    : activeTab === "login"
+                    ? "Đăng Nhập Ngay! 🚀"
+                    : registerStep === 1
+                    ? "Đăng Ký Tài Khoản"
+                    : "Xác Nhận & Hoàn Tất"}
+                </Button>
+              </div>
             </form>
 
             {/* Divider */}

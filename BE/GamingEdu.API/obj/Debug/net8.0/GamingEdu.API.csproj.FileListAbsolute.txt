@@ -168,3 +168,8 @@ C:\Users\LONG\gaming-edu\BE\GamingEdu.API\bin\Debug\net8.0\ExcelNumberFormat.dll
 C:\Users\LONG\gaming-edu\BE\GamingEdu.API\bin\Debug\net8.0\RBush.dll
 C:\Users\LONG\gaming-edu\BE\GamingEdu.API\bin\Debug\net8.0\SixLabors.Fonts.dll
 C:\Users\LONG\gaming-edu\BE\GamingEdu.API\bin\Debug\net8.0\System.IO.Packaging.dll
+C:\Users\LONG\gaming-edu\BE\GamingEdu.API\bin\Debug\net8.0\QRCoder.dll
+C:\Users\LONG\gaming-edu\BE\GamingEdu.API\bin\Debug\net8.0\MessagePack.dll
+C:\Users\LONG\gaming-edu\BE\GamingEdu.API\bin\Debug\net8.0\MessagePack.Annotations.dll
+C:\Users\LONG\gaming-edu\BE\GamingEdu.API\bin\Debug\net8.0\Microsoft.AspNetCore.SignalR.StackExchangeRedis.dll
+C:\Users\LONG\gaming-edu\BE\GamingEdu.API\bin\Debug\net8.0\Microsoft.NET.StringTools.dll

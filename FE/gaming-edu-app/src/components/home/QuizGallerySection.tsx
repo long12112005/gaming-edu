@@ -30,13 +30,15 @@ function QuizCard({ quiz, index }: { quiz: Quiz; index: number }) {
     
     setCreating(true);
     try {
-      const res = await api.post("/rooms", { quizId: quiz.id, mode: "HOST_PACED" });
-      if (res.data.success) {
-        const room = res.data.data;
+      const res: any = await api.post("/rooms", { quizId: quiz.id, mode: "HOST_PACED" });
+      if (res.success) {
+        const room = res.data;
         router.push(`/host/${room.id}?pin=${room.pinCode}`);
+      } else {
+        setCreating(false);
       }
-    } catch (err) {
-      alert("Lỗi khi tạo phòng");
+    } catch (err: any) {
+      alert(err.message || "Lỗi khi tạo phòng");
       setCreating(false);
     }
   };
@@ -133,8 +135,21 @@ export default function QuizGallerySection() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.get("/quizzes").then((res) => {
-      setQuizzes(res.data.data);
+    api.get("/quizzes").then((res: any) => {
+      // BE trả QuizSummaryDto (camelCase) → ánh xạ sang các trường mà QuizCard đang dùng
+      const items = (res?.data ?? []).map((q: any) => ({
+        id: q.id,
+        title: q.title,
+        cover_image_url: q.coverImageUrl,
+        topic: q.topic,
+        is_public: q.isPublic,
+        slide_count: q.slideCount ?? 0,
+        created_at: q.createdAt,
+        creator_nickname: q.creatorNickname,
+        creator_avatar: q.creatorAvatar,
+        play_count: 0,
+      }));
+      setQuizzes(items);
     }).catch(console.error)
     .finally(() => setLoading(false));
   }, []);

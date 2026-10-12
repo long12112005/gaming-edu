@@ -216,7 +216,8 @@ public class SlidesController : ControllerBase
         var (slide, error) = await GetSlideWithAuthCheckAsync(quizId, slideId, userId.Value);
         if (error is not null) return error;
 
-        _db.Slides.Remove(slide!);
+        slide!.IsDeleted = true;
+        _db.Slides.Update(slide);
         await _db.SaveChangesAsync();
         await _quizService.InvalidatePublicQuizCacheAsync();
 
@@ -326,7 +327,8 @@ public class SlidesController : ControllerBase
         if (slide.Status == "PUBLISHED")
             return BadRequest(Fail("Không thể từ chối câu hỏi đã được duyệt. Hãy xóa nếu muốn."));
 
-        _db.Slides.Remove(slide);
+        slide.IsDeleted = true;
+        _db.Slides.Update(slide);
         await _db.SaveChangesAsync();
         await _quizService.InvalidatePublicQuizCacheAsync();
 

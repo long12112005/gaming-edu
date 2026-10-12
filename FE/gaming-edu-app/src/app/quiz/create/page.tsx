@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
+import Cookies from "js-cookie";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import { Book, Trophy, ArrowRight, Globe, Lock } from "lucide-react";
@@ -34,24 +35,26 @@ export default function CreateQuizPage() {
       return;
     }
     setError("");
+    if (!Cookies.get("token")) {
+      router.push("/auth/login");
+      return;
+    }
     setLoading(true);
     try {
-      const res = await api.post("/quizzes", {
+      const res: any = await api.post("/quizzes", {
         title: title.trim(),
         topic,
         isPublic,
         coverImageUrl:
           "https://images.unsplash.com/photo-1614732414444-096e5f1122d5?w=600&h=350&fit=crop",
       });
-      if (res.data.success) {
-        const quiz = res.data.data;
+      if (res.success) {
+        const quiz = res.data;
         // Redirect to editor so user can add slides immediately
         router.push(`/quiz/${quiz.id}/edit`);
       }
     } catch (err: any) {
-      setError(
-        err.response?.data?.message ?? "Lỗi khi tạo bộ đề. Vui lòng thử lại."
-      );
+      setError(err.message ?? "Lỗi khi tạo bộ đề. Vui lòng thử lại.");
     } finally {
       setLoading(false);
     }

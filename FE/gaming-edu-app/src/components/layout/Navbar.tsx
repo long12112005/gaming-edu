@@ -13,7 +13,19 @@ import {
   Zap,
 } from "lucide-react";
 import Button from "@/components/ui/Button";
-import { NavbarUser } from "@/types/database";
+// Hồ sơ người dùng được lưu trong cookie `user` ngay sau khi đăng nhập (UserProfileDto của BE, camelCase)
+interface NavbarUser {
+  id: string;
+  email: string;
+  nickname: string;
+  avatarUrl?: string | null;
+  isAdmin?: boolean;
+  quota?: {
+    aiGenerationLimit: number;
+    aiUsedToday: number;
+    maxRoomCapacity?: number;
+  } | null;
+}
 
 interface NavbarProps {
   user: NavbarUser | null;
@@ -23,8 +35,10 @@ export default function Navbar({ user }: NavbarProps) {
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const aiRemaining = user ? user.quota.ai_generation_limit - user.quota.ai_used_today : 0;
-  const aiPercent = user ? (user.quota.ai_used_today / user.quota.ai_generation_limit) * 100 : 0;
+  const aiLimit = user?.quota?.aiGenerationLimit ?? 0;
+  const aiUsed = user?.quota?.aiUsedToday ?? 0;
+  const aiRemaining = Math.max(aiLimit - aiUsed, 0);
+  const aiPercent = aiLimit > 0 ? (aiUsed / aiLimit) * 100 : 0;
 
   return (
     <nav className="bg-white/95 backdrop-blur-md border-b border-gray-100 sticky top-0 z-50 shadow-sm">
@@ -48,6 +62,7 @@ export default function Navbar({ user }: NavbarProps) {
               size="sm"
               className="hidden sm:inline-flex"
               id="btn-create-group"
+              href="/dashboard/groups"
             >
               <Users size={15} />
               Tạo Nhóm
@@ -56,13 +71,13 @@ export default function Navbar({ user }: NavbarProps) {
             {/* AI Quota Badge — maps to user_quotas table */}
             <button
               className="ai-badge hidden sm:flex"
-              title={`Đã dùng ${user?.quota.ai_used_today || 0}/${user?.quota.ai_generation_limit || 0} lần sinh đề AI hôm nay`}
+              title={`Đã dùng ${aiUsed}/${aiLimit} lần sinh đề AI hôm nay`}
               id="btn-ai-quota"
             >
               <Zap size={13} />
               <span>Lượt tạo AI: </span>
               <span className="bg-white/20 px-1.5 py-0.5 rounded-full text-xs">
-                {aiRemaining}/{user?.quota.ai_generation_limit || 0}
+                {aiRemaining}/{aiLimit}
               </span>
             </button>
 
@@ -86,7 +101,7 @@ export default function Navbar({ user }: NavbarProps) {
                 >
                   <div className="relative">
                     <img
-                      src={user.avatar_url || `https://ui-avatars.com/api/?name=${user.nickname}&background=7c3aed&color=fff`}
+                      src={user.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.nickname)}&background=7c3aed&color=fff`}
                       alt={user.nickname}
                       className="w-8 h-8 rounded-full border-2 border-violet-200 group-hover:border-violet-400 transition-colors"
                     />
@@ -113,7 +128,7 @@ export default function Navbar({ user }: NavbarProps) {
                     </div>
                     {[
                       { icon: User, label: "Hồ Sơ", href: "/dashboard" },
-                      { icon: Trophy, label: "Bộ Đề Của Tôi", href: "/dashboard" },
+                      { icon: Trophy, label: "Bộ Đề Của Tôi", href: "/dashboard/quizzes" },
                       { icon: Settings, label: "Cài Đặt", href: "/dashboard" },
                     ].map(({ icon: Icon, label, href }) => (
                       <Link

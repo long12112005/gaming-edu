@@ -161,8 +161,13 @@ public class RoomsController : ControllerBase
 public class AIJobsController : ControllerBase
 {
     private readonly ApplicationDbContext _db;
+    private readonly ICacheStore _cache;
 
-    public AIJobsController(ApplicationDbContext db) => _db = db;
+    public AIJobsController(ApplicationDbContext db, ICacheStore cache)
+    {
+        _db = db;
+        _cache = cache;
+    }
 
     // POST /api/aijobs
     /// <summary>Queue an AI quiz generation job. Maps to ai_jobs table.</summary>
@@ -220,6 +225,31 @@ public class AIJobsController : ControllerBase
             job.CreatedAt, job.CompletedAt, job.ErrorMessage);
 
         return Ok(new ApiResponse<AIJobStatusDto>(true, null, dto));
+    }
+
+    // GET /api/aijobs/{id}/draft
+    /// <summary>Get the JSON draft of an AI job. Only available when COMPLETED.</summary>
+    [HttpGet("{id:guid}/draft")]
+    [ProducesResponseType(typeof(ApiResponse<string>), 200)]
+    [ProducesResponseType(404)]
+    [ProducesResponseType(400)]
+    public async Task<IActionResult> GetJobDraft(Guid id)
+    {
+        var job = await _db.AIJobs.FindAsync(id);
+        if (job is null)
+            return NotFound(new ApiResponse<string>(false, "Không tìm thấy AI Job.", null));
+
+        if (job.Status != "COMPLETED")
+            return BadRequest(new ApiResponse<string>(false, "Job chưa hoàn thành.", null));
+
+        var draftKey = $"ai_draft:{id}";
+        var draftJson = await _cache.GetStringAsync(draftKey);
+        if (draftJson is null)
+        {
+            return NotFound(new ApiResponse<string>(false, "Bản nháp đã hết hạn hoặc không tồn tại.", null));
+        }
+
+        return Ok(new ApiResponse<string>(true, "Lấy bản nháp thành công", draftJson));
     }
 
     private Guid? GetCurrentUserId()

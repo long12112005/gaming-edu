@@ -9,12 +9,14 @@ namespace GamingEdu.API.Services;
 public interface IQuizService
 {
     Task<IEnumerable<QuizSummaryDto>> GetPublicQuizzesAsync();
+    Task<IEnumerable<QuizSummaryDto>> GetMyQuizzesAsync(Guid creatorId);
     Task<QuizDetailDto?> GetQuizDetailAsync(Guid quizId);
     Task<QuizSummaryDto> CreateQuizAsync(Guid creatorId, CreateQuizRequest request);
     Task<QuizSummaryDto> UpdateQuizAsync(Guid creatorId, Guid quizId, UpdateQuizRequest request);
     Task DeleteQuizAsync(Guid creatorId, Guid quizId);
     Task<QuizSummaryDto> CloneQuizAsync(Guid userId, Guid originalQuizId);
     Task ApproveAISlideAsync(Guid creatorId, Guid quizId, Guid slideId);
+    Task BulkSaveSlidesAsync(Guid creatorId, Guid quizId, IEnumerable<CreateSlideRequest> requests);
     Task InvalidatePublicQuizCacheAsync();
 }
 
@@ -82,6 +84,29 @@ public class QuizService : IQuizService
 
         _cache.Set(PublicQuizzesCacheKey, quizzes, cacheOptions);
         return quizzes;
+    }
+
+    // ── GET MY QUIZZES (public + private của creator) ───────────────────
+    public async Task<IEnumerable<QuizSummaryDto>> GetMyQuizzesAsync(Guid creatorId)
+    {
+        return await _db.Quizzes
+            .AsNoTracking()
+            .Include(q => q.Creator)
+            .Include(q => q.Slides)
+            .Where(q => q.CreatorId == creatorId)
+            .OrderByDescending(q => q.CreatedAt)
+            .Select(q => new QuizSummaryDto(
+                q.Id,
+                q.Title,
+                q.CoverImageUrl,
+                q.Topic,
+                q.IsPublic,
+                q.Slides.Count,
+                q.CreatedAt,
+                q.Creator.Nickname,
+                q.Creator.AvatarUrl
+            ))
+            .ToListAsync();
     }
 
     // ── GET QUIZ DETAIL (with per-quiz caching) ─────────────────────────
@@ -202,7 +227,8 @@ public class QuizService : IQuizService
 
         if (quiz.CreatorId != creatorId) throw new UnauthorizedAccessException("Bạn không có quyền xóa bộ đề này.");
 
-        _db.Quizzes.Remove(quiz);
+        quiz.IsDeleted = true;
+        _db.Quizzes.Update(quiz);
         await _db.SaveChangesAsync();
 
         await InvalidatePublicQuizCacheAsync();
@@ -274,6 +300,56 @@ public class QuizService : IQuizService
         if (slide.Quiz.CreatorId != creatorId) throw new UnauthorizedAccessException("Bạn không có quyền sửa bộ đề này.");
 
         slide.Status = "PUBLISHED";
+        await _db.SaveChangesAsync();
+
+        _cache.Remove($"{QuizDetailPrefix}{quizId}");
+    }
+
+    // ── BULK SAVE SLIDES (XÁC NHẬN & LƯU TỪ AI) ────────────────────────
+    public async Task BulkSaveSlidesAsync(Guid creatorId, Guid quizId, IEnumerable<CreateSlideRequest> requests)
+    {
+        var quiz = await _db.Quizzes.Include(q => q.Slides).FirstOrDefaultAsync(q => q.Id == quizId)
+            ?? throw new KeyNotFoundException("Không tìm thấy bộ đề.");
+
+        if (quiz.CreatorId != creatorId) throw new UnauthorizedAccessException("Bạn không có quyền sửa bộ đề này.");
+
+        int startIndex = quiz.Slides.Count;
+        foreach (var req in requests)
+        {
+            var slide = new Slide
+            {
+                Id            = Guid.NewGuid(),
+                QuizId        = quiz.Id,
+                Type          = req.Type,
+                QuestionText  = req.QuestionText,
+                TimeLimit     = req.TimeLimit,
+                Points        = req.Points,
+                Status        = req.Status ?? "PUBLISHED",
+                OrderIndex    = req.OrderIndex ?? startIndex++,
+                IsAIGenerated = req.IsAIGenerated,
+                CreatedAt     = DateTime.UtcNow,
+            };
+
+            if (req.Options != null)
+            {
+                foreach (var opt in req.Options)
+                {
+                    slide.Options.Add(new SlideOption
+                    {
+                        Id = Guid.NewGuid(),
+                        Content = opt.Content,
+                        IsCorrect = opt.IsCorrect,
+                        MatchingPair = opt.MatchingPair,
+                        BlankKeywords = opt.BlankKeywords,
+                        OrderIndex = slide.Options.Count
+                    });
+                }
+            }
+
+            _db.Slides.Add(slide);
+        }
+
+        quiz.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
 
         _cache.Remove($"{QuizDetailPrefix}{quizId}");

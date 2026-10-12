@@ -62,6 +62,7 @@ CREATE TABLE quizzes (
     cover_image_url NVARCHAR(500),
     topic NVARCHAR(100),
     is_public BIT DEFAULT 0,
+    is_deleted BIT DEFAULT 0,
     created_at DATETIME2 DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME2 DEFAULT CURRENT_TIMESTAMP
 );
@@ -76,6 +77,7 @@ CREATE TABLE slides (
     points INT DEFAULT 1000,
     status NVARCHAR(50) DEFAULT 'PUBLISHED', -- DRAFT (chờ duyệt), PUBLISHED (đã duyệt)
     order_index INT NOT NULL,
+    is_deleted BIT DEFAULT 0,
     is_ai_generated BIT DEFAULT 0,
     created_at DATETIME2 DEFAULT CURRENT_TIMESTAMP
 );
@@ -140,6 +142,17 @@ CREATE TABLE player_responses (
     answered_at DATETIME2 DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 12. Bảng Question QA (Hỏi đáp trực tiếp trong phòng)
+CREATE TABLE question_qa (
+    id UNIQUEIDENTIFIER PRIMARY KEY,
+    room_id UNIQUEIDENTIFIER REFERENCES rooms(id) ON DELETE CASCADE,
+    player_id UNIQUEIDENTIFIER REFERENCES room_players(id) ON DELETE NO ACTION,
+    content NVARCHAR(MAX) NOT NULL,
+    upvotes INT DEFAULT 0,
+    status NVARCHAR(50) DEFAULT 'PENDING', -- PENDING, PINNED, HIDDEN, RESOLVED
+    created_at DATETIME2 DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Đánh Index để tối ưu truy vấn (Performance Indexes)
 CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_groups_code ON groups(group_code);
@@ -149,3 +162,4 @@ CREATE INDEX idx_slides_quiz ON slides(quiz_id);
 CREATE INDEX idx_slide_options_slide ON slide_options(slide_id);
 CREATE INDEX idx_room_players_room ON room_players(room_id);
 CREATE INDEX idx_player_responses_room_player ON player_responses(room_player_id);
+CREATE INDEX idx_question_qa_room ON question_qa(room_id);

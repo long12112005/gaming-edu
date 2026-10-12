@@ -1,519 +1,450 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
-import Link from "next/link";
-import Cookies from "js-cookie";
-import {
-  Trophy,
-  ArrowLeft,
-  Play,
-  BookOpen,
-  Clock,
-  Zap,
-  Users,
-  Pencil,
-  Star,
-  ChevronRight,
-  Check,
-  X,
-  BarChart2,
-  Globe,
-  Lock,
-  Plus,
-} from "lucide-react";
-import Button from "@/components/ui/Button";
-import { api } from "@/lib/api";
+import { useEffect, useState, useRef, use } from "react";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, Plus, Trash2, Save, UploadCloud, Sparkles, CheckCircle2, GripVertical, Settings2, Play } from "lucide-react";
+import { QuizAPI, SlideAPI, AIJobAPI } from "@/lib/api";
 
-// ─── Slide Preview Card ───────────────────────────────────────────────────────
-function SlidePreviewCard({
-  slide,
-  index,
-}: {
-  slide: any;
-  index: number;
-}) {
-  const typeIcon: Record<string, string> = {
-    QUIZ: "🎯",
-    FILL_IN_BLANK: "✏️",
-    MATCHING: "🔗",
-    POLL: "📊",
-    WORD_CLOUD: "☁️",
-  };
-  const typeLabel: Record<string, string> = {
-    QUIZ: "Trắc Nghiệm",
-    FILL_IN_BLANK: "Điền Khuyết",
-    MATCHING: "Ghép Nối",
-    POLL: "Bình Chọn",
-    WORD_CLOUD: "Đám Mây Từ",
-  };
-  const typeColor: Record<string, string> = {
-    QUIZ: "bg-violet-50 border-violet-200 text-violet-700",
-    FILL_IN_BLANK: "bg-blue-50 border-blue-200 text-blue-700",
-    MATCHING: "bg-amber-50 border-amber-200 text-amber-700",
-    POLL: "bg-pink-50 border-pink-200 text-pink-700",
-    WORD_CLOUD: "bg-emerald-50 border-emerald-200 text-emerald-700",
-  };
+const SLIDE_TYPES = [
+  { value: "QUIZ", label: "Trắc nghiệm" },
+  { value: "FILL_IN_BLANK", label: "Điền vào chỗ trống" },
+  { value: "MATCHING", label: "Nối từ" },
+  { value: "POLL", label: "Khảo sát (Poll)" },
+  { value: "WORD_CLOUD", label: "Word Cloud" },
+];
 
-  const optionLetters = ["A", "B", "C", "D"];
-  const optionBg = [
-    "bg-red-100 text-red-700 border-red-200",
-    "bg-blue-100 text-blue-700 border-blue-200",
-    "bg-yellow-100 text-yellow-700 border-yellow-200",
-    "bg-green-100 text-green-700 border-green-200",
-  ];
-
-  return (
-    <div
-      className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 animate-fade-in-up card-hover"
-      style={{ animationDelay: `${index * 80}ms` }}
-    >
-      <div className="flex items-start justify-between gap-3 mb-3">
-        <div className="flex items-center gap-2">
-          <span className="w-7 h-7 bg-gray-100 rounded-lg flex items-center justify-center text-xs font-800 text-gray-500 flex-shrink-0">
-            {index + 1}
-          </span>
-          <span
-            className={`text-xs font-700 px-2 py-0.5 rounded-full border ${
-              typeColor[slide.type] ?? "bg-gray-100 text-gray-700 border-gray-200"
-            }`}
-          >
-            {typeIcon[slide.type]} {typeLabel[slide.type] ?? slide.type}
-          </span>
-        </div>
-        <div className="flex items-center gap-3 text-xs text-gray-500 flex-shrink-0">
-          <span className="flex items-center gap-1">
-            <Clock size={11} /> {slide.timeLimit ?? 30}s
-          </span>
-          <span className="flex items-center gap-1">
-            <Zap size={11} /> {slide.points ?? 1000} pts
-          </span>
-        </div>
-      </div>
-
-      <p className="font-700 text-gray-900 text-sm mb-3 line-clamp-2">
-        {slide.questionText}
-      </p>
-
-      {/* Show options for QUIZ type */}
-      {slide.type === "QUIZ" && slide.options && slide.options.length > 0 && (
-        <div className="grid grid-cols-2 gap-2">
-          {slide.options.slice(0, 4).map((opt: any, idx: number) => (
-            <div
-              key={opt.id}
-              className={`flex items-center gap-2 p-2 rounded-lg border text-xs font-600 ${
-                optionBg[idx % 4]
-              } ${opt.isCorrect ? "ring-2 ring-green-400" : ""}`}
-            >
-              <span className="font-800 flex-shrink-0">{optionLetters[idx]}</span>
-              <span className="truncate">{opt.content}</span>
-              {opt.isCorrect && (
-                <Check size={12} className="text-green-600 ml-auto flex-shrink-0" />
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Mode Selector ─────────────────────────────────────────────────────────────
-function ModeOption({
-  mode,
-  label,
-  icon,
-  desc,
-  color,
-  selected,
-  onClick,
-}: {
-  mode: string;
-  label: string;
-  icon: string;
-  desc: string;
-  color: string;
-  selected: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`w-full text-left p-4 rounded-xl border-2 transition-all ${
-        selected
-          ? `${color} shadow-md`
-          : "border-gray-200 bg-white hover:border-gray-300"
-      }`}
-      id={`btn-mode-${mode}`}
-    >
-      <div className="flex items-center gap-3">
-        <span className="text-2xl">{icon}</span>
-        <div>
-          <div className="font-700 text-sm text-gray-900">{label}</div>
-          <div className="text-xs text-gray-500">{desc}</div>
-        </div>
-        {selected && (
-          <Check
-            size={16}
-            className="ml-auto text-violet-600 flex-shrink-0"
-          />
-        )}
-      </div>
-    </button>
-  );
-}
-
-// ─── Main Page ────────────────────────────────────────────────────────────────
-export default function QuizDetailPage() {
-  const params = useParams();
+export default function SlideBuilderPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
-  const quizId = params.id as string;
-
+  const { id: quizId } = use(params);
+  
   const [quiz, setQuiz] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [notFound, setNotFound] = useState(false);
-  const [creating, setCreating] = useState(false);
-  const [showModeModal, setShowModeModal] = useState(false);
-  const [selectedMode, setSelectedMode] = useState<string>("HOST_PACED");
-
-  const isLoggedIn = !!Cookies.get("token");
+  const [slides, setSlides] = useState<any[]>([]);
+  const [selectedSlideId, setSelectedSlideId] = useState<string | null>(null);
+  
+  // AI State
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [aiJobId, setAiJobId] = useState<string | null>(null);
+  const [aiStatus, setAiStatus] = useState<string>("");
 
   useEffect(() => {
-    api
-      .get(`/quizzes/${quizId}`)
-      .then((res) => {
-        if (res.data.success) setQuiz(res.data.data);
-        else setNotFound(true);
-      })
-      .catch(() => setNotFound(true))
-      .finally(() => setLoading(false));
+    fetchQuizAndSlides();
   }, [quizId]);
 
-  const handleStartGame = async () => {
-    if (!isLoggedIn) {
-      router.push("/auth/login");
-      return;
-    }
-    setCreating(true);
+  const fetchQuizAndSlides = async () => {
     try {
-      const res = await api.post("/rooms", {
-        quizId,
-        mode: selectedMode,
-      });
-      if (res.data.success) {
-        const room = res.data.data;
-        router.push(`/host/${room.id}?pin=${room.pinCode}`);
+      const qRes: any = await QuizAPI.getById(quizId);
+      if (qRes.success) setQuiz(qRes.data);
+      
+      const sRes: any = await SlideAPI.getAllByQuiz(quizId);
+      if (sRes.success) {
+        setSlides(sRes.data);
+        if (sRes.data.length > 0 && !selectedSlideId) {
+          setSelectedSlideId(sRes.data[0].id);
+        }
       }
-    } catch {
-      alert("Lỗi khi tạo phòng. Vui lòng thử lại.");
-    } finally {
-      setCreating(false);
-      setShowModeModal(false);
+    } catch (err) {
+      console.error(err);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-violet-600 border-t-transparent rounded-full animate-spin" />
-          <p className="text-gray-500 font-600">Đang tải bộ đề...</p>
-        </div>
-      </div>
-    );
+  // --- AI Polling Logic ---
+  useEffect(() => {
+    if (!aiJobId) return;
+    const interval = setInterval(async () => {
+      try {
+        const res: any = await AIJobAPI.getJobStatus(aiJobId);
+        if (res.success) {
+          setAiStatus(res.data.status);
+          if (res.data.status === "COMPLETED") {
+            clearInterval(interval);
+            setIsGenerating(false);
+            setAiJobId(null);
+            fetchQuizAndSlides(); // Refresh to show DRAFT slides
+          } else if (res.data.status === "FAILED") {
+            clearInterval(interval);
+            setIsGenerating(false);
+            setAiJobId(null);
+            alert("Tạo đề bằng AI thất bại.");
+          }
+        }
+      } catch (err) {
+        console.error("Polling error", err);
+      }
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [aiJobId]);
+
+  const handleUploadAI = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      setIsGenerating(true);
+      setAiStatus("Uploading...");
+      const res: any = await AIJobAPI.createJob({ quizId, fileUrl: "https://example.com/dummy.pdf" });
+      if (res.success) {
+        setAiJobId(res.data.jobId);
+        setAiStatus("PENDING");
+      }
+    } catch (err) {
+      alert("Lỗi upload file AI.");
+      setIsGenerating(false);
+    }
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleApproveDrafts = async () => {
+    try {
+      await SlideAPI.approveAll(quizId);
+      alert("Đã duyệt tất cả câu hỏi DRAFT!");
+      fetchQuizAndSlides();
+    } catch (err) {
+      alert("Lỗi duyệt DRAFT");
+    }
+  };
+
+  // --- Slide Actions ---
+  const handleAddSlide = async () => {
+    try {
+      const newOrder = slides.length + 1;
+      const payload = {
+        quizId,
+        type: "QUIZ",
+        questionText: "Câu hỏi mới",
+        timeLimit: 20,
+        points: 1000,
+        orderIndex: newOrder,
+        content: JSON.stringify({
+          answers: [
+            { text: "Đáp án 1", isCorrect: true },
+            { text: "Đáp án 2", isCorrect: false }
+          ]
+        })
+      };
+      const res: any = await SlideAPI.create(quizId, payload);
+      if (res.success) {
+        setSlides([...slides, res.data]);
+        setSelectedSlideId(res.data.id);
+      }
+    } catch (err) {
+      alert("Lỗi tạo slide!");
+    }
+  };
+
+  const handleUpdateSlide = async (id: string, updates: any) => {
+    setSlides(slides.map(s => s.id === id ? { ...s, ...updates } : s));
+    // In real app, we should debounce the API call or explicitly save
+  };
+
+  const saveSlideToDB = async (id: string) => {
+    const slide = slides.find(s => s.id === id);
+    if (!slide) return;
+    try {
+      await SlideAPI.update(quizId, id, slide);
+    } catch (err) {
+      alert("Lỗi lưu slide!");
+    }
+  };
+
+  const handleDeleteSlide = async (id: string) => {
+    if (!confirm("Xóa slide này?")) return;
+    try {
+      await SlideAPI.delete(quizId, id);
+      const newSlides = slides.filter(s => s.id !== id);
+      setSlides(newSlides);
+      if (selectedSlideId === id) setSelectedSlideId(newSlides[0]?.id || null);
+    } catch (err) {
+      alert("Lỗi xóa slide");
+    }
+  };
+
+  const selectedSlide = slides.find(s => s.id === selectedSlideId);
+
+  // Parse content safely
+  let parsedContent: any = {};
+  if (selectedSlide?.content) {
+    try {
+      parsedContent = JSON.parse(selectedSlide.content);
+    } catch (e) {}
   }
 
-  if (notFound || !quiz) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center gap-4 p-4 text-center">
-        <X size={48} className="text-red-400" />
-        <h1 className="text-2xl font-800 text-gray-900">Không tìm thấy bộ đề</h1>
-        <p className="text-gray-500">Bộ đề này không tồn tại hoặc đã bị xóa.</p>
-        <Button variant="primary" href="/">Về Trang Chủ</Button>
-      </div>
-    );
-  }
+  const updateSlideContent = (newContent: any) => {
+    if (!selectedSlideId) return;
+    handleUpdateSlide(selectedSlideId, { content: JSON.stringify(newContent) });
+  };
 
-  const slides = quiz.slides ?? [];
-  const publishedSlides = slides.filter((s: any) => s.status === "PUBLISHED");
+  if (!quiz) return <div className="flex h-screen items-center justify-center">Loading...</div>;
+
+  const hasDrafts = slides.some(s => s.status === "DRAFT");
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-100 sticky top-0 z-50 shadow-sm">
-        <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => router.back()}
-              className="p-2 rounded-lg hover:bg-gray-100 text-gray-600 transition-colors"
-              id="btn-back"
-            >
-              <ArrowLeft size={18} />
+    <div className="h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
+      {/* HEADER */}
+      <header className="h-16 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between px-4 shrink-0">
+        <div className="flex items-center">
+          <button onClick={() => router.push("/dashboard")} className="p-2 mr-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors">
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <input 
+            type="text" 
+            value={quiz.title} 
+            onChange={(e) => setQuiz({ ...quiz, title: e.target.value })}
+            className="text-xl font-bold bg-transparent border-none focus:ring-0 p-0 text-gray-900 dark:text-white"
+          />
+        </div>
+        <div className="flex items-center space-x-3">
+          {isGenerating && (
+            <div className="flex items-center text-sm font-medium text-amber-600 bg-amber-50 px-3 py-1.5 rounded-full border border-amber-200">
+              <Sparkles className="w-4 h-4 mr-1.5 animate-pulse" />
+              AI: {aiStatus}
+            </div>
+          )}
+          {hasDrafts && (
+            <button onClick={handleApproveDrafts} className="flex items-center bg-green-100 hover:bg-green-200 text-green-700 px-4 py-2 rounded-lg text-sm font-bold transition-colors border border-green-300">
+              <CheckCircle2 className="w-4 h-4 mr-1.5" /> Duyệt tất cả DRAFT
             </button>
-            <Link href="/" className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center">
-                <Trophy size={14} className="text-white" />
-              </div>
-              <span className="font-800 text-gray-900 hidden sm:block">
-                <span className="text-violet-600">Gaming</span> Edu
-              </span>
-            </Link>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {isLoggedIn && (
-              <Button variant="outline" size="sm" id="btn-edit-quiz" href={`/quiz/${quizId}/edit`}>
-                <Pencil size={13} /> Chỉnh Sửa
-              </Button>
-            )}
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={() =>
-                isLoggedIn ? setShowModeModal(true) : router.push("/auth/login")
-              }
-              disabled={publishedSlides.length === 0}
-              id="btn-start-quiz"
+          )}
+          <div>
+            <input type="file" ref={fileInputRef} className="hidden" accept=".pdf,.docx,.txt" onChange={handleUploadAI} />
+            <button 
+              onClick={() => fileInputRef.current?.click()}
+              className="flex items-center bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-4 py-2 rounded-lg text-sm font-semibold transition-colors border border-indigo-200"
             >
-              <Play size={13} /> Bắt Đầu Ngay
-            </Button>
+              <Sparkles className="w-4 h-4 mr-1.5" /> Tạo bằng AI
+            </button>
           </div>
+          <button 
+            onClick={() => router.push(`/host/setup/${quizId}`)}
+            className="flex items-center bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-semibold transition-colors shadow-sm"
+          >
+            <Play className="w-4 h-4 mr-1.5 fill-current" /> Bắt đầu ngay
+          </button>
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto px-4 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* ── LEFT: Quiz Info ───────────────────────────────────────── */}
-          <div className="lg:col-span-1 space-y-4">
-            {/* Cover Card */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden animate-fade-in-up">
-              <div className="relative h-44 bg-gray-100">
-                <img
-                  src={
-                    quiz.coverImageUrl ??
-                    "https://images.unsplash.com/photo-1497633762265-9d179a990aa6?w=600&h=350&fit=crop"
-                  }
-                  alt={quiz.title}
-                  className="w-full h-full object-cover"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-                {quiz.topic && (
-                  <span className="absolute top-3 left-3 bg-violet-600 text-white text-xs font-700 px-2.5 py-1 rounded-full uppercase">
-                    {quiz.topic}
-                  </span>
-                )}
-                <span className="absolute top-3 right-3 flex items-center gap-1 text-xs font-700 text-white bg-black/50 px-2 py-1 rounded-full backdrop-blur-sm">
-                  {quiz.isPublic ? (
-                    <>
-                      <Globe size={10} /> Công khai
-                    </>
-                  ) : (
-                    <>
-                      <Lock size={10} /> Riêng tư
-                    </>
+      {/* WORKSPACE */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* LEFT PANEL: Slides List */}
+        <aside className="w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col">
+          <div className="p-3 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+            <span className="font-semibold text-sm text-gray-500 uppercase tracking-wider">Danh sách ({slides.length})</span>
+            <button onClick={handleAddSlide} className="p-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-md">
+              <Plus className="w-5 h-5" />
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-3 space-y-3 custom-scrollbar">
+            {slides.map((slide, idx) => (
+              <div 
+                key={slide.id} 
+                onClick={() => setSelectedSlideId(slide.id)}
+                className={`relative p-3 rounded-xl border-2 cursor-pointer transition-all ${
+                  selectedSlideId === slide.id 
+                    ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20 shadow-sm" 
+                    : "border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-600"
+                }`}
+              >
+                <div className="flex justify-between items-start mb-2">
+                  <span className="text-xs font-bold text-gray-400">{idx + 1}</span>
+                  {slide.status === "DRAFT" && (
+                    <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 rounded-sm font-bold">DRAFT</span>
                   )}
-                </span>
-              </div>
-
-              <div className="p-4">
-                <h1 className="font-900 text-gray-900 text-lg leading-tight mb-3">
-                  {quiz.title}
-                </h1>
-
-                {/* Stats */}
-                <div className="grid grid-cols-3 gap-2 mb-4">
-                  {[
-                    {
-                      icon: BookOpen,
-                      value: slides.length,
-                      label: "Câu hỏi",
-                    },
-                    {
-                      icon: Play,
-                      value: quiz.playCount ?? 0,
-                      label: "Lượt chơi",
-                    },
-                    {
-                      icon: Star,
-                      value: "4.8",
-                      label: "Đánh giá",
-                    },
-                  ].map(({ icon: Icon, value, label }) => (
-                    <div
-                      key={label}
-                      className="bg-gray-50 rounded-xl p-2.5 text-center"
-                    >
-                      <Icon size={14} className="text-violet-600 mx-auto mb-1" />
-                      <div className="font-800 text-gray-900 text-sm">
-                        {value}
-                      </div>
-                      <div className="text-xs text-gray-500">{label}</div>
-                    </div>
-                  ))}
+                  {selectedSlideId === slide.id && (
+                    <button onClick={(e) => { e.stopPropagation(); handleDeleteSlide(slide.id); }} className="text-gray-400 hover:text-red-500">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
+                <div className="aspect-video bg-gray-100 dark:bg-gray-700 rounded flex items-center justify-center p-2 text-center text-xs text-gray-600 dark:text-gray-300 font-medium break-words overflow-hidden">
+                  {slide.questionText || "Nhập câu hỏi..."}
+                </div>
+              </div>
+            ))}
+          </div>
+        </aside>
 
-                {/* Creator */}
-                {quiz.creatorNickname && (
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <img
-                      src={
-                        quiz.creatorAvatar ??
-                        `https://ui-avatars.com/api/?name=${quiz.creatorNickname}&background=7c3aed&color=fff&size=32`
-                      }
-                      alt={quiz.creatorNickname}
-                      className="w-7 h-7 rounded-full border border-gray-200"
+        {/* CENTER PANEL: Canvas */}
+        <main className="flex-1 bg-gray-100 dark:bg-gray-900 overflow-y-auto p-8 flex items-center justify-center">
+          {selectedSlide ? (
+            <div className="w-full max-w-4xl bg-white dark:bg-gray-800 aspect-[16/9] rounded-2xl shadow-xl flex flex-col p-8 md:p-12 border border-gray-200 dark:border-gray-700">
+              <input 
+                type="text"
+                placeholder="Bắt đầu nhập câu hỏi của bạn tại đây..."
+                value={selectedSlide.questionText}
+                onChange={(e) => handleUpdateSlide(selectedSlide.id, { questionText: e.target.value })}
+                className="w-full text-center text-3xl md:text-5xl font-bold bg-transparent border-none focus:ring-0 p-0 text-gray-900 dark:text-white placeholder-gray-300 dark:placeholder-gray-600 mb-8 mt-10"
+              />
+              
+              <div className="flex-1 flex items-center justify-center">
+                {/* DYNAMIC CONTENT EDITOR BASED ON TYPE */}
+                {selectedSlide.type === "QUIZ" && (
+                  <div className="w-full grid grid-cols-2 gap-4">
+                    {["red", "blue", "yellow", "green"].map((color, i) => {
+                      const answer = parsedContent.answers?.[i] || { text: "", isCorrect: false };
+                      const bgColors = ["bg-red-500", "bg-blue-500", "bg-yellow-500", "bg-green-500"];
+                      return (
+                        <div key={i} className={`relative flex items-center p-4 rounded-xl ${bgColors[i]} shadow-inner text-white`}>
+                          <button 
+                            onClick={() => {
+                              const newAnswers = [...(parsedContent.answers || [])];
+                              // Set this true, others false for single choice (or support multiple)
+                              newAnswers.forEach((a, idx) => { if(!newAnswers[idx]) newAnswers[idx] = {text:"", isCorrect:false}; newAnswers[idx].isCorrect = (idx === i); });
+                              updateSlideContent({ ...parsedContent, answers: newAnswers });
+                            }}
+                            className={`w-8 h-8 rounded-full border-4 flex items-center justify-center mr-4 transition-colors ${answer.isCorrect ? "bg-white border-white" : "border-white/50 hover:border-white"}`}
+                          >
+                            {answer.isCorrect && <CheckCircle2 className={`w-5 h-5 text-${color}-600`} />}
+                          </button>
+                          <input 
+                            type="text" 
+                            placeholder={`Đáp án ${i + 1}`}
+                            value={answer.text}
+                            onChange={(e) => {
+                              const newAnswers = [...(parsedContent.answers || [])];
+                              if (!newAnswers[i]) newAnswers[i] = { text: "", isCorrect: false };
+                              newAnswers[i].text = e.target.value;
+                              updateSlideContent({ ...parsedContent, answers: newAnswers });
+                            }}
+                            className="flex-1 bg-transparent border-none text-xl font-semibold placeholder-white/70 focus:ring-0 p-0"
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {selectedSlide.type === "FILL_IN_BLANK" && (
+                  <div className="w-full max-w-xl bg-gray-50 dark:bg-gray-700/50 p-6 rounded-xl border border-gray-200 dark:border-gray-600">
+                    <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Từ khóa chính xác (Các đáp án đúng):</label>
+                    <input 
+                      type="text" 
+                      placeholder="VD: Hà Nội, Thu đô Hà Nội (ngăn cách bởi dấu phẩy)"
+                      value={parsedContent.blankKeywords?.join(", ") || ""}
+                      onChange={(e) => {
+                        const keywords = e.target.value.split(",").map(s => s.trim()).filter(s => s);
+                        updateSlideContent({ ...parsedContent, blankKeywords: keywords });
+                      }}
+                      className="w-full p-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                     />
-                    <span className="font-600">{quiz.creatorNickname}</span>
+                  </div>
+                )}
+
+                {selectedSlide.type === "MATCHING" && (
+                  <div className="w-full max-w-2xl space-y-3">
+                    <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Các cặp nối (Vế trái - Vế phải):</label>
+                    {(parsedContent.matchingPairs || [{left:"", right:""}, {left:"", right:""}]).map((pair: any, i: number) => (
+                      <div key={i} className="flex space-x-3 items-center">
+                        <input 
+                          type="text" placeholder="Vế trái" value={pair.left}
+                          onChange={(e) => {
+                            const newPairs = [...(parsedContent.matchingPairs || [])];
+                            if(!newPairs[i]) newPairs[i] = {left:"", right:""};
+                            newPairs[i].left = e.target.value;
+                            updateSlideContent({ ...parsedContent, matchingPairs: newPairs });
+                          }}
+                          className="flex-1 p-3 rounded-lg border border-gray-300 dark:border-gray-600"
+                        />
+                        <span className="text-gray-400 font-bold">-</span>
+                        <input 
+                          type="text" placeholder="Vế phải (Đáp án đúng)" value={pair.right}
+                          onChange={(e) => {
+                            const newPairs = [...(parsedContent.matchingPairs || [])];
+                            if(!newPairs[i]) newPairs[i] = {left:"", right:""};
+                            newPairs[i].right = e.target.value;
+                            updateSlideContent({ ...parsedContent, matchingPairs: newPairs });
+                          }}
+                          className="flex-1 p-3 rounded-lg border border-gray-300 dark:border-gray-600"
+                        />
+                      </div>
+                    ))}
+                    <button 
+                      onClick={() => {
+                        const newPairs = [...(parsedContent.matchingPairs || []), {left:"", right:""}];
+                        updateSlideContent({ ...parsedContent, matchingPairs: newPairs });
+                      }}
+                      className="text-sm text-blue-600 font-bold hover:underline mt-2 inline-block"
+                    >
+                      + Thêm cặp nối
+                    </button>
+                  </div>
+                )}
+
+                {(selectedSlide.type === "POLL" || selectedSlide.type === "WORD_CLOUD") && (
+                  <div className="text-center text-gray-400 dark:text-gray-500 font-medium">
+                    {selectedSlide.type === "POLL" ? "Người chơi sẽ được tự do chọn các đáp án." : "Người chơi sẽ nhập từ khóa. Các từ lặp lại nhiều sẽ to hơn."}
+                    <br />(Không cần cấu hình đáp án đúng cho loại câu hỏi này)
                   </div>
                 )}
               </div>
             </div>
+          ) : (
+            <div className="text-gray-400 font-medium">Chọn một slide để chỉnh sửa</div>
+          )}
+        </main>
 
-            {/* Action Buttons */}
-            <div className="space-y-2 animate-fade-in-up" style={{ animationDelay: "100ms" }}>
-              <Button
-                variant="primary"
-                size="lg"
-                fullWidth
-                onClick={() =>
-                  isLoggedIn ? setShowModeModal(true) : router.push("/auth/login")
-                }
-                disabled={publishedSlides.length === 0 || creating}
-                className="font-800"
-                id="btn-start-main"
-              >
-                <Play size={18} /> Bắt Đầu Trò Chơi
-              </Button>
-
-              <Button
-                variant="outline"
-                size="md"
-                fullWidth
-                onClick={() => router.push("/play")}
-                id="btn-join-instead"
-              >
-                <Users size={15} /> Tham Gia Với PIN
-              </Button>
-
-              {publishedSlides.length === 0 && (
-                <p className="text-xs text-amber-600 text-center bg-amber-50 rounded-lg px-3 py-2 border border-amber-200">
-                  ⚠️ Bộ đề chưa có câu hỏi nào được published
-                </p>
-              )}
+        {/* RIGHT PANEL: Settings */}
+        {selectedSlide && (
+          <aside className="w-72 bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 flex flex-col">
+            <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center">
+              <Settings2 className="w-5 h-5 text-gray-500 mr-2" />
+              <span className="font-bold text-gray-900 dark:text-white">Cài đặt Slide</span>
             </div>
-          </div>
-
-          {/* ── RIGHT: Slides List ────────────────────────────────────── */}
-          <div className="lg:col-span-2">
-            <div className="flex items-center justify-between mb-4">
+            
+            <div className="p-5 space-y-6 flex-1 overflow-y-auto custom-scrollbar">
               <div>
-                <h2 className="font-800 text-gray-900">
-                  Danh Sách Câu Hỏi
-                </h2>
-                <p className="text-sm text-gray-500 mt-0.5">
-                  {slides.length} câu hỏi ({publishedSlides.length} đã publish)
-                </p>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Loại câu hỏi</label>
+                <select 
+                  value={selectedSlide.type}
+                  onChange={(e) => handleUpdateSlide(selectedSlide.id, { type: e.target.value })}
+                  className="w-full bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5"
+                >
+                  {SLIDE_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                </select>
               </div>
-              {isLoggedIn && (
-                <Button variant="outline" size="sm" id="btn-edit-slides" href={`/quiz/${quizId}/edit`}>
-                  <Pencil size={13} /> Thêm / Sửa
-                </Button>
-              )}
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Thời gian (giây)</label>
+                <select 
+                  value={selectedSlide.timeLimit}
+                  onChange={(e) => handleUpdateSlide(selectedSlide.id, { timeLimit: parseInt(e.target.value) })}
+                  className="w-full bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5"
+                >
+                  <option value={10}>10 giây</option>
+                  <option value={20}>20 giây</option>
+                  <option value={30}>30 giây</option>
+                  <option value={60}>1 phút</option>
+                  <option value={120}>2 phút</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Điểm tối đa</label>
+                <select 
+                  value={selectedSlide.points}
+                  onChange={(e) => handleUpdateSlide(selectedSlide.id, { points: parseInt(e.target.value) })}
+                  className="w-full bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5"
+                >
+                  <option value={0}>0 (Không tính điểm)</option>
+                  <option value={1000}>1000 (Tiêu chuẩn)</option>
+                  <option value={2000}>2000 (Gấp đôi)</option>
+                </select>
+              </div>
             </div>
 
-            {slides.length === 0 ? (
-              <div className="bg-white rounded-2xl border-2 border-dashed border-gray-200 p-10 text-center">
-                <BookOpen size={40} className="text-gray-300 mx-auto mb-3" />
-                <p className="font-700 text-gray-500 mb-2">
-                  Chưa có câu hỏi nào
-                </p>
-                {isLoggedIn && (
-                    <Button variant="primary" size="sm" href={`/quiz/${quizId}/edit`}>
-                      <Plus size={14} /> Thêm Câu Hỏi
-                    </Button>
-                )}
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {slides.map((slide: any, idx: number) => (
-                  <SlidePreviewCard key={slide.id} slide={slide} index={idx} />
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      </main>
-
-      {/* ── MODE SELECTION MODAL ─────────────────────────────────────────── */}
-      {showModeModal && (
-        <div
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-          onClick={(e) =>
-            e.target === e.currentTarget && setShowModeModal(false)
-          }
-        >
-          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm animate-fade-in-up">
-            <h3 className="font-800 text-gray-900 text-lg mb-1">
-              Chọn Chế Độ Chơi
-            </h3>
-            <p className="text-sm text-gray-500 mb-5">
-              Chọn hình thức phù hợp với buổi học của bạn.
-            </p>
-
-            <div className="space-y-3 mb-6">
-              <ModeOption
-                mode="HOST_PACED"
-                label="Host Điều Khiển"
-                icon="🎮"
-                desc="Điều khiển tốc độ, phù hợp buổi học trực tiếp"
-                color="border-violet-500 bg-violet-50"
-                selected={selectedMode === "HOST_PACED"}
-                onClick={() => setSelectedMode("HOST_PACED")}
-              />
-              <ModeOption
-                mode="PLAYER_PACED"
-                label="Người Chơi Tự Chơi"
-                icon="🕹️"
-                desc="Tự học, ôn tập theo tốc độ riêng"
-                color="border-blue-500 bg-blue-50"
-                selected={selectedMode === "PLAYER_PACED"}
-                onClick={() => setSelectedMode("PLAYER_PACED")}
-              />
-              <ModeOption
-                mode="ASYNC_TOURNAMENT"
-                label="Giải Đấu"
-                icon="🏆"
-                desc="Bảng xếp hạng toàn cầu, tham gia bất kỳ lúc nào"
-                color="border-amber-500 bg-amber-50"
-                selected={selectedMode === "ASYNC_TOURNAMENT"}
-                onClick={() => setSelectedMode("ASYNC_TOURNAMENT")}
-              />
-            </div>
-
-            <div className="flex gap-3">
-              <Button
-                variant="outline"
-                size="md"
-                fullWidth
-                onClick={() => setShowModeModal(false)}
-                id="btn-cancel-mode"
+            <div className="p-4 border-t border-gray-200 dark:border-gray-700">
+              <button 
+                onClick={() => saveSlideToDB(selectedSlide.id)}
+                className="w-full flex justify-center items-center bg-gray-900 hover:bg-gray-800 dark:bg-gray-700 dark:hover:bg-gray-600 text-white px-4 py-2.5 rounded-lg font-medium transition-colors"
               >
-                Hủy
-              </Button>
-              <Button
-                variant="primary"
-                size="md"
-                fullWidth
-                loading={creating}
-                onClick={handleStartGame}
-                id="btn-confirm-start"
-              >
-                <Play size={15} /> Bắt Đầu!
-              </Button>
+                <Save className="w-5 h-5 mr-2" /> Lưu thay đổi
+              </button>
             </div>
-          </div>
-        </div>
-      )}
+          </aside>
+        )}
+      </div>
     </div>
   );
 }

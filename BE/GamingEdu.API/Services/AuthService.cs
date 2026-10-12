@@ -6,7 +6,7 @@ using GamingEdu.API.DTOs;
 using GamingEdu.API.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-using StackExchange.Redis;
+using System.Security.Cryptography;
 
 namespace GamingEdu.API.Services;
 
@@ -26,23 +26,64 @@ public class AuthService : IAuthService
     private readonly IConfiguration _config;
     private readonly ILogger<AuthService> _logger;
     private readonly IEmailService _email;
-    private readonly IDatabase _redis;
+    private readonly ICacheStore _cache;
+
+    private const int OtpTtlMinutes = 5;
+    private const int OtpResendCooldownSeconds = 60;
+    private const int OtpMaxVerifyAttempts = 5;
 
     public AuthService(
         ApplicationDbContext db,
         IConfiguration config,
         ILogger<AuthService> logger,
         IEmailService email,
-        IConnectionMultiplexer redis)
+        ICacheStore cache)
     {
         _db = db;
         _config = config;
         _logger = logger;
         _email = email;
-        _redis = redis.GetDatabase();
+        _cache = cache;
     }
 
-    private string GenerateOtp() => Random.Shared.Next(100000, 999999).ToString();
+    // OTP 6 chữ số, sinh bằng CSPRNG
+    private static string GenerateOtp() => RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
+
+    /// <summary>Chặn gửi lại OTP quá nhanh (cooldown 60s / email / loại).</summary>
+    private async Task EnsureResendCooldownAsync(string purpose, string email)
+    {
+        var key = $"otp:cooldown:{purpose}:{email}";
+        if (await _cache.ExistsAsync(key))
+            throw new InvalidOperationException($"Vui lòng chờ {OtpResendCooldownSeconds} giây trước khi yêu cầu gửi lại mã OTP.");
+        await _cache.SetStringAsync(key, "1", TimeSpan.FromSeconds(OtpResendCooldownSeconds));
+    }
+
+    private async Task StoreOtpAsync(string purpose, string email, string otp)
+    {
+        await _cache.SetStringAsync($"otp:{purpose}:{email}", otp, TimeSpan.FromMinutes(OtpTtlMinutes));
+        await _cache.RemoveAsync($"otp:fail:{purpose}:{email}");
+    }
+
+    /// <summary>Kiểm tra OTP; sai quá 5 lần thì hủy OTP (chống dò mã).</summary>
+    private async Task VerifyOtpAsync(string purpose, string email, string? input)
+    {
+        var cachedOtp = await _cache.GetStringAsync($"otp:{purpose}:{email}");
+        if (cachedOtp is null)
+            throw new InvalidOperationException("Mã OTP không chính xác hoặc đã hết hạn.");
+
+        bool match = input is not null && CryptographicOperations.FixedTimeEquals(
+            Encoding.UTF8.GetBytes(cachedOtp), Encoding.UTF8.GetBytes(input));
+        if (match) return;
+
+        var fails = await _cache.IncrementAsync($"otp:fail:{purpose}:{email}", TimeSpan.FromMinutes(OtpTtlMinutes));
+        if (fails >= OtpMaxVerifyAttempts)
+        {
+            await _cache.RemoveAsync($"otp:{purpose}:{email}");
+            await _cache.RemoveAsync($"otp:fail:{purpose}:{email}");
+            throw new InvalidOperationException("Bạn đã nhập sai OTP quá 5 lần. Vui lòng yêu cầu mã mới.");
+        }
+        throw new InvalidOperationException("Mã OTP không chính xác hoặc đã hết hạn.");
+    }
 
     // ── SEND OTP ──────────────────────────────────────────────────────
     public async Task SendRegisterOtpAsync(SendRegisterOtpRequest request)
@@ -51,9 +92,10 @@ public class AuthService : IAuthService
         bool emailExists = await _db.Users.AnyAsync(u => u.Email == email);
         if (emailExists) throw new InvalidOperationException("Email này đã được đăng ký.");
 
+        await EnsureResendCooldownAsync("register", email);
         var otp = GenerateOtp();
-        var cacheKey = $"otp:register:{email}";
-        await _redis.StringSetAsync(cacheKey, otp, TimeSpan.FromMinutes(5));
+        await StoreOtpAsync("register", email, otp);
+        _logger.LogInformation("[OTP DEV] Mã OTP (register) gửi tới {Email} là: {Otp}", email, otp);
 
         var body = $"<h3>Mã xác thực đăng ký Gaming Edu</h3><p>Mã OTP của bạn là: <b>{otp}</b></p><p>Mã này có hiệu lực trong 5 phút.</p>";
         await _email.SendEmailAsync(email, "Mã xác thực Đăng ký", body);
@@ -63,11 +105,7 @@ public class AuthService : IAuthService
     public async Task<AuthResponse> RegisterAsync(RegisterRequest request)
     {
         var email = request.Email.ToLower().Trim();
-        var cacheKey = $"otp:register:{email}";
-        
-        var cachedOtp = await _redis.StringGetAsync(cacheKey);
-        if (!cachedOtp.HasValue || cachedOtp.ToString() != request.Otp)
-            throw new InvalidOperationException("Mã OTP không chính xác hoặc đã hết hạn.");
+        await VerifyOtpAsync("register", email, request.Otp);
 
         bool emailExists = await _db.Users.AnyAsync(u => u.Email == email);
         if (emailExists) throw new InvalidOperationException("Email này đã được đăng ký.");
@@ -100,7 +138,7 @@ public class AuthService : IAuthService
         _db.UserQuotas.Add(quota);
         await _db.SaveChangesAsync();
 
-        await _redis.KeyDeleteAsync(cacheKey); // Xóa OTP sau khi dùng
+        await _cache.RemoveAsync($"otp:register:{email}"); // Xóa OTP sau khi dùng
 
         _logger.LogInformation("New user registered: {Email}", user.Email);
 
@@ -136,24 +174,23 @@ public class AuthService : IAuthService
         }
 
         var attemptKey = $"login:attempts:{email}";
-        
+
         if (!BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
         {
-            var attempts = await _redis.StringIncrementAsync(attemptKey);
-            if (attempts == 1) await _redis.KeyExpireAsync(attemptKey, TimeSpan.FromMinutes(15));
+            var attempts = await _cache.IncrementAsync(attemptKey, TimeSpan.FromMinutes(15));
 
             if (attempts >= 5)
             {
                 user.Status = "LOCKED";
                 user.LockedUntil = DateTime.UtcNow.AddMinutes(15);
                 await _db.SaveChangesAsync();
-                await _redis.KeyDeleteAsync(attemptKey);
+                await _cache.RemoveAsync(attemptKey);
                 throw new UnauthorizedAccessException("Tài khoản bị khóa 15 phút do nhập sai mật khẩu quá 5 lần.");
             }
             throw new UnauthorizedAccessException("Email hoặc mật khẩu không đúng.");
         }
 
-        await _redis.KeyDeleteAsync(attemptKey); // Xóa bộ đếm sai mật khẩu
+        await _cache.RemoveAsync(attemptKey); // Xóa bộ đếm sai mật khẩu
 
         var token = await GenerateAndStoreJwtToken(user);
         return BuildAuthResponse(token, user, user.UserQuota);
@@ -167,9 +204,14 @@ public class AuthService : IAuthService
         if (user == null || user.Status == "DELETED")
             return; // Không ném lỗi để tránh lộ email (security)
 
+        // Cooldown vẫn áp dụng ngầm (không lộ email tồn tại hay không)
+        var cooldownKey = $"otp:cooldown:reset:{email}";
+        if (await _cache.ExistsAsync(cooldownKey)) return;
+        await _cache.SetStringAsync(cooldownKey, "1", TimeSpan.FromSeconds(OtpResendCooldownSeconds));
+
         var otp = GenerateOtp();
-        var cacheKey = $"otp:reset:{email}";
-        await _redis.StringSetAsync(cacheKey, otp, TimeSpan.FromMinutes(5));
+        await StoreOtpAsync("reset", email, otp);
+        _logger.LogInformation("[OTP DEV] Mã OTP (reset) gửi tới {Email} là: {Otp}", email, otp);
 
         var body = $"<h3>Đặt lại mật khẩu Gaming Edu</h3><p>Mã OTP của bạn là: <b>{otp}</b></p><p>Mã này có hiệu lực trong 5 phút.</p>";
         await _email.SendEmailAsync(email, "Mã xác thực Quên mật khẩu", body);
@@ -178,11 +220,7 @@ public class AuthService : IAuthService
     public async Task ResetPasswordAsync(ResetPasswordRequest request)
     {
         var email = request.Email.ToLower().Trim();
-        var cacheKey = $"otp:reset:{email}";
-        
-        var cachedOtp = await _redis.StringGetAsync(cacheKey);
-        if (!cachedOtp.HasValue || cachedOtp.ToString() != request.Otp)
-            throw new InvalidOperationException("Mã OTP không chính xác hoặc đã hết hạn.");
+        await VerifyOtpAsync("reset", email, request.Otp);
 
         var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == email);
         if (user == null) throw new InvalidOperationException("Không tìm thấy người dùng.");
@@ -191,14 +229,13 @@ public class AuthService : IAuthService
         user.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
 
-        await _redis.KeyDeleteAsync(cacheKey);
+        await _cache.RemoveAsync($"otp:reset:{email}");
         await LogoutAsync(user.Id); // Hủy mọi session cũ
     }
 
     public async Task LogoutAsync(Guid userId)
     {
-        var sessionKey = $"session:{userId}";
-        await _redis.KeyDeleteAsync(sessionKey);
+        await _cache.RemoveAsync($"session:{userId}");
     }
 
     // ── JWT TOKEN GENERATION ───────────────────────────────────────────
@@ -230,8 +267,8 @@ public class AuthService : IAuthService
             signingCredentials: creds
         );
 
-        // Lưu sessionId vào Redis để tracking Single Session
-        await _redis.StringSetAsync($"session:{user.Id}", sessionId, TimeSpan.FromMinutes(expiryMinutes));
+        // Lưu sessionId vào Redis để tracking Single Session (đăng nhập nơi khác sẽ ghi đè)
+        await _cache.SetStringAsync($"session:{user.Id}", sessionId, TimeSpan.FromMinutes(expiryMinutes));
 
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
