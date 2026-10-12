@@ -333,29 +333,31 @@ body {
 }
 
 /* ===========================
-   INPUT FIELDS
+   INPUT FIELDS (UI/UX Pro Max)
 =========================== */
 .input-field {
   width: 100%;
-  padding: 12px 16px 12px 44px;
-  border: 1.5px solid #e5e7eb;
-  border-radius: 10px;
-  font-size: 0.9rem;
+  padding: 16px 16px 16px 44px;
+  border: 4px solid #e5e7eb;
+  border-radius: 20px;
+  font-size: 1rem;
   font-family: "Be Vietnam Pro", sans-serif;
+  font-weight: 700;
   color: #1a1a2e;
   background: #f9fafb;
   outline: none;
-  transition: all 0.3s;
+  transition: all 0.2s ease-in-out;
 }
 
 .input-field:focus {
   border-color: #7c3aed;
   background: white;
-  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
+  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.1);
 }
 
 .input-field::placeholder {
   color: #9ca3af;
+  font-weight: 700;
 }
 
 /* ===========================

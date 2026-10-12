@@ -1,129 +1,237 @@
-import { useEffect, useState, useCallback } from 'react';
-import { HubConnectionBuilder, LogLevel, HubConnection } from '@microsoft/signalr';
-import Cookies from 'js-cookie';
+import { useEffect, useState, useCallback, useRef } from "react";
+import * as signalR from "@microsoft/signalr";
+import Cookies from "js-cookie";
+
+const HUB_URL = process.env.NEXT_PUBLIC_HUB_URL || "http://localhost:5000/hubs/game";
+
+export interface PlayerInfo {
+  playerId: string;
+  nickname: string;
+  avatarUrl?: string;
+  joinedAt: string;
+}
+
+export interface SlideOptionPublic {
+  id: string;
+  content: string;
+  matchingPair?: string;
+  orderIndex: number;
+}
+
+export interface SlideStartedPayload {
+  index: number;
+  slideId: string;
+  type: string;
+  questionText: string;
+  timeLimit: number;
+  points: number;
+  options: SlideOptionPublic[];
+}
 
 export function useGameHub() {
-  const [connection, setConnection] = useState<HubConnection | null>(null);
-  const [players, setPlayers] = useState<any[]>([]);
-  const [isLocked, setIsLocked] = useState(false);
-  const [countdown, setCountdown] = useState(0);
-  const [currentSlide, setCurrentSlide] = useState<any>(null);
-  const [leaderboard, setLeaderboard] = useState<any[]>([]);
-  const [gameStatus, setGameStatus] = useState<"LOBBY" | "COUNTDOWN" | "PLAYING" | "RESULT" | "PODIUM">("LOBBY");
+  const [connection, setConnection] = useState<signalR.HubConnection | null>(null);
+  const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
-  // Specific for Player
-  const [playerId, setPlayerId] = useState<string | null>(null);
-  const [roomId, setRoomId] = useState<string | null>(null);
-  const [scoreInfo, setScoreInfo] = useState({ score: 0, totalScore: 0 });
-  const [resultState, setResultState] = useState<"NONE" | "CORRECT" | "INCORRECT">("NONE");
-  const [myRank, setMyRank] = useState<number | null>(null);
+  // Game State
+  const [roomInfo, setRoomInfo] = useState<any>(null);
+  const [players, setPlayers] = useState<PlayerInfo[]>([]);
+  const [gameState, setGameState] = useState<"WAITING" | "STARTING" | "PLAYING" | "LEADERBOARD" | "FINISHED">("WAITING");
+  const [currentSlide, setCurrentSlide] = useState<SlideStartedPayload | null>(null);
+  const [countdown, setCountdown] = useState<number | null>(null);
+  const [slideTimeLeft, setSlideTimeLeft] = useState<number | null>(null);
+  const [leaderboard, setLeaderboard] = useState<any[]>([]);
+  const [answerResult, setAnswerResult] = useState<any>(null);
 
-  const connect = useCallback(async (pinCode?: string, nickname?: string) => {
-    const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+  // Keep a ref to the connection to avoid closure issues
+  const connectionRef = useRef<signalR.HubConnection | null>(null);
+
+  useEffect(() => {
     const token = Cookies.get("token");
-
-    const hub = new HubConnectionBuilder()
-      .withUrl(`${baseUrl}/hubs/game`, token ? { accessTokenFactory: () => token } : {})
-      .configureLogging(LogLevel.Information)
+    const newConnection = new signalR.HubConnectionBuilder()
+      .withUrl(HUB_URL, {
+        accessTokenFactory: () => token || "",
+        transport: signalR.HttpTransportType.WebSockets,
+      })
       .withAutomaticReconnect()
+      .configureLogging(signalR.LogLevel.Information)
       .build();
 
-    hub.on("PlayerJoined", (player) => {
-      setPlayers(prev => {
-        if (prev.find(p => p.id === player.id)) return prev;
+    connectionRef.current = newConnection;
+
+    newConnection.start()
+      .then(() => {
+        setIsConnected(true);
+        setError(null);
+      })
+      .catch((err) => {
+        console.error("SignalR Connection Error: ", err);
+        setError("Không thể kết nối đến máy chủ game.");
+      });
+
+    // ── Events ──
+    newConnection.on("Error", (err: { message: string }) => {
+      setError(err.message);
+    });
+
+    newConnection.on("JoinedRoom", (info: any) => {
+      setRoomInfo(info);
+    });
+
+    newConnection.on("PlayerJoined", (player: PlayerInfo) => {
+      setPlayers((prev) => {
+        if (prev.find((p) => p.playerId === player.playerId)) return prev;
         return [...prev, player];
       });
-      if (nickname && player.nickname === nickname) {
-        setPlayerId(player.id);
-        setRoomId(player.roomId);
-        setGameStatus("LOBBY"); // For player, we might map LOBBY to WAITING in the component
-      }
     });
 
-    hub.on("PlayerKicked", (pId) => {
-      setPlayers(prev => prev.filter(p => p.id !== pId));
+    newConnection.on("PlayerKicked", (playerId: string) => {
+      setPlayers((prev) => prev.filter((p) => p.playerId !== playerId));
+      // If we are the one kicked, handle it in the UI (by checking context player ID)
     });
 
-    hub.on("RoomLocked", (locked) => {
-      setIsLocked(locked);
+    newConnection.on("RoomLockedStatusChanged", (isLocked: boolean) => {
+      setRoomInfo((prev: any) => prev ? { ...prev, isLocked } : prev);
     });
 
-    hub.on("CountdownStarted", (seconds) => {
-      setGameStatus("COUNTDOWN");
-      setCountdown(seconds);
-      const iv = setInterval(() => {
-        setCountdown(c => {
-          if (c <= 1) {
-            clearInterval(iv);
-            return 0;
-          }
-          return c - 1;
-        });
-      }, 1000);
+    newConnection.on("GameStarted", (data: any) => {
+      setGameState("STARTING");
     });
 
-    hub.on("SlideStarted", (slide) => {
+    newConnection.on("SlideStarted", (slide: SlideStartedPayload) => {
       setCurrentSlide(slide);
-      setResultState("NONE");
-      setGameStatus("PLAYING");
+      setGameState("PLAYING");
+      setSlideTimeLeft(slide.timeLimit);
+      setAnswerResult(null); // Reset previous answer
     });
 
-    hub.on("AnswerAccepted", (pId, score, totalScore) => {
-      // If we are the player who answered
-      setScoreInfo({ score, totalScore });
-      setResultState(score > 0 ? "CORRECT" : "INCORRECT");
-      setGameStatus("RESULT");
+    newConnection.on("CountdownStarted", (seconds: number) => {
+      setCountdown(seconds);
     });
 
-    hub.on("LeaderboardUpdated", (data) => {
+    newConnection.on("TimeTick", (seconds: number) => {
+      setCountdown(seconds);
+    });
+
+    newConnection.on("TimeOut", () => {
+      setCountdown(null);
+    });
+
+    newConnection.on("SlideTimeTick", (data: { slideId: string, remaining: number }) => {
+      setSlideTimeLeft(data.remaining);
+    });
+
+    newConnection.on("SlideTimeOut", (slideId: string) => {
+      setSlideTimeLeft(0);
+      setGameState("LEADERBOARD");
+    });
+
+    newConnection.on("AnswerAccepted", (data: any) => {
+      // Logic when answer is accepted
+    });
+
+    newConnection.on("AnswerResult", (result: any) => {
+      setAnswerResult(result);
+    });
+
+    newConnection.on("LeaderboardUpdated", (data: any[]) => {
       setLeaderboard(data);
     });
 
-    hub.on("GameEnded", () => {
-      setGameStatus("PODIUM");
+    newConnection.on("GameEnded", (data: any) => {
+      setGameState("FINISHED");
+      setLeaderboard(data.leaderboard);
     });
 
-    hub.on("Error", (msg) => {
-      setError(msg);
-      hub.stop();
-    });
+    setConnection(newConnection);
 
-    try {
-      await hub.start();
-      setConnection(hub);
-      if (pinCode && nickname) {
-        await hub.invoke("JoinRoom", pinCode, nickname);
-      }
-    } catch (err) {
-      setError("Không thể kết nối đến máy chủ trò chơi.");
+    return () => {
+      newConnection.stop();
+    };
+  }, []);
+
+  // ── Actions ──
+  const joinRoom = useCallback(async (pinCode: string, nickname?: string) => {
+    if (connectionRef.current?.state === signalR.HubConnectionState.Connected) {
+      await connectionRef.current.invoke("JoinRoom", { pinCode, nickname });
     }
   }, []);
 
-  const disconnect = useCallback(() => {
-    if (connection) {
-      connection.stop();
+  const startGame = useCallback(async (roomId: string) => {
+    if (connectionRef.current?.state === signalR.HubConnectionState.Connected) {
+      await connectionRef.current.invoke("StartGame", roomId);
     }
-  }, [connection]);
+  }, []);
+
+  const nextSlide = useCallback(async (roomId: string) => {
+    if (connectionRef.current?.state === signalR.HubConnectionState.Connected) {
+      await connectionRef.current.invoke("NextSlide", roomId);
+    }
+  }, []);
+
+  const startCountdown = useCallback(async (seconds: number = 3) => {
+    if (connectionRef.current?.state === signalR.HubConnectionState.Connected) {
+      await connectionRef.current.invoke("StartCountdown", seconds);
+    }
+  }, []);
+
+  const startSlideTimer = useCallback(async (timeLimitSeconds: number, slideId: string) => {
+    if (connectionRef.current?.state === signalR.HubConnectionState.Connected) {
+      await connectionRef.current.invoke("StartSlideTimer", timeLimitSeconds, slideId);
+    }
+  }, []);
+
+  const submitAnswer = useCallback(async (slideId: string, answerData: any) => {
+    if (connectionRef.current?.state === signalR.HubConnectionState.Connected) {
+      await connectionRef.current.invoke("SubmitAnswer", { slideId, ...answerData });
+    }
+  }, []);
+
+  const requestLeaderboard = useCallback(async () => {
+    if (connectionRef.current?.state === signalR.HubConnectionState.Connected) {
+      await connectionRef.current.invoke("RequestLeaderboard");
+    }
+  }, []);
+
+  const lockRoom = useCallback(async (isLocked: boolean) => {
+    if (connectionRef.current?.state === signalR.HubConnectionState.Connected) {
+      await connectionRef.current.invoke("LockRoom", isLocked);
+    }
+  }, []);
+
+  const kickPlayer = useCallback(async (playerId: string) => {
+    if (connectionRef.current?.state === signalR.HubConnectionState.Connected) {
+      await connectionRef.current.invoke("KickPlayer", playerId);
+    }
+  }, []);
+
+  const endGame = useCallback(async (roomId: string) => {
+    if (connectionRef.current?.state === signalR.HubConnectionState.Connected) {
+      await connectionRef.current.invoke("EndGame", roomId);
+    }
+  }, []);
 
   return {
     connection,
-    players,
-    isLocked,
-    countdown,
-    currentSlide,
-    leaderboard,
-    gameStatus,
+    isConnected,
     error,
-    playerId,
-    roomId,
-    scoreInfo,
-    resultState,
-    myRank,
-    setGameStatus,
-    setResultState,
-    setMyRank,
-    connect,
-    disconnect
+    roomInfo,
+    players,
+    gameState,
+    currentSlide,
+    countdown,
+    slideTimeLeft,
+    leaderboard,
+    answerResult,
+    joinRoom,
+    startGame,
+    nextSlide,
+    startCountdown,
+    startSlideTimer,
+    submitAnswer,
+    requestLeaderboard,
+    lockRoom,
+    kickPlayer,
+    endGame,
   };
 }
