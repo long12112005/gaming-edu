@@ -6,9 +6,7 @@ import Link from "next/link";
 import Cookies from "js-cookie";
 import {
   Plus,
-  Trophy,
   Users,
-  Zap,
   BookOpen,
   Play,
   MoreVertical,
@@ -16,109 +14,101 @@ import {
   Trash2,
   BarChart2,
   Star,
-  ChevronRight,
   Bot,
-  LogOut,
-  Settings,
-  User,
-  LayoutDashboard,
   Gamepad2,
-  Compass,
+  Sparkles,
 } from "lucide-react";
-import Button from "@/components/ui/Button";
 import { api } from "@/lib/api";
 import { Quiz } from "@/types/database";
 import { formatNumber } from "@/lib/utils";
 import { useAuthStore } from "@/store/useAuthStore";
-import { useQuery } from "@tanstack/react-query";
+import SiteHeader from "@/components/layout/SiteHeader";
 
-// ─── Stat Card (Claymorphism) ────────────────────────────────────────────────
-function StatCard({ icon: Icon, label, value, color, bg, borderColor }: any) {
+// ─── Stat Card (Tiên Môn Style) ────────────────────────────────────────────────
+function StatCard({ icon: Icon, label, value, color, bg }: any) {
   return (
-    <div className={`bg-white rounded-[32px] border-4 ${borderColor} shadow-[4px_4px_16px_rgba(0,0,0,0.05)] p-6 flex flex-col items-center text-center gap-3 hover:-translate-y-1 transition-transform`}>
-      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${bg}`}>
-        <Icon size={28} className={color} />
+    <div className="bg-white/60 backdrop-blur-xl rounded-2xl border border-white/80 shadow-[0_8px_32px_rgba(8,38,42,0.12)] p-5 flex flex-col items-center text-center gap-2.5 hover:-translate-y-1.5 transition-all">
+      <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${bg} border border-white/30`}>
+        <Icon size={24} className={color} />
       </div>
       <div>
-        <div className="text-3xl font-black text-gray-900">{value}</div>
-        <div className="text-sm text-gray-500 font-bold uppercase tracking-wider mt-1">{label}</div>
+        <div className="text-2xl md:text-3xl font-bold font-serif text-[#0a3038]">{value}</div>
+        <div className="text-xs text-teal-700/80 font-bold uppercase tracking-wider mt-1">{label}</div>
       </div>
     </div>
   );
 }
 
-// ─── Quiz Row Card (Vibrant Block) ────────────────────────────────────────────
+// ─── Quiz Row Card (Tiên Môn Style) ────────────────────────────────────────────
 function QuizRow({ quiz, onDelete, onCreateRoom }: any) {
   const [showMenu, setShowMenu] = useState(false);
   const [creating, setCreating] = useState(false);
 
   const topicColors: Record<string, string> = {
-    "TOÁN HỌC": "bg-red-100 text-red-700 border-red-200",
-    "KHOA HỌC": "bg-amber-100 text-amber-700 border-amber-200",
-    "LỊCH SỬ": "bg-emerald-100 text-emerald-700 border-emerald-200",
-    "NGỮ VĂN": "bg-blue-100 text-blue-700 border-blue-200",
+    "TOÁN HỌC": "bg-red-500/20 text-red-200 border-red-400/30",
+    "KHOA HỌC": "bg-amber-500/20 text-amber-200 border-amber-400/30",
+    "LỊCH SỬ": "bg-emerald-500/20 text-emerald-200 border-emerald-400/30",
+    "NGỮ VĂN": "bg-blue-500/20 text-blue-200 border-blue-400/30",
   };
-  const badgeCls = topicColors[quiz.topic ?? ""] ?? "bg-violet-100 text-violet-700 border-violet-200";
 
   return (
-    <div className="bg-white rounded-[32px] border-4 border-gray-100 shadow-[4px_4px_16px_rgba(0,0,0,0.05)] p-5 flex items-center gap-6 hover:shadow-[0_12px_32px_rgba(124,58,237,0.1)] hover:border-violet-200 transition-all group animate-fade-in-up">
-      <div className="w-20 h-20 rounded-[20px] overflow-hidden flex-shrink-0 bg-gray-100 shadow-[inset_2px_2px_8px_rgba(0,0,0,0.1)]">
-        <img
-          src={quiz.cover_image_url ?? "https://images.unsplash.com/photo-1497633762265-9d179a990aa6?w=200&h=200&fit=crop"}
-          alt={quiz.title}
-          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-        />
-      </div>
-
+    <div className="bg-white/65 backdrop-blur-xl rounded-2xl p-5 border border-white/80 hover:border-emerald-400/60 hover:shadow-[0_8px_32px_rgba(6,78,59,0.15)] transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-3 mb-2">
-          <h3 className="font-black text-gray-900 text-xl truncate">{quiz.title}</h3>
-          {quiz.topic && (
-            <span className={`text-xs font-bold px-3 py-1 rounded-full border-2 ${badgeCls}`}>
-              {quiz.topic}
-            </span>
-          )}
+        <div className="flex items-center gap-2.5 mb-1.5 flex-wrap">
+          <span className={`px-2.5 py-0.5 rounded-lg text-xs font-bold border ${topicColors[quiz.topic] || "bg-cyan-500/20 text-cyan-200 border-cyan-400/30"}`}>
+            {quiz.topic}
+          </span>
+          <h3 className="text-lg font-bold font-serif text-white truncate max-w-md">{quiz.title}</h3>
         </div>
-        <div className="flex items-center gap-5 text-sm font-semibold text-gray-500">
-          <span className="flex items-center gap-1.5"><BookOpen size={16} />{quiz.slide_count ?? 0} câu</span>
-          <span className="flex items-center gap-1.5"><Play size={16} />{formatNumber(quiz.play_count ?? 0)} lượt</span>
-          <span className="flex items-center gap-1.5 text-orange-500"><Star size={16} className="fill-orange-500" />4.8</span>
+        <div className="flex items-center gap-4 text-xs font-sans text-cyan-200/70">
+          <span className="flex items-center gap-1"><BookOpen size={14} />{quiz.slide_count ?? 0} câu</span>
+          <span className="flex items-center gap-1"><Play size={14} />{formatNumber(quiz.play_count ?? 0)} lượt</span>
         </div>
       </div>
 
-      <div className="flex items-center gap-3 flex-shrink-0">
+      <div className="flex items-center gap-2.5 shrink-0">
         <button
-          onClick={() => onCreateRoom(quiz)}
+          onClick={() => {
+            setCreating(true);
+            onCreateRoom(quiz);
+          }}
           disabled={creating}
-          className="hidden sm:flex items-center gap-2 px-6 py-3 bg-violet-600 text-white font-bold rounded-2xl shadow-[0_4px_0_#5b21b6] active:translate-y-[4px] active:shadow-none hover:brightness-110 transition-all disabled:opacity-50"
+          className="flex items-center gap-1.5 px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-bold rounded-xl shadow-md active:scale-95 transition-all text-sm disabled:opacity-50"
         >
-          <Play size={18} fill="currentColor" /> {creating ? "Đang tạo..." : "Bắt Đầu"}
+          <Play size={16} fill="currentColor" /> {creating ? "Đang tạo..." : "Mở Phòng"}
         </button>
 
-        <Link href={`/quiz/${quiz.id}/edit`} className="p-3 bg-gray-100 text-gray-600 rounded-2xl hover:bg-violet-100 hover:text-violet-600 transition-colors">
-          <Pencil size={20} />
+        <Link
+          href={`/quiz/${quiz.id}/edit`}
+          className="p-2.5 bg-white/10 hover:bg-white/20 text-cyan-200 hover:text-white rounded-xl border border-white/10 transition-colors"
+          title="Chỉnh sửa"
+        >
+          <Pencil size={18} />
         </Link>
 
         <div className="relative">
           <button
             onClick={() => setShowMenu(!showMenu)}
-            className="p-3 bg-gray-100 text-gray-600 rounded-2xl hover:bg-gray-200 transition-colors"
+            className="p-2.5 bg-white/10 hover:bg-white/20 text-cyan-200 hover:text-white rounded-xl border border-white/10 transition-colors"
           >
-            <MoreVertical size={20} />
+            <MoreVertical size={18} />
           </button>
           {showMenu && (
             <div
-              className="absolute right-0 top-full mt-2 w-48 bg-white rounded-2xl shadow-xl border-4 border-gray-100 py-2 z-20 animate-fade-in-up"
+              className="absolute right-0 top-full mt-2 w-44 bg-[#0e3b43]/95 backdrop-blur-xl rounded-xl shadow-2xl border border-cyan-300/30 py-1.5 z-30 animate-in fade-in"
               onMouseLeave={() => setShowMenu(false)}
             >
-              <Link href={`/quiz/${quiz.id}`} className="flex items-center gap-3 px-4 py-3 text-sm font-bold text-gray-700 hover:bg-violet-50 hover:text-violet-700 transition-colors">
-                <BarChart2 size={16} /> Xem Chi Tiết
+              <Link
+                href={`/quiz/${quiz.id}`}
+                className="flex items-center gap-2 px-3.5 py-2 text-xs font-bold text-cyan-100 hover:text-white hover:bg-white/10 transition-colors"
+              >
+                <BarChart2 size={14} /> Xem Chi Tiết
               </Link>
               <button
                 onClick={() => { setShowMenu(false); onDelete(quiz.id); }}
-                className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-red-500 hover:bg-red-50 transition-colors"
+                className="w-full flex items-center gap-2 px-3.5 py-2 text-xs font-bold text-rose-300 hover:text-rose-100 hover:bg-rose-500/20 transition-colors text-left"
               >
-                <Trash2 size={16} /> Xóa Bộ Đề
+                <Trash2 size={14} /> Xóa Bộ Đề
               </button>
             </div>
           )}
@@ -131,197 +121,158 @@ function QuizRow({ quiz, onDelete, onCreateRoom }: any) {
 // ─── Main Dashboard Page ──────────────────────────────────────────────────────
 export default function DashboardPage() {
   const router = useRouter();
-  const { user, isAuthenticated, logout } = useAuthStore();
-  const [creatingRoom, setCreatingRoom] = useState(false);
+  const { user, isAuthenticated } = useAuthStore();
+  const [quizzes, setQuizzes] = useState<Quiz[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!isAuthenticated) router.push("/login");
+    if (!isAuthenticated && !Cookies.get("token")) {
+      router.push("/login");
+      return;
+    }
+
+    const fetchMyQuizzes = async () => {
+      try {
+        const res = await api.get("/quizzes/my");
+        if (res.data.success) {
+          setQuizzes(res.data.data);
+        }
+      } catch (err) {
+        console.error("Lỗi khi tải bộ đề:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchMyQuizzes();
   }, [isAuthenticated, router]);
 
-  const { data: quizzes = [], isLoading: loading, refetch } = useQuery({
-    queryKey: ["quizzes"],
-    queryFn: async () => {
-      const res = await api.get("/quizzes"); 
-      return res.data.data || [];
-    },
-    enabled: isAuthenticated,
-  });
-
   const handleCreateRoom = async (quiz: Quiz) => {
-    setCreatingRoom(true);
     try {
-      const res = await api.post("/rooms", { quizId: quiz.id, mode: "HOST_PACED" });
+      const res = await api.post("/rooms", { quizId: quiz.id });
       if (res.data.success) {
-        router.push(`/host/${res.data.data.id}?pin=${res.data.data.pinCode}`);
+        router.push(`/host/${res.data.data.id}`);
       }
-    } catch {
-      alert("Lỗi khi tạo phòng. Vui lòng thử lại.");
-    } finally {
-      setCreatingRoom(false);
+    } catch (err) {
+      alert("Tạo phòng thi đấu thất bại. Vui lòng thử lại!");
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Bạn chắc chắn muốn xóa bộ đề này?")) return;
+  const handleDelete = async (quizId: string) => {
+    if (!confirm("Bạn có chắc chắn muốn xóa bộ đề này?")) return;
     try {
-      await api.delete(`/quizzes/${id}`);
-      refetch();
-    } catch (e) {
+      await api.delete(`/quizzes/${quizId}`);
+      setQuizzes((prev) => prev.filter((q) => q.id !== quizId));
+    } catch (err) {
       alert("Xóa bộ đề thất bại.");
     }
   };
 
   const aiUsed = user?.ai_used_today ?? 0;
   const aiLimit = user?.ai_generation_limit ?? 10;
-  const aiPercent = Math.min((aiUsed / aiLimit) * 100, 100);
+  const aiRemaining = Math.max(0, aiLimit - aiUsed);
 
   return (
-    <div className="min-h-screen bg-[#F4F1FA] flex font-sans">
-      {/* ── SIDEBAR (Claymorphism) ───────────────────────────────────────── */}
-      <aside className="hidden lg:flex flex-col w-72 bg-white border-r-4 border-violet-100 h-screen sticky top-0 shadow-[4px_0_24px_rgba(0,0,0,0.02)] rounded-tr-[40px] rounded-br-[40px] z-10">
-        <div className="p-8 pb-4">
-          <Link href="/" className="flex items-center gap-3 group">
-            <div className="w-12 h-12 rounded-[16px] bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center shadow-[0_4px_12px_rgba(124,58,237,0.3)] group-hover:rotate-12 transition-transform">
-              <Gamepad2 size={24} className="text-white" />
-            </div>
-            <span className="font-black text-2xl text-gray-900 tracking-tight">
-              <span className="text-violet-600">Gaming</span>Edu
-            </span>
+    <div className="min-h-screen text-[#1B2A2E] font-serif flex flex-col relative">
+      {/* Landscape background */}
+      <div
+        className="fixed inset-0 z-0"
+        style={{
+          backgroundImage: "url('/bg-misty-white.jpg')",
+          backgroundSize: "cover",
+          backgroundPosition: "center top",
+        }}
+      />
+      {/* Frosted mist overlay */}
+      <div className="fixed inset-0 z-0" style={{ background: "rgba(240,248,248,0.45)" }} />
+      <SiteHeader />
+
+      <main className="flex-1 pt-24 pb-16 px-4 md:px-8 max-w-6xl mx-auto w-full relative z-10">
+        {/* Header Greeting */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
+          <div>
+            <h1 className="text-3xl md:text-5xl font-bold font-serif text-[#08282e] tracking-tight drop-shadow-sm">
+              Chào Mừng, <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-600 via-teal-600 to-emerald-600">{user?.nickname ?? "Bạn"}</span> 👋
+            </h1>
+            <p className="text-sm md:text-base text-teal-800/80 font-sans mt-1">
+              Sẵn sàng rèn luyện và mở phòng thi đấu cùng học sinh, bạn bè hôm nay!
+            </p>
+          </div>
+          <Link
+            href="/quiz/create"
+            className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-amber-950 font-sans font-bold text-base rounded-2xl shadow-lg hover:scale-105 active:scale-95 transition-all"
+          >
+            <Plus size={20} /> Tạo Bộ Đề
           </Link>
         </div>
 
-        {user && (
-          <div className="px-6 py-4">
-            <Link href="/profile" className="flex items-center gap-4 p-3 bg-violet-50 rounded-[24px] border-2 border-violet-100 hover:bg-violet-100 transition-colors cursor-pointer">
-              <img
-                src={user.avatar_url ?? `https://ui-avatars.com/api/?name=${user.nickname}&background=7c3aed&color=fff`}
-                alt={user.nickname}
-                className="w-12 h-12 rounded-full border-4 border-white shadow-sm"
-              />
-              <div className="flex-1 min-w-0">
-                <div className="font-bold text-gray-900 text-sm truncate">{user.nickname}</div>
-                <div className="text-xs font-semibold text-violet-600 flex items-center gap-1">
-                  <Star size={12} className="fill-violet-600" /> Pro Member
+        {/* Stats Grid */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 mb-8">
+          <StatCard icon={BookOpen} label="Bộ đề" value={quizzes.length} color="text-cyan-300" bg="bg-cyan-500/20" />
+          <StatCard icon={Play} label="Lượt chơi" value={formatNumber(quizzes.reduce((s, q) => s + (q.play_count ?? 0), 0))} color="text-emerald-300" bg="bg-emerald-500/20" />
+          <StatCard icon={Users} label="Tổng câu hỏi" value={quizzes.reduce((s, q) => s + (q.slide_count ?? 0), 0)} color="text-amber-300" bg="bg-amber-500/20" />
+          <StatCard icon={Sparkles} label="Lượt AI còn lại" value={`${aiRemaining}/${aiLimit}`} color="text-yellow-300" bg="bg-yellow-500/20" />
+        </div>
+
+        {/* Quick Actions */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-10">
+          {[
+            { icon: Plus, label: "Tạo Thủ Công", desc: "Tự tay thiết kế câu hỏi", href: "/quiz/create", color: "text-emerald-300", bg: "bg-emerald-500/20" },
+            { icon: Bot, label: "AI Sinh Đề", desc: "Upload tài liệu PDF / Văn bản", href: "/quiz/create", color: "text-cyan-300", bg: "bg-cyan-500/20" },
+            { icon: Gamepad2, label: "Nhập PIN Code", desc: "Tham gia phòng chơi ngay", href: "/", color: "text-amber-300", bg: "bg-amber-500/20" },
+          ].map(({ icon: Icon, label, desc, href, color, bg }) => (
+            <Link key={label} href={href}>
+              <div className="bg-white/65 backdrop-blur-xl rounded-2xl border border-white/80 p-5 flex items-center gap-4 hover:-translate-y-1.5 hover:border-emerald-400/60 hover:shadow-[0_12px_32px_rgba(6,78,59,0.15)] transition-all shadow-md">
+                <div className={`w-14 h-14 rounded-2xl ${bg} ${color} border border-white/10 flex items-center justify-center shrink-0`}>
+                  <Icon size={28} />
+                </div>
+                <div>
+                  <div className="font-bold font-serif text-[#08282e] text-lg">{label}</div>
+                  <div className="text-xs font-sans text-teal-700/70 mt-0.5">{desc}</div>
                 </div>
               </div>
-            </Link>
-            <div className="mt-4 bg-white rounded-[20px] p-4 border-2 border-orange-100 shadow-sm">
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-xs font-bold text-orange-600 flex items-center gap-1">
-                  <Zap size={14} className="fill-orange-600"/> AI Năng lượng
-                </span>
-                <span className="text-xs font-black text-orange-700">{aiUsed}/{aiLimit}</span>
-              </div>
-              <div className="w-full h-2.5 bg-orange-100 rounded-full overflow-hidden">
-                <div className="h-full bg-gradient-to-r from-orange-400 to-pink-500 rounded-full" style={{ width: `${aiPercent}%` }} />
-              </div>
-            </div>
-          </div>
-        )}
-
-        <nav className="flex-1 px-4 py-4 space-y-2">
-          {[
-            { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard", active: true },
-            { icon: Compass, label: "Khám Phá", href: "/explore", active: false },
-            { icon: BarChart2, label: "Báo Cáo", href: "/reports", active: false },
-            { icon: User, label: "Hồ Sơ", href: "/profile", active: false },
-          ].map(({ icon: Icon, label, href, active }) => (
-            <Link
-              key={label} href={href}
-              className={`flex items-center gap-4 px-5 py-4 rounded-[20px] font-bold transition-all ${
-                active ? "bg-violet-600 text-white shadow-[0_4px_12px_rgba(124,58,237,0.3)] translate-x-2" : "text-gray-500 hover:bg-gray-100 hover:text-gray-900 hover:translate-x-1"
-              }`}
-            >
-              <Icon size={20} /> {label}
             </Link>
           ))}
-        </nav>
-
-        <div className="p-6">
-          <button onClick={() => { logout(); router.push("/login"); }} className="w-full flex items-center justify-center gap-2 px-4 py-4 text-sm font-bold text-red-500 bg-red-50 hover:bg-red-100 rounded-[20px] transition-colors">
-            <LogOut size={18} /> Đăng Xuất
-          </button>
         </div>
-      </aside>
 
-      {/* ── MAIN CONTENT ─────────────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col min-h-screen relative z-0">
-        <main className="flex-1 p-6 md:p-10 max-w-6xl w-full mx-auto">
-          {/* Greeting */}
-          <div className="flex items-center justify-between mb-10">
-            <div>
-              <h1 className="text-3xl md:text-5xl font-black text-gray-900 tracking-tight">
-                Xin chào, <span className="text-transparent bg-clip-text bg-gradient-to-r from-violet-600 to-pink-500">{user?.nickname ?? "..."}</span> 👋
-              </h1>
-              <p className="text-lg font-medium text-gray-500 mt-2">Sẵn sàng bùng nổ với các bộ câu hỏi hôm nay chưa?</p>
+        {/* My Quizzes */}
+        <div>
+          <div className="flex items-center justify-between mb-5">
+            <h2 className="text-2xl font-bold font-serif text-[#08282e]">Bộ Đề Của Bạn</h2>
+          </div>
+          {loading ? (
+            <div className="space-y-4">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="bg-white/60 backdrop-blur-xl rounded-2xl p-6 h-24 animate-pulse border border-white/60" />
+              ))}
             </div>
-            <Link
-              href="/quiz/create"
-              className="hidden sm:flex items-center gap-2 px-6 py-4 bg-violet-600 text-white font-bold text-lg rounded-[20px] shadow-[0_6px_0_#5b21b6] active:translate-y-[6px] active:shadow-none hover:brightness-110 transition-all"
-            >
-              <Plus size={24} /> Tạo Bộ Đề
-            </Link>
-          </div>
-
-          {/* Stats Grid */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-10">
-            <StatCard icon={BookOpen} label="Bộ đề" value={quizzes.length} color="text-violet-600" bg="bg-violet-100" borderColor="border-violet-100" />
-            <StatCard icon={Play} label="Lượt chơi" value={formatNumber(quizzes.reduce((s, q) => s + (q.play_count ?? 0), 0))} color="text-pink-600" bg="bg-pink-100" borderColor="border-pink-100" />
-            <StatCard icon={Users} label="Người tham gia" value="—" color="text-emerald-600" bg="bg-emerald-100" borderColor="border-emerald-100" />
-            <StatCard icon={Zap} label="AI Năng lượng" value={`${aiLimit - aiUsed}/${aiLimit}`} color="text-orange-600" bg="bg-orange-100" borderColor="border-orange-100" />
-          </div>
-
-          {/* Quick Actions */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-            {[
-              { icon: Plus, label: "Tạo Thủ Công", desc: "Tự tay thiết kế câu hỏi", href: "/quiz/create", bg: "bg-violet-100", text: "text-violet-700", border: "border-violet-200" },
-              { icon: Bot, label: "AI Sinh Đề", desc: "Upload tài liệu PDF/Word", href: "/quiz/create", bg: "bg-pink-100", text: "text-pink-700", border: "border-pink-200" },
-              { icon: Gamepad2, label: "Nhập PIN Code", desc: "Tham gia phòng chơi ngay", href: "/play", bg: "bg-orange-100", text: "text-orange-700", border: "border-orange-200" },
-            ].map(({ icon: Icon, label, desc, href, bg, text, border }) => (
-              <Link key={label} href={href}>
-                <div className={`bg-white rounded-[32px] border-4 ${border} p-6 flex items-center gap-5 hover:-translate-y-2 hover:shadow-[0_12px_24px_rgba(0,0,0,0.08)] transition-all`}>
-                  <div className={`w-16 h-16 rounded-[24px] ${bg} ${text} flex items-center justify-center`}>
-                    <Icon size={32} />
-                  </div>
-                  <div>
-                    <div className="font-black text-gray-900 text-lg">{label}</div>
-                    <div className="text-sm font-semibold text-gray-500 mt-1">{desc}</div>
-                  </div>
-                </div>
+          ) : quizzes.length === 0 ? (
+            <div className="bg-white/60 backdrop-blur-xl rounded-3xl border-2 border-dashed border-teal-400/50 p-12 text-center">
+              <div className="w-20 h-20 bg-teal-500/15 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-teal-400/30">
+                <BookOpen size={40} className="text-teal-600" />
+              </div>
+              <h3 className="text-xl font-bold font-serif text-[#08282e] mb-2">Chưa có bộ đề nào!</h3>
+              <p className="text-sm font-sans text-teal-700/80 mb-6">Hãy khởi tạo bài thi đầu tiên để bắt đầu hành trình giảng dạy.</p>
+              <Link
+                href="/quiz/create"
+                className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-sans font-bold text-sm rounded-xl shadow-md hover:scale-105 active:scale-95 transition-all"
+              >
+                <Plus size={18} /> Tạo Ngay
               </Link>
-            ))}
-          </div>
-
-          {/* My Quizzes */}
-          <div>
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-black text-gray-900">Bộ Đề Của Bạn</h2>
             </div>
-            {loading ? (
-              <div className="space-y-4">
-                {[1, 2, 3].map((i) => <div key={i} className="bg-white rounded-[32px] border-4 border-gray-100 p-6 h-24 animate-pulse" />)}
-              </div>
-            ) : quizzes.length === 0 ? (
-              <div className="bg-white rounded-[40px] border-4 border-dashed border-gray-200 p-16 text-center">
-                <div className="w-24 h-24 bg-gray-100 rounded-[32px] flex items-center justify-center mx-auto mb-6">
-                  <BookOpen size={48} className="text-gray-300" />
-                </div>
-                <h3 className="text-2xl font-black text-gray-700 mb-2">Chưa có bộ đề nào!</h3>
-                <p className="text-lg font-medium text-gray-500 mb-8">Hãy bắt đầu sáng tạo nội dung giáo dục của riêng bạn.</p>
-                <Link href="/quiz/create" className="inline-flex items-center gap-2 px-8 py-4 bg-violet-600 text-white font-bold text-lg rounded-[20px] shadow-[0_6px_0_#5b21b6] active:translate-y-[6px] active:shadow-none hover:brightness-110 transition-all">
-                  <Plus size={24} /> Tạo Ngay
-                </Link>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {quizzes.map((quiz) => (
-                  <QuizRow key={quiz.id} quiz={quiz} onDelete={handleDelete} onCreateRoom={handleCreateRoom} />
-                ))}
-              </div>
-            )}
-          </div>
-        </main>
-      </div>
+          ) : (
+            <div className="space-y-3.5">
+              {quizzes.map((quiz) => (
+                <QuizRow key={quiz.id} quiz={quiz} onDelete={handleDelete} onCreateRoom={handleCreateRoom} />
+              ))}
+            </div>
+          )}
+        </div>
+      </main>
+
+      {/* Footer */}
+      <footer className="py-8 border-t border-teal-600/20 text-center text-teal-800/60 bg-white/50 backdrop-blur-md text-xs font-sans relative z-10">
+        <p>© 2026 Gaming Edu · Bảng điều khiển quản lý học tập.</p>
+      </footer>
     </div>
   );
 }

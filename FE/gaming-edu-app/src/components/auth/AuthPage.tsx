@@ -1,96 +1,34 @@
 "use client";
 
 import { useState } from "react";
-import { Mail, Lock, User, Trophy, Sparkles, Zap, Users, Key, Gamepad2 } from "lucide-react";
-import Input from "@/components/ui/Input";
+import { Mail, Key, User, ArrowLeft, Sparkles, Compass } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { useAuthStore } from "@/store/useAuthStore";
 import Link from "next/link";
-
-type AuthTab = "login" | "register";
-type RegisterStep = 1 | 2;
-
-const features = [
-  { icon: Zap, label: "Học tập vui vẻ", color: "text-amber-500", bg: "bg-amber-100 border-amber-200" },
-  { icon: Users, label: "Kết nối bạn bè", color: "text-blue-500", bg: "bg-blue-100 border-blue-200" },
-  { icon: Trophy, label: "Trò chơi kích thích", color: "text-emerald-500", bg: "bg-emerald-100 border-emerald-200" },
-  { icon: Sparkles, label: "Siêu mượt mà", color: "text-pink-500", bg: "bg-pink-100 border-pink-200" },
-];
-
-function ActionButton({ label, onClick, disabled, loading, variant = "primary", className = "", type = "button" }: any) {
-  const baseClasses = `relative flex items-center justify-center gap-2 font-900 rounded-[20px] border-4 transition-all duration-200 active:translate-y-2 w-full py-4 text-lg ${className}`;
-  const variants: any = {
-    primary: "bg-violet-500 border-violet-700 text-white shadow-[0_6px_0_0_#5b21b6] hover:bg-violet-600 active:shadow-none",
-    outline: "bg-white border-gray-200 text-gray-700 shadow-[0_6px_0_0_#e5e7eb] hover:bg-gray-50 active:shadow-none",
-    disabled: "bg-gray-300 border-gray-400 text-gray-500 cursor-not-allowed shadow-[0_6px_0_0_#9ca3af]",
-  };
-
-  return (
-    <button
-      type={type}
-      onClick={onClick}
-      disabled={disabled || loading}
-      className={`${baseClasses} ${disabled ? variants.disabled : variants[variant]}`}
-    >
-      {loading ? <div className="w-6 h-6 border-4 border-white border-t-transparent rounded-full animate-spin" /> : label}
-    </button>
-  );
-}
-
-function SocialButton({ icon, label, id }: { icon: string; label: string; id: string }) {
-  return (
-    <button
-      id={id}
-      type="button"
-      className="flex-1 w-full flex items-center justify-center gap-3 py-4 px-4 bg-white border-4 border-gray-200 rounded-[20px] font-900 text-gray-700 hover:bg-gray-50 hover:border-gray-300 shadow-[0_6px_0_0_#e5e7eb] active:translate-y-2 active:shadow-none transition-all duration-200"
-    >
-      <img src={icon} alt={label} className="w-6 h-6" />
-      {label}
-    </button>
-  );
-}
+import SiteHeader from "@/components/layout/SiteHeader";
 
 export default function AuthPage() {
   const router = useRouter();
   const { login } = useAuthStore();
-  const [activeTab, setActiveTab] = useState<AuthTab>("login");
-  const [registerStep, setRegisterStep] = useState<RegisterStep>(1);
+  const [activeTab, setActiveTab] = useState<"login" | "register">("login");
+  const [registerStep, setRegisterStep] = useState<1 | 2>(1);
   const [isLoading, setIsLoading] = useState(false);
   const [globalError, setGlobalError] = useState("");
 
   const [loginForm, setLoginForm] = useState({ email: "", password: "" });
   const [registerForm, setRegisterForm] = useState({ nickname: "", email: "", password: "", otp: "" });
-  const [errors, setErrors] = useState<Record<string, string>>({});
-
-  const validateLogin = () => {
-    const e: Record<string, string> = {};
-    if (!loginForm.email.includes("@")) e.email = "Email không hợp lệ";
-    if (loginForm.password.length < 6) e.password = "Mật khẩu ít nhất 6 ký tự";
-    setErrors(e);
-    return Object.keys(e).length === 0;
-  };
-
-  const validateRegisterStep1 = () => {
-    const e: Record<string, string> = {};
-    if (!registerForm.nickname || registerForm.nickname.length < 2) e.nickname = "Biệt danh ít nhất 2 ký tự";
-    if (!registerForm.email.includes("@")) e.email = "Email không hợp lệ";
-    if (registerForm.password.length < 6) e.password = "Mật khẩu ít nhất 6 ký tự";
-    setErrors(e);
-    return Object.keys(e).length === 0;
-  };
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setGlobalError("");
-    if (!validateLogin()) return;
     setIsLoading(true);
     try {
       const { data } = await api.post("/auth/login", loginForm);
       login(data.data.user, data.data.token);
       router.push("/dashboard");
     } catch (error: any) {
-      setGlobalError(error.response?.data?.message || "Có lỗi xảy ra, vui lòng thử lại sau.");
+      setGlobalError(error.response?.data?.message || "Lạc lối trong linh vân, vui lòng kiểm tra lại tài khoản hoặc khẩu quyết.");
     } finally {
       setIsLoading(false);
     }
@@ -99,14 +37,13 @@ export default function AuthPage() {
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setGlobalError("");
-    if (!validateRegisterStep1()) return;
     setIsLoading(true);
     try {
       await api.post("/auth/send-register-otp", { email: registerForm.email });
       setRegisterStep(2);
       setGlobalError("");
     } catch (error: any) {
-      setGlobalError(error.response?.data?.message || "Không thể gửi OTP. Vui lòng thử lại.");
+      setGlobalError(error.response?.data?.message || "Không thể truyền linh thư (OTP).");
     } finally {
       setIsLoading(false);
     }
@@ -115,97 +52,68 @@ export default function AuthPage() {
   const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setGlobalError("");
-    if (!registerForm.otp || registerForm.otp.length < 6) {
-      setErrors({ otp: "Mã OTP phải có 6 ký tự" });
-      return;
-    }
     setIsLoading(true);
     try {
       const { data } = await api.post("/auth/register", registerForm);
       login(data.data.user, data.data.token);
       router.push("/dashboard");
     } catch (error: any) {
-      setGlobalError(error.response?.data?.message || "Mã OTP không hợp lệ.");
+      setGlobalError(error.response?.data?.message || "Mã Trận Pháp (OTP) không chính xác.");
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex bg-[#F4F1FA] font-sans">
-      {/* LEFT PANEL (HERO) */}
-      <div className="hidden lg:flex flex-col justify-between w-[45%] xl:w-[40%] p-12 relative overflow-hidden bg-white border-r-4 border-gray-200 shadow-xl z-10">
-        <div className="absolute -top-32 -left-32 w-96 h-96 bg-violet-400/20 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-fuchsia-400/20 rounded-full blur-3xl pointer-events-none" />
-        
-        <Link href="/" className="relative z-10 flex items-center gap-3">
-          <div className="w-12 h-12 rounded-[16px] bg-gradient-to-br from-violet-600 to-fuchsia-600 flex items-center justify-center shadow-lg">
-            <Gamepad2 size={24} className="text-white" />
-          </div>
-          <span className="font-900 text-2xl text-gray-900 tracking-tight">
-            <span className="text-violet-600">Gaming</span>Edu
-          </span>
-        </Link>
+    <div className="min-h-screen text-[#1B2A2E] font-serif flex flex-col relative overflow-hidden">
+      {/* Landscape background */}
+      <div
+        className="fixed inset-0 z-0"
+        style={{
+          backgroundImage: "url('/bg-bamboo-mist.jpg')",
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+        }}
+      />
+      {/* White mist overlay */}
+      <div className="fixed inset-0 z-0" style={{ background: "rgba(238,248,243,0.52)" }} />
 
-        <div className="relative z-10 flex flex-col items-center text-center px-4">
-          <div className="relative mb-10">
-            <div className="w-64 h-64 rounded-[40px] bg-violet-50 border-4 border-violet-100 flex items-center justify-center shadow-[4px_4px_16px_rgba(0,0,0,0.05),_inset_-4px_-4px_8px_rgba(0,0,0,0.02)]">
-               <div className="text-9xl select-none transform hover:scale-110 transition-transform duration-500 cursor-pointer animate-bounce">
-                  🚀
-               </div>
-            </div>
-          </div>
+      <SiteHeader />
 
-          <h2 className="text-3xl xl:text-4xl font-black text-gray-900 mb-6 leading-tight tracking-tight">
-            Vừa Học Vừa Chơi <br />
-            <span className="text-violet-600">Điểm Mười Trao Tay!</span>
+      <div className="flex-1 flex flex-col md:flex-row items-center justify-center p-6 pt-24 relative z-10 max-w-6xl mx-auto w-full">
+        {/* NỬA TRÁI: GIỚI THIỆU HIỆN ĐẠI */}
+        <div className="hidden md:flex w-1/2 flex-col items-center justify-center p-12 text-center">
+          <div className="w-24 h-24 border-2 border-amber-500/60 bg-amber-400/15 rounded-full flex items-center justify-center text-amber-600 mb-8 shadow-[0_0_30px_rgba(251,191,36,0.2)] animate-pulse">
+            <Compass size={48} strokeWidth={1.5} />
+          </div>
+          <h2 className="text-4xl lg:text-5xl font-bold font-serif text-[#08282e] mb-6 tracking-wide leading-tight drop-shadow-sm">
+            Khám Phá Thế Giới <br />
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-600 via-emerald-600 to-teal-600">
+              Học Tập Tương Tác
+            </span>
           </h2>
-          <p className="text-lg font-700 text-gray-500 max-w-sm">
-            Nền tảng tạo câu hỏi, bài tập, trò chơi trắc nghiệm và báo cáo kết quả với sức mạnh của AI.
+          <p className="text-lg text-teal-800/80 max-w-sm font-sans leading-relaxed">
+            Học tập qua trò chơi, kết nối tri thức, ôn luyện hiệu quả và thi đua sôi nổi cùng bạn bè.
           </p>
         </div>
 
-        <div className="relative z-10 grid grid-cols-2 gap-4">
-            {features.map(({ icon: Icon, label, color, bg }) => (
-              <div key={label} className={`flex items-center gap-3 rounded-[20px] border-4 px-4 py-3 shadow-sm ${bg}`}>
-                <Icon size={24} className={color} />
-                <span className="text-sm font-900 text-gray-700">{label}</span>
-              </div>
-            ))}
-        </div>
-      </div>
-
-      {/* RIGHT PANEL (FORM) */}
-      <div className="flex-1 flex items-center justify-center p-6 md:p-12 relative">
-        <div className="w-full max-w-md relative z-20">
-          
-          <div className="lg:hidden flex items-center gap-3 justify-center mb-10">
-            <div className="w-14 h-14 rounded-[20px] bg-gradient-to-br from-violet-600 to-fuchsia-600 flex items-center justify-center shadow-lg">
-              <Gamepad2 size={28} className="text-white" />
-            </div>
-            <span className="font-900 text-3xl text-gray-900 tracking-tight">
-              <span className="text-violet-600">Gaming</span>Edu
-            </span>
-          </div>
-
-          <div className="bg-white rounded-[40px] shadow-[4px_4px_16px_rgba(0,0,0,0.05)] border-4 border-gray-100 p-8 md:p-10">
-            
-            {/* TABS */}
-            <div className="flex bg-gray-100 rounded-[24px] p-2 mb-10 border-4 border-gray-200">
-              {(["login", "register"] as AuthTab[]).map((tab) => (
+        {/* NỬA PHẢI: FORM ĐĂNG NHẬP / ĐĂNG KÝ */}
+        <div className="w-full max-w-md md:w-1/2 md:pl-10">
+          <div className="bg-white/65 backdrop-blur-xl border border-white/85 rounded-[32px] p-8 md:p-10 shadow-[0_20px_50px_rgba(8,38,42,0.18)] font-sans">
+            {/* Tab switch */}
+            <div className="flex justify-around items-center mb-8 border-b border-teal-400/20 pb-4">
+              {(["login", "register"] as const).map((tab) => (
                 <button
                   key={tab}
-                  type="button"
                   onClick={() => {
                     setActiveTab(tab);
                     setRegisterStep(1);
-                    setErrors({});
                     setGlobalError("");
                   }}
-                  className={`flex-1 py-3 text-lg font-900 rounded-[16px] transition-all duration-300 ${
+                  className={`font-serif text-lg tracking-wider transition-all relative pb-2 ${
                     activeTab === tab
-                      ? "bg-white text-violet-700 shadow-md border-2 border-white"
-                      : "text-gray-500 hover:text-gray-700 border-2 border-transparent"
+                      ? "text-amber-600 font-bold after:content-[''] after:absolute after:bottom-[-17px] after:left-0 after:right-0 after:h-[2px] after:bg-amber-600 shadow-[0_0_15px_rgba(251,191,36,0.2)]"
+                      : "text-teal-700/60 hover:text-teal-900"
                   }`}
                 >
                   {tab === "login" ? "Đăng Nhập" : "Đăng Ký"}
@@ -214,130 +122,147 @@ export default function AuthPage() {
             </div>
 
             {globalError && (
-              <div className="mb-6 p-4 bg-red-100 border-4 border-red-200 text-red-700 text-sm font-800 rounded-[20px] flex items-center gap-3">
-                <span className="text-xl">⚠️</span> {globalError}
+              <div className="mb-6 border border-red-400/40 text-red-200 p-4 text-center text-sm bg-red-500/10 rounded-2xl">
+                {globalError}
               </div>
             )}
 
-            {/* LOGIN FORM */}
             {activeTab === "login" ? (
               <form onSubmit={handleLoginSubmit} className="space-y-6">
-                <div>
-                  <label className="text-sm font-900 text-gray-700 block mb-2 uppercase tracking-widest">Địa chỉ Email</label>
-                  <Input
-                    icon={Mail}
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-teal-800 uppercase tracking-wider flex items-center gap-1.5">
+                    <Mail size={14} className="text-amber-600" /> Địa Chỉ Email
+                  </label>
+                  <input
                     type="email"
-                    placeholder="Email@gmail.com"
+                    required
+                    placeholder="email@vidu.com"
+                    className="w-full px-5 py-4 bg-white/70 backdrop-blur-md border-2 border-teal-300/40 rounded-2xl text-[#08282e] placeholder-teal-500/40 outline-none focus:border-amber-500 focus:bg-white/90 focus:shadow-[0_0_20px_rgba(20,120,100,0.15)] transition-all font-semibold"
                     value={loginForm.email}
                     onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
-                    error={errors.email}
                   />
                 </div>
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-sm font-900 text-gray-700 uppercase tracking-widest">Mật Khẩu</label>
-                    <button type="button" className="text-sm font-800 text-violet-600 hover:text-violet-800 transition-colors">
-                      Quên mật khẩu?
-                    </button>
-                  </div>
-                  <Input
-                    icon={Lock}
+
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-teal-800 uppercase tracking-wider flex items-center gap-1.5">
+                    <Key size={14} className="text-amber-600" /> Mật Khẩu
+                  </label>
+                  <input
                     type="password"
-                    showPasswordToggle
+                    required
                     placeholder="••••••••"
+                    className="w-full px-5 py-4 bg-white/70 backdrop-blur-md border-2 border-teal-300/40 rounded-2xl text-[#08282e] placeholder-teal-500/40 outline-none focus:border-amber-500 focus:bg-white/90 focus:shadow-[0_0_20px_rgba(20,120,100,0.15)] transition-all font-semibold"
                     value={loginForm.password}
                     onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
-                    error={errors.password}
                   />
                 </div>
-                <div className="pt-4">
-                   <ActionButton type="submit" variant="primary" loading={isLoading} label="ĐĂNG NHẬP" />
+
+                <div className="pt-2">
+                  <button
+                    type="submit"
+                    disabled={isLoading}
+                    className="w-full py-4 bg-gradient-to-r from-amber-400 via-amber-300 to-yellow-400 hover:from-amber-300 hover:to-amber-400 text-teal-950 font-black text-lg rounded-2xl shadow-[0_0_25px_rgba(251,191,36,0.4)] transition-all active:scale-[0.98] disabled:opacity-60"
+                  >
+                    {isLoading ? "Đang Xử Lý..." : "Đăng Nhập"}
+                  </button>
                 </div>
               </form>
             ) : (
-              /* REGISTER FORM */
-              <form onSubmit={registerStep === 1 ? handleSendOtp : handleRegisterSubmit} className="space-y-6">
+              <form onSubmit={registerStep === 1 ? handleSendOtp : handleRegisterSubmit} className="space-y-5">
                 {registerStep === 1 ? (
                   <>
-                    <div>
-                      <label className="text-sm font-900 text-gray-700 block mb-2 uppercase tracking-widest">Biệt danh (Tên nhân vật)</label>
-                      <Input
-                        icon={User}
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-teal-800 uppercase tracking-wider flex items-center gap-1.5">
+                        <User size={14} className="text-amber-600" /> Tên Hiển Thị (Nickname)
+                      </label>
+                      <input
                         type="text"
-                        placeholder="VD: Người Chơi Hệ Ánh Sáng"
+                        required
+                        placeholder="VD: Alex Nguyễn"
+                        className="w-full px-5 py-3.5 bg-white/70 backdrop-blur-md border-2 border-teal-300/40 rounded-2xl text-[#08282e] placeholder-teal-500/40 outline-none focus:border-amber-500 focus:bg-white/90 transition-all font-semibold"
                         value={registerForm.nickname}
                         onChange={(e) => setRegisterForm({ ...registerForm, nickname: e.target.value })}
-                        error={errors.nickname}
                       />
                     </div>
-                    <div>
-                      <label className="text-sm font-900 text-gray-700 block mb-2 uppercase tracking-widest">Địa chỉ Email</label>
-                      <Input
-                        icon={Mail}
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-teal-800 uppercase tracking-wider flex items-center gap-1.5">
+                        <Mail size={14} className="text-amber-600" /> Địa Chỉ Email
+                      </label>
+                      <input
                         type="email"
-                        placeholder="Email@gmail.com"
+                        required
+                        placeholder="email@vidu.com"
+                        className="w-full px-5 py-3.5 bg-white/70 backdrop-blur-md border-2 border-teal-300/40 rounded-2xl text-[#08282e] placeholder-teal-500/40 outline-none focus:border-amber-500 focus:bg-white/90 transition-all font-semibold"
                         value={registerForm.email}
                         onChange={(e) => setRegisterForm({ ...registerForm, email: e.target.value })}
-                        error={errors.email}
                       />
                     </div>
-                    <div>
-                      <label className="text-sm font-900 text-gray-700 block mb-2 uppercase tracking-widest">Mật Khẩu</label>
-                      <Input
-                        icon={Lock}
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-teal-800 uppercase tracking-wider flex items-center gap-1.5">
+                        <Key size={14} className="text-amber-600" /> Mật Khẩu (&gt; 6 ký tự)
+                      </label>
+                      <input
                         type="password"
-                        showPasswordToggle
+                        required
                         placeholder="••••••••"
+                        className="w-full px-5 py-3.5 bg-white/70 backdrop-blur-md border-2 border-teal-300/40 rounded-2xl text-[#08282e] placeholder-teal-500/40 outline-none focus:border-amber-500 focus:bg-white/90 transition-all font-semibold"
                         value={registerForm.password}
                         onChange={(e) => setRegisterForm({ ...registerForm, password: e.target.value })}
-                        error={errors.password}
                       />
                     </div>
-                    <div className="pt-4">
-                       <ActionButton type="submit" variant="primary" loading={isLoading} label="ĐĂNG KÝ & NHẬN OTP" />
+
+                    <div className="pt-2">
+                      <button
+                        type="submit"
+                        disabled={isLoading}
+                        className="w-full py-4 bg-gradient-to-r from-amber-400 via-amber-300 to-yellow-400 hover:from-amber-300 hover:to-amber-400 text-teal-950 font-black text-lg rounded-2xl shadow-[0_0_25px_rgba(251,191,36,0.4)] transition-all active:scale-[0.98] disabled:opacity-60"
+                      >
+                        {isLoading ? "Đang Gửi Mã..." : "Nhận Mã Xác Nhận (OTP)"}
+                      </button>
                     </div>
                   </>
                 ) : (
                   <>
-                    <div>
-                      <div className="bg-blue-50 border-4 border-blue-200 rounded-[24px] p-6 mb-6">
-                         <p className="text-sm font-700 text-blue-800 text-center">
-                           Chúng tôi đã gửi một mã OTP 6 số tới email <br />
-                           <span className="font-900 text-blue-900 mt-1 block">{registerForm.email}</span>
-                         </p>
-                      </div>
-                      <label className="text-sm font-900 text-gray-700 block mb-2 uppercase tracking-widest">Mã OTP (6 chữ số)</label>
-                      <Input
-                        icon={Key}
+                    <p className="text-center text-teal-800/80 text-sm mb-4">
+                      Mã xác nhận đã gửi tới <b className="text-amber-600">{registerForm.email}</b>. Vui lòng nhập mã OTP để tiếp tục.
+                    </p>
+                    <div className="space-y-2">
+                      <input
                         type="text"
-                        placeholder="123456"
                         maxLength={6}
+                        placeholder="6 chữ số"
+                        className="w-full px-5 py-4 bg-white/70 backdrop-blur-md border-2 border-teal-300/40 rounded-2xl text-[#08282e] placeholder-teal-500/40 text-center tracking-[0.5em] text-2xl font-bold outline-none focus:border-amber-500 focus:bg-white/90 transition-all"
                         value={registerForm.otp}
                         onChange={(e) => setRegisterForm({ ...registerForm, otp: e.target.value })}
-                        error={errors.otp}
                       />
                     </div>
-                    <div className="flex gap-4 pt-4">
-                      <div className="w-1/3">
-                         <ActionButton type="button" variant="outline" onClick={() => setRegisterStep(1)} disabled={isLoading} label="Quay Lại" />
-                      </div>
-                      <div className="w-2/3">
-                         <ActionButton type="submit" variant="primary" loading={isLoading} label="XÁC NHẬN" />
-                      </div>
+                    <div className="flex gap-3 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setRegisterStep(1)}
+                        className="px-4 py-4 rounded-2xl bg-white/60 hover:bg-white/80 text-teal-800 border border-teal-300/40 transition-colors"
+                      >
+                        <ArrowLeft size={20} />
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={isLoading}
+                        className="flex-1 py-4 bg-gradient-to-r from-amber-400 via-amber-300 to-yellow-400 hover:from-amber-300 hover:to-amber-400 text-teal-950 font-black text-lg rounded-2xl shadow-[0_0_25px_rgba(251,191,36,0.4)] transition-all active:scale-[0.98] disabled:opacity-60"
+                      >
+                        {isLoading ? "Đang Xác Nhận..." : "Hoàn Tất Đăng Ký"}
+                      </button>
                     </div>
                   </>
                 )}
               </form>
             )}
 
-            <div className="flex items-center gap-4 my-8">
-              <div className="flex-1 h-1 bg-gray-100 rounded-full" />
-              <span className="text-sm text-gray-400 font-900 uppercase tracking-widest">Hoặc</span>
-              <div className="flex-1 h-1 bg-gray-100 rounded-full" />
-            </div>
-
-            <div>
-              <SocialButton icon="https://www.google.com/favicon.ico" label="Đăng nhập với Google" id="btn-google-login" />
+            <div className="mt-6 pt-4 border-t border-teal-400/20 text-center">
+              <Link href="/" className="text-teal-700/70 hover:text-amber-600 text-sm font-semibold transition-colors">
+                ← Quay lại Trang Chủ
+              </Link>
             </div>
           </div>
         </div>

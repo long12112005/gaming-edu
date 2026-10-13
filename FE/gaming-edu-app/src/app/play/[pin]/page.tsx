@@ -77,7 +77,7 @@ export default function PlayerGameRoom() {
   }, [gameState]);
 
   const submitAnswer = (optionId: string) => {
-    if (hasAnswered || !slideTimeLeft || slideTimeLeft === 0) return;
+    if (hasAnswered || !slideTimeLeft || slideTimeLeft === 0 || !currentSlide) return;
     setHasAnswered(true);
     hubSubmitAnswer(currentSlide.slideId, {
       selectedOptionIds: [optionId],
@@ -94,11 +94,22 @@ export default function PlayerGameRoom() {
 
   if (!isConnected && !error) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-[#F4F1FA] font-sans">
-        <Loader2 size={64} className="text-violet-600 animate-spin mb-6" />
-        <h2 className="text-2xl font-900 text-gray-900 tracking-tight">Đang kết nối vào phòng...</h2>
-        <div className="mt-4 px-6 py-2 bg-white rounded-full border-4 border-violet-100 shadow-sm font-black text-violet-700 text-xl tracking-widest">
-           PIN: {pinCode}
+      <div className="min-h-screen flex flex-col items-center justify-center font-sans relative overflow-hidden">
+        <div
+          className="fixed inset-0 z-0"
+          style={{
+            backgroundImage: "url('/bg-misty-white.jpg')",
+            backgroundSize: "cover",
+            backgroundPosition: "center",
+          }}
+        />
+        <div className="fixed inset-0 z-0" style={{ background: "rgba(240,249,246,0.65)" }} />
+        <div className="relative z-10 flex flex-col items-center p-8 bg-white/80 backdrop-blur-xl rounded-[32px] border border-white/80 shadow-[0_16px_40px_rgba(8,38,42,0.12)]">
+          <Loader2 size={64} className="text-teal-700 animate-spin mb-6" />
+          <h2 className="text-2xl font-900 text-gray-900 tracking-tight">Đang kết nối vào phòng...</h2>
+          <div className="mt-4 px-6 py-2 bg-white/90 rounded-full border-2 border-teal-200 shadow-sm font-black text-teal-800 text-xl tracking-widest">
+            PIN: {pinCode}
+          </div>
         </div>
       </div>
     );
@@ -106,36 +117,57 @@ export default function PlayerGameRoom() {
 
   if (error) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-[#F4F1FA] p-6 text-center font-sans">
-        <div className="bg-white p-10 rounded-[40px] border-4 border-red-100 shadow-[4px_4px_16px_rgba(0,0,0,0.05)] max-w-md w-full flex flex-col items-center">
-           <div className="w-24 h-24 bg-red-100 border-4 border-red-200 rounded-[24px] flex items-center justify-center transform rotate-6 mb-8">
-             <X size={48} className="text-red-500" />
-           </div>
-           <h1 className="text-3xl font-black text-gray-900 mb-4 tracking-tight">Ối! Đã xảy ra lỗi</h1>
-           <p className="text-lg font-700 text-gray-500 mb-8">{error}</p>
-           <ActionButton onClick={() => router.push("/")} variant="primary" label="Về Trang Chủ" className="w-full" />
+      <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center font-sans relative overflow-hidden">
+        <div
+          className="fixed inset-0 z-0"
+          style={{
+            backgroundImage: "url('/bg-misty-white.jpg')",
+            backgroundSize: "cover",
+            backgroundPosition: "center",
+          }}
+        />
+        <div className="fixed inset-0 z-0" style={{ background: "rgba(240,249,246,0.65)" }} />
+        <div className="relative z-10 bg-white/85 backdrop-blur-xl p-10 rounded-[40px] border border-white/80 shadow-[0_16px_40px_rgba(8,38,42,0.12)] max-w-md w-full flex flex-col items-center">
+          <div className="w-24 h-24 bg-red-100 border-2 border-red-200 rounded-[24px] flex items-center justify-center transform rotate-6 mb-8">
+            <X size={48} className="text-red-500" />
+          </div>
+          <h1 className="text-3xl font-black text-gray-900 mb-4 tracking-tight">Ối! Đã xảy ra lỗi</h1>
+          <p className="text-lg font-bold text-gray-600 mb-8">{error}</p>
+          <ActionButton onClick={() => router.push("/")} variant="primary" label="Về Trang Chủ" className="w-full" />
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#F4F1FA] font-sans">
-       {/* ── HEADER BONG BÓNG ── */}
-       <header className="bg-white border-b-4 border-gray-200 p-4 sticky top-0 z-10 flex items-center justify-between">
-          <div className="flex items-center gap-3 bg-gray-100 px-4 py-2 rounded-[16px] border-2 border-gray-200">
-             <span className="text-xs font-900 text-gray-500 uppercase">PIN</span>
-             <span className="font-black text-xl text-gray-900">{pinCode}</span>
-          </div>
-          <div className="flex items-center gap-3">
-             <span className="text-sm font-800 text-gray-500 hidden sm:inline-block">Người chơi</span>
-             <div className="bg-violet-100 text-violet-700 px-4 py-2 rounded-[16px] border-2 border-violet-200 font-black text-lg shadow-sm">
-                {roomInfo?.playerNickname}
-             </div>
-          </div>
-       </header>
+    <div className="min-h-screen text-[#1B2A2E] flex flex-col font-sans relative overflow-hidden">
+      {/* Landscape background */}
+      <div
+        className="fixed inset-0 z-0"
+        style={{
+          backgroundImage: "url('/bg-misty-white.jpg')",
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+        }}
+      />
+      {/* White fog overlay */}
+      <div className="fixed inset-0 z-0" style={{ background: "rgba(240,249,246,0.65)" }} />
 
-       <main className="flex-1 flex flex-col p-4 md:p-8 max-w-4xl mx-auto w-full">
+      {/* ── HEADER BONG BÓNG ── */}
+      <header className="bg-white/75 backdrop-blur-xl border-b border-teal-500/20 p-4 sticky top-0 z-20 flex items-center justify-between shadow-sm">
+        <div className="flex items-center gap-3 bg-white/90 px-4 py-2 rounded-[16px] border border-teal-200">
+          <span className="text-xs font-900 text-gray-500 uppercase">PIN</span>
+          <span className="font-black text-xl text-teal-900">{pinCode}</span>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-sm font-800 text-teal-800/70 hidden sm:inline-block">Người chơi</span>
+          <div className="bg-teal-600 text-white px-4 py-2 rounded-[16px] border border-teal-700 font-black text-lg shadow-sm">
+            {roomInfo?.playerNickname}
+          </div>
+        </div>
+      </header>
+
+      <main className="flex-1 flex flex-col p-4 md:p-8 max-w-4xl mx-auto w-full relative z-10">
           {/* ════════════════════════════════════════════════════════════
               WAITING STATE (CHỜ BẮT ĐẦU)
           ════════════════════════════════════════════════════════════ */}
@@ -264,11 +296,11 @@ export default function PlayerGameRoom() {
        </main>
 
        {/* ── NÚT VÀ MODAL HỎI ĐÁP (Q&A) ── */}
-       {gameState !== "CONNECTING" && gameState !== "ERROR" && (
+       {isConnected && !error && (
           <>
              <button
                 onClick={() => setShowQA(true)}
-                className="fixed bottom-6 right-6 w-16 h-16 bg-violet-600 text-white rounded-[24px] border-4 border-violet-800 shadow-[0_6px_0_0_#4c1d95] active:translate-y-2 active:shadow-none flex items-center justify-center transition-all z-40"
+                className="fixed bottom-6 right-6 w-16 h-16 bg-teal-600 hover:bg-teal-700 text-white rounded-[24px] border-4 border-teal-800 shadow-[0_6px_0_0_#115e59] active:translate-y-2 active:shadow-none flex items-center justify-center transition-all z-40"
              >
                 <MessageCircle size={28} />
                 {questions.length > 0 && (
@@ -279,7 +311,7 @@ export default function PlayerGameRoom() {
              </button>
 
              {showQA && (
-                <div className="fixed inset-0 z-50 flex flex-col bg-[#F4F1FA] animate-fade-in-up md:p-10">
+                <div className="fixed inset-0 z-50 flex flex-col bg-slate-900/60 backdrop-blur-md animate-fade-in-up md:p-10">
                    <div className="bg-white w-full h-full md:max-w-3xl md:mx-auto md:rounded-[40px] md:border-4 md:border-gray-200 flex flex-col shadow-2xl overflow-hidden">
                       <div className="bg-violet-50 p-6 flex items-center justify-between border-b-4 border-violet-100 sticky top-0 z-10 shrink-0">
                          <h3 className="font-900 text-gray-900 text-2xl flex items-center gap-3">
