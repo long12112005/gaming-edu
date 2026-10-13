@@ -136,6 +136,7 @@ public class Quiz
     public string? Topic { get; set; }
 
     public bool IsPublic { get; set; } = false;
+    public bool IsDeleted { get; set; } = false;
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
@@ -173,6 +174,7 @@ public class Slide
 
     public int OrderIndex { get; set; }
     public bool IsAIGenerated { get; set; } = false;
+    public bool IsDeleted { get; set; } = false;
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 

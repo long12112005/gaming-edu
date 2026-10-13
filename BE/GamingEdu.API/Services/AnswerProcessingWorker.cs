@@ -93,7 +93,7 @@ public class AnswerProcessingWorker : BackgroundService
                 }
                 else
                 {
-                    var leaderboard = await roomService.GetLeaderboardAsync(payload.RoomId);
+                    var leaderboard = await roomService.GetLeaderboardAsync(payload.RoomId, top: 10);
                     await _hubContext.Clients.Group(payload.GroupName).SendAsync("LeaderboardUpdated", leaderboard, cancellationToken: stoppingToken);
                 }
             }

@@ -1,17 +1,20 @@
 using GamingEdu.API.Data;
 using GamingEdu.API.Models;
 using Microsoft.EntityFrameworkCore;
+using GamingEdu.API.Hubs;
+using Microsoft.AspNetCore.SignalR;
 
 namespace GamingEdu.API.Services;
 
 /// <summary>
-/// Hosted background service that polls AI jobs from DB (Mocking RabbitMQ),
+/// Hosted background service that polls ai_jobs table for PENDING jobs,
 /// processes them (simulated AI generation), and updates status to COMPLETED/FAILED.
 /// </summary>
 public class AIJobWorker : BackgroundService
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<AIJobWorker> _logger;
+    private readonly TimeSpan _pollInterval = TimeSpan.FromSeconds(10);
 
     public AIJobWorker(IServiceScopeFactory scopeFactory, ILogger<AIJobWorker> logger)
     {
@@ -21,98 +24,103 @@ public class AIJobWorker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("AI Job Worker started. Polling DB every 10s.");
+        _logger.LogInformation("AI Job Worker started. Polling every {Interval}s",
+            _pollInterval.TotalSeconds);
 
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
-                using var scope = _scopeFactory.CreateScope();
-                var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-
-                var job = await db.AIJobs.FirstOrDefaultAsync(j => j.Status == "PENDING", stoppingToken);
-                if (job != null)
-                {
-                    await ProcessSingleJobAsync(db, job, stoppingToken);
-                }
+                await ProcessPendingJobsAsync(stoppingToken);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                _logger.LogError(ex, "Error processing AI job polling");
+                _logger.LogError(ex, "Unhandled error in AI Job Worker");
             }
 
-            await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
+            await Task.Delay(_pollInterval, stoppingToken);
+        }
+
+        _logger.LogInformation("AI Job Worker stopped.");
+    }
+
+    private async Task ProcessPendingJobsAsync(CancellationToken ct)
+    {
+        // Use a new scope per cycle (DbContext is scoped, not singleton)
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        var geminiService = scope.ServiceProvider.GetRequiredService<IGeminiApiService>();
+        var cache = scope.ServiceProvider.GetRequiredService<ICacheStore>();
+        var hub = scope.ServiceProvider.GetRequiredService<IHubContext<NotificationHub>>();
+
+        // Query PENDING jobs from ai_jobs table (idx_ai_jobs_status index used)
+        var pendingJobs = await db.AIJobs
+            .Where(j => j.Status == "PENDING")
+            .OrderBy(j => j.CreatedAt)
+            .Take(5) // process up to 5 per cycle to avoid blocking
+            .ToListAsync(ct);
+
+        if (!pendingJobs.Any())
+        {
+            _logger.LogDebug("No PENDING AI jobs found.");
+            return;
+        }
+
+        _logger.LogInformation("Processing {Count} pending AI jobs", pendingJobs.Count);
+
+        foreach (var job in pendingJobs)
+        {
+            await ProcessSingleJobAsync(db, job, geminiService, cache, hub, ct);
         }
     }
 
-    private async Task ProcessSingleJobAsync(ApplicationDbContext db, AIJob job, CancellationToken ct)
+    /// <summary>
+    /// Đẩy trạng thái job tới đúng người dùng qua SignalR (group user_{id} của NotificationHub)
+    /// thay cho việc frontend gọi lặp để hỏi trạng thái. Lỗi gửi không được làm hỏng job.
+    /// </summary>
+    private async Task PushAsync(IHubContext<NotificationHub> hub, AIJob job, string eventName, object? extra = null)
+    {
+        try
+        {
+            await hub.Clients.Group($"user_{job.UserId}").SendAsync(eventName, new
+            {
+                JobId  = job.Id,
+                Status = job.Status,
+                Error  = job.ErrorMessage,
+                Extra  = extra,
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Không đẩy được {Event} cho job {JobId}", eventName, job.Id);
+        }
+    }
+
+    private async Task ProcessSingleJobAsync(ApplicationDbContext db, AIJob job, IGeminiApiService geminiService, ICacheStore cache, IHubContext<NotificationHub> hub, CancellationToken ct)
     {
         // ── Step 1: Mark as PROCESSING ───────────────────────────────
         job.Status = "PROCESSING";
         await db.SaveChangesAsync(ct);
+        await PushAsync(hub, job, "AIJobProgress");
         _logger.LogInformation("AI Job {JobId}: PROCESSING (file: {FileUrl})", job.Id, job.FileUrl);
 
         try
         {
-            // ── Step 2: Simulate AI generation (2–5s delay) ─────────
-            var processingTime = TimeSpan.FromSeconds(Random.Shared.Next(2, 6));
-            await Task.Delay(processingTime, ct);
+            // ── Step 2: Generate AI content via Gemini API ─────────
+            var prompt = $"Vui lòng phân tích tài liệu/từ khóa sau và tạo ra 5 câu hỏi trắc nghiệm: {job.FileUrl}";
+            var jsonDraft = await geminiService.GenerateQuizJsonAsync(prompt, job.FileUrl);
 
-            // ── Step 3: Simulate generating slides into the Quiz ─────
-            if (job.QuizId.HasValue)
-            {
-                var quiz = await db.Quizzes
-                    .Include(q => q.Slides)
-                    .FirstOrDefaultAsync(q => q.Id == job.QuizId, ct);
-
-                if (quiz is not null)
-                {
-                    // Mock: generate 5 AI slides
-                    int startIndex = quiz.Slides.Count;
-                    for (int i = 0; i < 5; i++)
-                    {
-                        var slide = new Slide
-                        {
-                            Id            = Guid.NewGuid(),
-                            QuizId        = quiz.Id,
-                            Type          = "QUIZ",
-                            QuestionText  = $"[AI] Câu hỏi {startIndex + i + 1} được tạo tự động từ tài liệu.",
-                            TimeLimit     = 30,
-                            Points        = 1000,
-                            Status        = "DRAFT",
-                            OrderIndex    = startIndex + i,
-                            IsAIGenerated = true,
-                            CreatedAt     = DateTime.UtcNow,
-                        };
-
-                        // Add mock options (A, B, C, D)
-                        var options = new[]
-                        {
-                            new SlideOption { Id = Guid.NewGuid(), SlideId = slide.Id,
-                                Content = "Đáp án A (AI generated)", IsCorrect = true,  OrderIndex = 0 },
-                            new SlideOption { Id = Guid.NewGuid(), SlideId = slide.Id,
-                                Content = "Đáp án B (AI generated)", IsCorrect = false, OrderIndex = 1 },
-                            new SlideOption { Id = Guid.NewGuid(), SlideId = slide.Id,
-                                Content = "Đáp án C (AI generated)", IsCorrect = false, OrderIndex = 2 },
-                            new SlideOption { Id = Guid.NewGuid(), SlideId = slide.Id,
-                                Content = "Đáp án D (AI generated)", IsCorrect = false, OrderIndex = 3 },
-                        };
-
-                        db.Slides.Add(slide);
-                        db.SlideOptions.AddRange(options);
-                    }
-
-                    quiz.UpdatedAt = DateTime.UtcNow;
-                }
-            }
+            // ── Step 3: Lưu Draft vào Cache để FE gọi lên lấy ─────
+            var draftKey = $"ai_draft:{job.Id}";
+            await cache.SetStringAsync(draftKey, jsonDraft, TimeSpan.FromHours(24));
 
             // ── Step 4: Mark COMPLETED ───────────────────────────────
             job.Status      = "COMPLETED";
             job.CompletedAt = DateTime.UtcNow;
             await db.SaveChangesAsync(ct);
 
-            _logger.LogInformation("AI Job {JobId}: COMPLETED in {Ms}ms",
-                job.Id, processingTime.TotalMilliseconds);
+            _logger.LogInformation("AI Job {JobId}: COMPLETED, Draft saved to Cache", job.Id);
 
             // ── Step 5: Reset daily quota if needed ─────────────────
             var quota = await db.UserQuotas.FirstOrDefaultAsync(q => q.UserId == job.UserId, ct);
@@ -121,6 +129,9 @@ public class AIJobWorker : BackgroundService
                 quota.AIUsedToday++;
                 await db.SaveChangesAsync(ct);
             }
+
+            // ── Step 6: Thông báo realtime cho Host (FE mở bản nháp để xem trước) ──
+            await PushAsync(hub, job, "AIJobCompleted");
         }
         catch (OperationCanceledException)
         {
@@ -138,6 +149,7 @@ public class AIJobWorker : BackgroundService
             job.CompletedAt  = DateTime.UtcNow;
             await db.SaveChangesAsync(CancellationToken.None);
             _logger.LogError(ex, "AI Job {JobId}: FAILED", job.Id);
+            await PushAsync(hub, job, "AIJobFailed");
         }
     }
 }

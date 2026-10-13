@@ -5,7 +5,9 @@ using GamingEdu.API.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.SignalR;
 using GamingEdu.API.Hubs;
+using Microsoft.Extensions.Caching.Memory;
 using ClosedXML.Excel;
+using QRCoder;
 
 namespace GamingEdu.API.Services;
 
@@ -14,7 +16,7 @@ public interface IRoomService
     Task<RoomDto> CreateRoomAsync(Guid hostId, CreateRoomRequest request);
     Task<(Room room, RoomPlayer player)> JoinRoomAsync(Guid? userId, JoinRoomRequest request);
     Task<Room?> GetRoomByPinAsync(string pinCode);
-    Task<IEnumerable<LeaderboardEntryDto>> GetLeaderboardAsync(Guid roomId);
+    Task<IEnumerable<LeaderboardEntryDto>> GetLeaderboardAsync(Guid roomId, int top = 0);
     Task<AnswerResultDto> SubmitAnswerAsync(Guid roomPlayerId, SubmitAnswerRequest request);
     Task UpdateRoomStatusAsync(Guid roomId, string status);
     Task<Dictionary<string, int>> GetWordCloudDataAsync(Guid roomId, Guid slideId);
@@ -22,6 +24,7 @@ public interface IRoomService
     Task RemovePlayerAsync(Guid roomId, Guid playerId);
     Task SaveDraftAnswerAsync(Guid roomPlayerId, Guid slideId, string answerData);
     Task<IEnumerable<LeaderboardEntryDto>> FinishRoomAsync(Guid roomId, Guid hostId);
+    Task<byte[]> ExportRoomReportAsync(Guid roomId, Guid hostId);
 }
 
 public class RoomService : IRoomService
@@ -30,17 +33,23 @@ public class RoomService : IRoomService
     private readonly ILogger<RoomService>  _logger;
     private readonly FuzzyMatchingService  _fuzzy;
     private readonly IHubContext<NotificationHub> _notificationHub;
+    private readonly IMemoryCache _cache;
+    private readonly ILeaderboardStore _leaderboard;
 
     public RoomService(
         ApplicationDbContext db,
         ILogger<RoomService> logger,
         FuzzyMatchingService fuzzy,
-        IHubContext<NotificationHub> notificationHub)
+        IHubContext<NotificationHub> notificationHub,
+        IMemoryCache cache,
+        ILeaderboardStore leaderboard)
     {
         _db     = db;
         _logger = logger;
         _fuzzy  = fuzzy;
         _notificationHub = notificationHub;
+        _cache  = cache;
+        _leaderboard = leaderboard;
     }
 
     // ── CREATE ROOM ────────────────────────────────────────────────────
@@ -78,8 +87,21 @@ public class RoomService : IRoomService
 
         _logger.LogInformation("Room created: PIN={Pin}, Mode={Mode}", pin, request.Mode);
 
+        string qrCodeBase64 = GenerateQrCodeBase64(pin);
+
         return new RoomDto(room.Id, room.PinCode, room.Mode, room.Status,
-            room.QuizId, quiz.Title, room.CreatedAt);
+            room.QuizId, quiz.Title, room.CreatedAt, qrCodeBase64);
+    }
+
+    private string GenerateQrCodeBase64(string pin)
+    {
+        // Example URL: https://game.edu/join?pin={pin}
+        string url = $"https://game.edu/join?pin={pin}";
+        using var qrGenerator = new QRCodeGenerator();
+        using var qrCodeData = qrGenerator.CreateQrCode(url, QRCodeGenerator.ECCLevel.Q);
+        using var qrCode = new PngByteQRCode(qrCodeData);
+        var qrCodeBytes = qrCode.GetGraphic(20);
+        return Convert.ToBase64String(qrCodeBytes);
     }
 
     // ── JOIN ROOM ──────────────────────────────────────────────────────
@@ -114,6 +136,10 @@ public class RoomService : IRoomService
 
         _db.RoomPlayers.Add(player);
         await _db.SaveChangesAsync();
+
+        // Đưa người chơi vào bảng xếp hạng (0 điểm) để có hạng ngay từ đầu
+        await EnsureLeaderboardAsync(room.Id);
+        await _leaderboard.SetScoreAsync(room.Id, player.Id, 0);
 
         return (room, player);
     }
@@ -214,34 +240,62 @@ public class RoomService : IRoomService
             AnsweredAt     = DateTime.UtcNow,
         };
 
-        // Cập nhật điểm đồng bộ vào DB vì không dùng Redis nữa
+        // Hạng trước khi cộng điểm (để tính leo hạng - spec 5.3)
+        await EnsureLeaderboardAsync(player.RoomId);
+        int? rankBefore = await _leaderboard.GetRankAsync(player.RoomId, roomPlayerId);
+
+        // Update total_score in room_players table
         player.TotalScore += scoreAwarded;
+
         _db.PlayerResponses.Add(response);
         await _db.SaveChangesAsync();
 
-        // Tính thứ hạng ngay từ DB
-        var currentRank = await _db.RoomPlayers
-            .Where(rp => rp.RoomId == player.RoomId && rp.TotalScore > player.TotalScore)
-            .CountAsync() + 1;
+        // Cập nhật Redis Sorted Set và lấy hạng mới
+        await _leaderboard.SetScoreAsync(player.RoomId, roomPlayerId, player.TotalScore);
+        int? rankAfter = await _leaderboard.GetRankAsync(player.RoomId, roomPlayerId);
+        int rankChange = (rankBefore.HasValue && rankAfter.HasValue) ? rankBefore.Value - rankAfter.Value : 0;
 
-        return new AnswerResultDto(isCorrect, scoreAwarded, player.TotalScore, currentRank, correctAnswer);
+        return new AnswerResultDto(isCorrect, scoreAwarded, player.TotalScore, correctAnswer,
+            rankAfter ?? 0, rankChange);
     }
 
     // ── LEADERBOARD ────────────────────────────────────────────────────
-    public async Task<IEnumerable<LeaderboardEntryDto>> GetLeaderboardAsync(Guid roomId)
+    /// <summary>Dựng lại sorted set từ DB nếu Redis chưa có/mất dữ liệu (DB là nguồn sự thật).</summary>
+    private async Task EnsureLeaderboardAsync(Guid roomId)
     {
-        var players = await _db.RoomPlayers
+        if (await _leaderboard.ExistsAsync(roomId)) return;
+
+        var scores = await _db.RoomPlayers
             .AsNoTracking()
             .Where(rp => rp.RoomId == roomId)
-            .OrderByDescending(rp => rp.TotalScore)
+            .Select(rp => new { rp.Id, rp.TotalScore })
             .ToListAsync();
 
-        return players.Select((p, index) => new LeaderboardEntryDto(
-            index + 1,
-            p.Nickname,
-            p.AvatarUrl,
-            p.TotalScore
-        ));
+        foreach (var s in scores)
+            await _leaderboard.SetScoreAsync(roomId, s.Id, s.TotalScore);
+    }
+
+    public async Task<IEnumerable<LeaderboardEntryDto>> GetLeaderboardAsync(Guid roomId, int top = 0)
+    {
+        await EnsureLeaderboardAsync(roomId);
+        var rows = await _leaderboard.GetTopAsync(roomId, top);
+        if (rows.Count == 0) return [];
+
+        // Chỉ truy vấn thông tin hiển thị cho các hạng cần lấy (theo khóa chính)
+        var ids = rows.Select(r => r.PlayerId).ToList();
+        var info = await _db.RoomPlayers
+            .AsNoTracking()
+            .Where(rp => ids.Contains(rp.Id))
+            .Select(rp => new { rp.Id, rp.Nickname, rp.AvatarUrl })
+            .ToDictionaryAsync(x => x.Id);
+
+        var result = new List<LeaderboardEntryDto>(rows.Count);
+        foreach (var r in rows)
+        {
+            if (!info.TryGetValue(r.PlayerId, out var p)) continue; // người chơi đã bị xóa
+            result.Add(new LeaderboardEntryDto(r.Rank, p.Nickname, p.AvatarUrl, r.Score));
+        }
+        return result;
     }
 
     // ── UPDATE ROOM STATUS ─────────────────────────────────────────────
@@ -258,10 +312,10 @@ public class RoomService : IRoomService
     }
 
     // ── AUTO-SAVE DRAFT ────────────────────────────────────────────────
-    public Task SaveDraftAnswerAsync(Guid roomPlayerId, Guid slideId, string answerData)
+    public async Task SaveDraftAnswerAsync(Guid roomPlayerId, Guid slideId, string answerData)
     {
-        // Mock save draft since we removed Redis
-        return Task.CompletedTask;
+        var draftKey = $"draft_answer:{roomPlayerId}:{slideId}";
+        _cache.Set(draftKey, answerData, TimeSpan.FromHours(2));
     }
 
     // ── FINISH ROOM (PODIUM) ───────────────────────────────────────────
@@ -272,26 +326,58 @@ public class RoomService : IRoomService
 
         await UpdateRoomStatusAsync(roomId, "FINISHED");
 
-        // Lấy top từ Leaderboard (Redis ZSET)
-        var fullLeaderboard = (await GetLeaderboardAsync(roomId)).ToList();
-        
-        // Sync điểm từ Redis về DB khi kết thúc game
-        var roomPlayers = await _db.RoomPlayers.Where(rp => rp.RoomId == roomId).ToListAsync();
-        foreach (var rp in roomPlayers)
-        {
-            var lbEntry = fullLeaderboard.FirstOrDefault(l => l.Nickname == rp.Nickname);
-            if (lbEntry != null)
-            {
-                rp.TotalScore = lbEntry.TotalScore;
-                rp.Rank = lbEntry.Rank;
-            }
-        }
-        await _db.SaveChangesAsync();
-
+        // Lấy top 3 từ Leaderboard (Redis hoặc DB)
+        var fullLeaderboard = await GetLeaderboardAsync(roomId);
         return fullLeaderboard.Take(3);
     }
 
+    // ── EXPORT REPORT ──────────────────────────────────────────────────
+    public async Task<byte[]> ExportRoomReportAsync(Guid roomId, Guid hostId)
+    {
+        var room = await _db.Rooms
+            .Include(r => r.Quiz)
+            .Include(r => r.Players)
+            .FirstOrDefaultAsync(r => r.Id == roomId) ?? throw new KeyNotFoundException("Không tìm thấy phòng.");
+            
+        if (room.HostId != hostId) throw new UnauthorizedAccessException("Bạn không phải chủ phòng.");
 
+        var players = room.Players.OrderByDescending(p => p.TotalScore).ToList();
+
+        using var workbook = new XLWorkbook();
+        var ws = workbook.Worksheets.Add("Kết quả phòng chơi");
+
+        // Header
+        ws.Cell(1, 1).Value = "Room PIN";
+        ws.Cell(1, 2).Value = room.PinCode;
+        ws.Cell(2, 1).Value = "Bộ đề";
+        ws.Cell(2, 2).Value = room.Quiz.Title;
+        ws.Cell(3, 1).Value = "Thời gian tạo";
+        ws.Cell(3, 2).Value = room.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss");
+
+        ws.Cell(5, 1).Value = "Hạng";
+        ws.Cell(5, 2).Value = "Người chơi";
+        ws.Cell(5, 3).Value = "Tổng điểm";
+
+        var headerRange = ws.Range("A5:C5");
+        headerRange.Style.Font.Bold = true;
+        headerRange.Style.Fill.BackgroundColor = XLColor.LightBlue;
+
+        // Data
+        int row = 6;
+        for (int i = 0; i < players.Count; i++)
+        {
+            ws.Cell(row, 1).Value = i + 1;
+            ws.Cell(row, 2).Value = players[i].Nickname;
+            ws.Cell(row, 3).Value = players[i].TotalScore;
+            row++;
+        }
+
+        ws.Columns().AdjustToContents();
+
+        using var stream = new MemoryStream();
+        workbook.SaveAs(stream);
+        return stream.ToArray();
+    }
 
     // ── HELPERS ────────────────────────────────────────────────────────
     public async Task InviteGroupAsync(Guid hostId, Guid roomId, Guid groupId)
@@ -329,6 +415,7 @@ public class RoomService : IRoomService
         {
             _db.RoomPlayers.Remove(player);
             await _db.SaveChangesAsync();
+            await _leaderboard.RemoveAsync(roomId, playerId);
         }
     }
 

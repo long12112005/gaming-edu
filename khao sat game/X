@@ -1,0 +1,42 @@
+Dựa trên những phân tích điểm thiếu sót ở trên, đây là danh sách công việc (To-Do List) chi tiết và mang tính thực thi cao dành cho team Backend để hoàn thiện dự án sao cho khớp 100% với tài liệu thiết kế. 
+
+Bạn có thể copy danh sách này vào Jira, Trello, hoặc GitHub Issues để tracking:
+
+### 🔴 Ưu tiên cao: Viết lại Module AI Sinh đề (AI Generation)
+*Theo đúng thiết kế, Backend không được lưu thẳng kết quả AI vào Database mà phải trả về bản Nháp (Draft) cho Frontend.*
+
+- [ ] **Tích hợp API Google Gemini (hoặc OpenAI):**
+  - Khởi tạo Service mới (ví dụ: `GeminiApiService`) để gọi API.
+  - Viết logic thiết lập Prompt hệ thống: Yêu cầu AI đọc văn bản/từ khóa và bắt buộc trả về định dạng **JSON có cấu trúc chuẩn** (chứa list câu hỏi, loại câu hỏi, đáp án, đáp án đúng, time limit, point).
+- [ ] **Sửa lại luồng của `AIJobWorker.cs`:**
+  - **XÓA** đoạn code giả lập (`Task.Delay`) và code sinh 5 slide cứng (hardcode).
+  - **XÓA** thao tác `db.Slides.Add(...)` và `db.SaveChanges()` đang lưu thẳng câu hỏi vào database.
+  - Cập nhật logic: Nhận JSON từ `GeminiApiService`, kiểm tra (validate format).
+  - Lưu chuỗi JSON draft này vào một trường mới (ví dụ: thêm cột `DraftData` vào bảng `ai_jobs`) hoặc lưu vào `MemoryCache / Redis` với key là Id của Job. Cập nhật trạng thái Job thành `COMPLETED`.
+- [ ] **Tạo API trả dữ liệu Nháp cho Frontend:**
+  - Endpoint ví dụ: `GET /api/ai-jobs/{id}/draft`. API này sẽ lấy chuỗi JSON nháp từ DB/Cache trả về để Frontend tự do render UI cho giáo viên chỉnh sửa.
+- [ ] **Tạo API Xác nhận & Lưu chính thức:**
+  - Endpoint ví dụ: `POST /api/quizzes/{quizId}/slides/bulk-save`.
+  - API này nhận mảng object các Slide đã được giáo viên chỉnh sửa từ Frontend gửi xuống, lúc này mới tiến hành insert hàng loạt vào các bảng `slides` và `slide_options`.
+
+### 🟡 Ưu tiên trung bình: Xử lý hiển thị QR Code (Phòng chơi)
+*Trong tài liệu ghi BE trả về PIN và QR, nhưng BE hiện chỉ trả PIN.*
+
+- [ ] **Chốt lại luồng sinh mã QR với team Frontend:**
+  - *Option 1 (Khuyên dùng):* Frontend nhận `PinCode` và tự dùng thư viện (như `qrcode.react`) để vẽ ra QR Code. (Nếu chọn Option này $\rightarrow$ Sửa lại chữ ở Sơ đồ 3 thành "BE trả về PIN, FE tự sinh QR").
+  - *Option 2:* Backend phải sinh mã QR.
+- [ ] **(Nếu chọn Option 2) Code sinh QR tại `RoomService.cs`:**
+  - Cài đặt thư viện sinh mã QR (ví dụ: `QRCoder` cho .NET).
+  - Trong hàm `CreateRoomAsync`, lấy `PinCode` kết hợp với URL domain trang web (ví dụ: `https://game.edu/join?pin=123456`) để sinh ra mã Base64 của ảnh QR.
+  - Bổ sung property `QrCodeBase64` vào `RoomDto` và trả về kèm với mã PIN cho Frontend.
+
+### 🔵 Ưu tiên thấp: Đồng bộ tài liệu
+*Sửa lại tài liệu cho khớp với những tính năng nâng cao mà code Backend đang có.*
+
+- [x] **Cập nhật lại hình ảnh sơ đồ ERD:**
+  - Vẽ thêm bảng `QuestionQA` (các cột: Id, RoomId, PlayerId, Content, Upvotes, Status, CreatedAt) vào sơ đồ ERD để map chính xác với cấu trúc trong `Entities.cs`.
+  - Nối khóa ngoại (Foreign Key) từ `QuestionQA` sang bảng `rooms` và `room_players`.
+
+---
+
+💡 **Lời khuyên:** Khối lượng công việc nặng nhất nằm ở phần **AI Sinh đề**. Bạn nên bắt đầu ngay với việc đăng ký Google Gemini API Key và thiết kế cái JSON Schema để ép con AI trả về đúng chuẩn, nếu không bước "Bóc tách & Xác thực format" sẽ bị lỗi liên tục.

@@ -21,13 +21,11 @@ public class RoomsController : ControllerBase
 {
     private readonly IRoomService _roomService;
     private readonly ApplicationDbContext _db;
-    private readonly IReportService _reportService;
 
-    public RoomsController(IRoomService roomService, ApplicationDbContext db, IReportService reportService)
+    public RoomsController(IRoomService roomService, ApplicationDbContext db)
     {
-        _roomService   = roomService;
-        _db            = db;
-        _reportService = reportService;
+        _roomService = roomService;
+        _db          = db;
     }
 
     // POST /api/rooms
@@ -139,7 +137,7 @@ public class RoomsController : ControllerBase
 
         try
         {
-            var fileBytes = await _reportService.GenerateRoomReportAsync(id, userId.Value);
+            var fileBytes = await _roomService.ExportRoomReportAsync(id, userId.Value);
             return File(fileBytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"Room_{id}_Report.xlsx");
         }
         catch (UnauthorizedAccessException ex) { return StatusCode(403, new ApiResponse<string>(false, ex.Message, null)); }
@@ -163,12 +161,12 @@ public class RoomsController : ControllerBase
 public class AIJobsController : ControllerBase
 {
     private readonly ApplicationDbContext _db;
-    private readonly RabbitMQPublisher _mqPublisher;
+    private readonly ICacheStore _cache;
 
-    public AIJobsController(ApplicationDbContext db, RabbitMQPublisher mqPublisher)
+    public AIJobsController(ApplicationDbContext db, ICacheStore cache)
     {
         _db = db;
-        _mqPublisher = mqPublisher;
+        _cache = cache;
     }
 
     // POST /api/aijobs
@@ -203,9 +201,6 @@ public class AIJobsController : ControllerBase
         _db.AIJobs.Add(job);
         await _db.SaveChangesAsync();
 
-        // Đẩy Message vào RabbitMQ thay vì chờ Worker Polling DB
-        await _mqPublisher.PublishAsync("ai_jobs_queue", job.Id.ToString());
-
         var dto = new AIJobStatusDto(
             job.Id, job.Status, job.FileUrl,
             job.CreatedAt, job.CompletedAt, job.ErrorMessage);
@@ -232,24 +227,29 @@ public class AIJobsController : ControllerBase
         return Ok(new ApiResponse<AIJobStatusDto>(true, null, dto));
     }
 
-    // PUT /api/aijobs/slides/{slideId}/approve
-    /// <summary>Approve an AI generated slide (change DRAFT to PUBLISHED).</summary>
-    [HttpPut("slides/{slideId:guid}/approve")]
-    public async Task<IActionResult> ApproveSlide(Guid slideId)
+    // GET /api/aijobs/{id}/draft
+    /// <summary>Get the JSON draft of an AI job. Only available when COMPLETED.</summary>
+    [HttpGet("{id:guid}/draft")]
+    [ProducesResponseType(typeof(ApiResponse<string>), 200)]
+    [ProducesResponseType(404)]
+    [ProducesResponseType(400)]
+    public async Task<IActionResult> GetJobDraft(Guid id)
     {
-        var userId = GetCurrentUserId();
-        if (userId == null) return Unauthorized();
+        var job = await _db.AIJobs.FindAsync(id);
+        if (job is null)
+            return NotFound(new ApiResponse<string>(false, "Không tìm thấy AI Job.", null));
 
-        var slide = await _db.Slides.Include(s => s.Quiz).FirstOrDefaultAsync(s => s.Id == slideId);
-        if (slide == null) return NotFound(new ApiResponse<string>(false, "Không tìm thấy Slide.", null));
+        if (job.Status != "COMPLETED")
+            return BadRequest(new ApiResponse<string>(false, "Job chưa hoàn thành.", null));
 
-        if (slide.Quiz.CreatorId != userId.Value)
-            return StatusCode(403, new ApiResponse<string>(false, "Bạn không có quyền duyệt Slide này.", null));
+        var draftKey = $"ai_draft:{id}";
+        var draftJson = await _cache.GetStringAsync(draftKey);
+        if (draftJson is null)
+        {
+            return NotFound(new ApiResponse<string>(false, "Bản nháp đã hết hạn hoặc không tồn tại.", null));
+        }
 
-        slide.Status = "PUBLISHED";
-        await _db.SaveChangesAsync();
-
-        return Ok(new ApiResponse<string>(true, "Đã duyệt Slide thành công.", null));
+        return Ok(new ApiResponse<string>(true, "Lấy bản nháp thành công", draftJson));
     }
 
     private Guid? GetCurrentUserId()

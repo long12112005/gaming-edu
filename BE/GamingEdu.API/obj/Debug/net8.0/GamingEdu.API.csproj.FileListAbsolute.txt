@@ -168,6 +168,11 @@ C:\Users\LONG\gaming-edu\BE\GamingEdu.API\bin\Debug\net8.0\ExcelNumberFormat.dll
 C:\Users\LONG\gaming-edu\BE\GamingEdu.API\bin\Debug\net8.0\RBush.dll
 C:\Users\LONG\gaming-edu\BE\GamingEdu.API\bin\Debug\net8.0\SixLabors.Fonts.dll
 C:\Users\LONG\gaming-edu\BE\GamingEdu.API\bin\Debug\net8.0\System.IO.Packaging.dll
+C:\Users\LONG\gaming-edu\BE\GamingEdu.API\bin\Debug\net8.0\QRCoder.dll
+C:\Users\LONG\gaming-edu\BE\GamingEdu.API\bin\Debug\net8.0\MessagePack.dll
+C:\Users\LONG\gaming-edu\BE\GamingEdu.API\bin\Debug\net8.0\MessagePack.Annotations.dll
+C:\Users\LONG\gaming-edu\BE\GamingEdu.API\bin\Debug\net8.0\Microsoft.AspNetCore.SignalR.StackExchangeRedis.dll
+C:\Users\LONG\gaming-edu\BE\GamingEdu.API\bin\Debug\net8.0\Microsoft.NET.StringTools.dll
 D:\gaming-edu\BE\GamingEdu.API\obj\Debug\net8.0\GamingEdu.API.csproj.AssemblyReference.cache
 D:\gaming-edu\BE\GamingEdu.API\obj\Debug\net8.0\rpswa.dswa.cache.json
 D:\gaming-edu\BE\GamingEdu.API\obj\Debug\net8.0\GamingEdu.API.GeneratedMSBuildEditorConfig.editorconfig
@@ -182,8 +187,8 @@ D:\gaming-edu\BE\GamingEdu.API\obj\Debug\net8.0\refint\GamingEdu.API.dll
 D:\gaming-edu\BE\GamingEdu.API\obj\Debug\net8.0\GamingEdu.API.pdb
 D:\gaming-edu\BE\GamingEdu.API\bin\Debug\net8.0\NuGet.Config
 D:\gaming-edu\BE\GamingEdu.API\bin\Debug\net8.0\appsettings.Development.json
-D:\gaming-edu\BE\GamingEdu.API\bin\Debug\net8.0\appsettings.json
 D:\gaming-edu\BE\GamingEdu.API\bin\Debug\net8.0\GamingEdu.API.staticwebassets.endpoints.json
+D:\gaming-edu\BE\GamingEdu.API\bin\Debug\net8.0\appsettings.json
 D:\gaming-edu\BE\GamingEdu.API\bin\Debug\net8.0\GamingEdu.API.exe
 D:\gaming-edu\BE\GamingEdu.API\bin\Debug\net8.0\GamingEdu.API.deps.json
 D:\gaming-edu\BE\GamingEdu.API\bin\Debug\net8.0\GamingEdu.API.runtimeconfig.json
@@ -201,8 +206,11 @@ D:\gaming-edu\BE\GamingEdu.API\bin\Debug\net8.0\EFCore.NamingConventions.dll
 D:\gaming-edu\BE\GamingEdu.API\bin\Debug\net8.0\ExcelNumberFormat.dll
 D:\gaming-edu\BE\GamingEdu.API\bin\Debug\net8.0\Humanizer.dll
 D:\gaming-edu\BE\GamingEdu.API\bin\Debug\net8.0\MailKit.dll
+D:\gaming-edu\BE\GamingEdu.API\bin\Debug\net8.0\MessagePack.dll
+D:\gaming-edu\BE\GamingEdu.API\bin\Debug\net8.0\MessagePack.Annotations.dll
 D:\gaming-edu\BE\GamingEdu.API\bin\Debug\net8.0\Microsoft.AspNetCore.Authentication.JwtBearer.dll
 D:\gaming-edu\BE\GamingEdu.API\bin\Debug\net8.0\Microsoft.AspNetCore.OpenApi.dll
+D:\gaming-edu\BE\GamingEdu.API\bin\Debug\net8.0\Microsoft.AspNetCore.SignalR.StackExchangeRedis.dll
 D:\gaming-edu\BE\GamingEdu.API\bin\Debug\net8.0\Microsoft.Bcl.AsyncInterfaces.dll
 D:\gaming-edu\BE\GamingEdu.API\bin\Debug\net8.0\Microsoft.Bcl.Cryptography.dll
 D:\gaming-edu\BE\GamingEdu.API\bin\Debug\net8.0\Microsoft.CodeAnalysis.dll
@@ -230,6 +238,7 @@ D:\gaming-edu\BE\GamingEdu.API\bin\Debug\net8.0\Microsoft.IdentityModel.Logging.
 D:\gaming-edu\BE\GamingEdu.API\bin\Debug\net8.0\Microsoft.IdentityModel.Protocols.dll
 D:\gaming-edu\BE\GamingEdu.API\bin\Debug\net8.0\Microsoft.IdentityModel.Protocols.OpenIdConnect.dll
 D:\gaming-edu\BE\GamingEdu.API\bin\Debug\net8.0\Microsoft.IdentityModel.Tokens.dll
+D:\gaming-edu\BE\GamingEdu.API\bin\Debug\net8.0\Microsoft.NET.StringTools.dll
 D:\gaming-edu\BE\GamingEdu.API\bin\Debug\net8.0\Microsoft.OpenApi.dll
 D:\gaming-edu\BE\GamingEdu.API\bin\Debug\net8.0\Microsoft.SqlServer.Server.dll
 D:\gaming-edu\BE\GamingEdu.API\bin\Debug\net8.0\Microsoft.Win32.SystemEvents.dll
@@ -237,7 +246,7 @@ D:\gaming-edu\BE\GamingEdu.API\bin\Debug\net8.0\MimeKit.dll
 D:\gaming-edu\BE\GamingEdu.API\bin\Debug\net8.0\Mono.TextTemplating.dll
 D:\gaming-edu\BE\GamingEdu.API\bin\Debug\net8.0\Newtonsoft.Json.dll
 D:\gaming-edu\BE\GamingEdu.API\bin\Debug\net8.0\Pipelines.Sockets.Unofficial.dll
-D:\gaming-edu\BE\GamingEdu.API\bin\Debug\net8.0\RabbitMQ.Client.dll
+D:\gaming-edu\BE\GamingEdu.API\bin\Debug\net8.0\QRCoder.dll
 D:\gaming-edu\BE\GamingEdu.API\bin\Debug\net8.0\RBush.dll
 D:\gaming-edu\BE\GamingEdu.API\bin\Debug\net8.0\SixLabors.Fonts.dll
 D:\gaming-edu\BE\GamingEdu.API\bin\Debug\net8.0\StackExchange.Redis.dll

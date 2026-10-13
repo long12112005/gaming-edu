@@ -31,6 +31,19 @@ public class QuizzesController : ControllerBase
         return Ok(new ApiResponse<IEnumerable<QuizSummaryDto>>(true, null, quizzes));
     }
 
+    // GET /api/quizzes/mine
+    /// <summary>Returns all quizzes (public + private) created by the current user.</summary>
+    [HttpGet("mine")]
+    [Authorize]
+    public async Task<IActionResult> GetMyQuizzes()
+    {
+        var userId = GetCurrentUserId();
+        if (userId is null) return Unauthorized();
+
+        var quizzes = await _quizService.GetMyQuizzesAsync(userId.Value);
+        return Ok(new ApiResponse<IEnumerable<QuizSummaryDto>>(true, null, quizzes));
+    }
+
     // GET /api/quizzes/{id}
     /// <summary>Returns quiz detail with slides and options. Uses per-quiz cache.</summary>
     [HttpGet("{id:guid}")]
@@ -124,6 +137,23 @@ public class QuizzesController : ControllerBase
         {
             await _quizService.ApproveAISlideAsync(userId.Value, quizId, slideId);
             return Ok(new ApiResponse<string>(true, "Đã duyệt slide.", null));
+        }
+        catch (UnauthorizedAccessException ex) { return StatusCode(403, new ApiResponse<string>(false, ex.Message, null)); }
+        catch (KeyNotFoundException ex) { return NotFound(new ApiResponse<string>(false, ex.Message, null)); }
+    }
+
+    // POST /api/quizzes/{quizId}/slides/bulk-save
+    [HttpPost("{quizId:guid}/slides/bulk-save")]
+    [Authorize]
+    public async Task<IActionResult> BulkSaveSlides(Guid quizId, [FromBody] IEnumerable<CreateSlideRequest> requests)
+    {
+        var userId = GetCurrentUserId();
+        if (userId is null) return Unauthorized();
+
+        try
+        {
+            await _quizService.BulkSaveSlidesAsync(userId.Value, quizId, requests);
+            return Ok(new ApiResponse<string>(true, "Đã lưu thành công các câu hỏi.", null));
         }
         catch (UnauthorizedAccessException ex) { return StatusCode(403, new ApiResponse<string>(false, ex.Message, null)); }
         catch (KeyNotFoundException ex) { return NotFound(new ApiResponse<string>(false, ex.Message, null)); }

@@ -176,7 +176,8 @@ public record RoomDto(
     string Status,
     Guid QuizId,
     string QuizTitle,
-    DateTime CreatedAt
+    DateTime CreatedAt,
+    string? QrCodeBase64 = null
 );
 
 public record JoinRoomRequest(
@@ -197,8 +198,9 @@ public record AnswerResultDto(
     bool IsCorrect,
     int ScoreAwarded,
     int TotalScore,
-    int CurrentRank,
-    string CorrectAnswer
+    string CorrectAnswer,
+    int Rank = 0,          // hạng hiện tại (1-based), 0 = chưa xác định
+    int RankChange = 0     // >0: leo hạng, <0: tụt hạng
 );
 
 public record LeaderboardEntryDto(

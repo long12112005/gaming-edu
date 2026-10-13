@@ -9,14 +9,9 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
-using StackExchange.Redis;
+using Microsoft.Extensions.Caching.Memory;
 
 var builder = WebApplication.CreateBuilder(args);
-
-builder.Services.Configure<HostOptions>(hostOptions =>
-{
-    hostOptions.BackgroundServiceExceptionBehavior = BackgroundServiceExceptionBehavior.Ignore;
-});
 
 // ─── CONTROLLERS + JSON ───────────────────────────────────────────────────
 builder.Services.AddControllers()
@@ -114,9 +109,9 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 var jti = ctx.Principal?.FindFirst(JwtRegisteredClaimNames.Jti)?.Value;
                 if (userId != null && jti != null)
                 {
-                    var cache = ctx.HttpContext.RequestServices.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>();
-                    cache.TryGetValue($"session:{userId}", out object? activeSessionObj);
-                    if (activeSessionObj as string != jti)
+                    var store = ctx.HttpContext.RequestServices.GetRequiredService<ICacheStore>();
+                    var activeSession = await store.GetStringAsync($"session:{userId}");
+                    if (activeSession != jti)
                     {
                         ctx.Fail("Phiên đăng nhập không hợp lệ hoặc bạn đã đăng nhập ở nơi khác.");
                     }
@@ -130,18 +125,38 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("RequireAdmin", policy => policy.RequireClaim("is_admin", "true"));
 });
 
+var redisConn = builder.Configuration.GetConnectionString("Redis");
+var useRedis = !string.IsNullOrWhiteSpace(redisConn);
+
 // ─── SIGNALR ──────────────────────────────────────────────────────────────
-builder.Services.AddSignalR(options =>
+var signalRBuilder = builder.Services.AddSignalR(options =>
 {
     options.EnableDetailedErrors = builder.Environment.IsDevelopment();
     options.MaximumReceiveMessageSize = 32 * 1024; // 32 KB
 });
 
-// ─── CACHING (IMemoryCache) ───────────────────────────────────────────────
-builder.Services.AddMemoryCache();
+// Redis backplane: nhiều instance API vẫn broadcast đúng tới người chơi ở instance khác
+if (useRedis)
+{
+    signalRBuilder.AddStackExchangeRedis(redisConn!, o =>
+        o.Configuration.ChannelPrefix = StackExchange.Redis.RedisChannel.Literal("GamingEdu"));
+}
 
-// ─── RABBITMQ (Mocked) ────────────────────────────────────────────────────
-builder.Services.AddSingleton<RabbitMQPublisher>();
+// ─── CACHING (Redis nếu có cấu hình, fallback MemoryCache) ───────────────
+builder.Services.AddMemoryCache();
+if (useRedis)
+{
+    builder.Services.AddSingleton<StackExchange.Redis.IConnectionMultiplexer>(
+        _ => StackExchange.Redis.ConnectionMultiplexer.Connect(redisConn!));
+    builder.Services.AddSingleton<ICacheStore, RedisCacheStore>();
+    builder.Services.AddSingleton<ILeaderboardStore, RedisLeaderboardStore>();
+}
+else
+{
+    builder.Services.AddSingleton<ICacheStore, MemoryCacheStore>();
+    builder.Services.AddSingleton<ILeaderboardStore, MemoryLeaderboardStore>();
+}
+
 
 // ─── RATE LIMITING ────────────────────────────────────────────────────────
 builder.Services.AddRateLimiter(options =>
@@ -163,7 +178,7 @@ builder.Services.AddRateLimiter(options =>
             factory: partition => new FixedWindowRateLimiterOptions
             {
                 AutoReplenishment = true,
-                PermitLimit = 100, // Increased for dev
+                PermitLimit = builder.Environment.IsDevelopment() ? 100 : 5, // 5 requests per hour in Prod, 100 in Dev
                 QueueLimit = 0,
                 Window = TimeSpan.FromHours(1)
             }));
@@ -188,18 +203,19 @@ builder.Services.AddCors(options =>
 
 // ─── APPLICATION SERVICES ─────────────────────────────────────────────────
 builder.Services.AddScoped<IEmailService, EmailService>();
+builder.Services.AddHttpClient<IGeminiApiService, GeminiApiService>();
 builder.Services.AddScoped<IAuthService,  AuthService>();
 builder.Services.AddScoped<IQuizService,  QuizService>();
 builder.Services.AddScoped<IRoomService,  RoomService>();
 builder.Services.AddScoped<IGroupService, GroupService>();
 builder.Services.AddScoped<IQAService,    QAService>();
-builder.Services.AddScoped<IReportService, ReportService>();
 
 // FuzzyMatchingService: stateless, dùng Singleton để tránh allocation mỗi request
 builder.Services.AddSingleton<FuzzyMatchingService>();
 
 // Queue Service for Answer processing
 builder.Services.AddSingleton<AnswerQueueService>();
+builder.Services.AddSingleton<ISlideTimerService, SlideTimerService>();
 
 // Background Service: AI Job Worker (polls ai_jobs table every 10s)
 builder.Services.AddHostedService<AIJobWorker>();
@@ -236,7 +252,7 @@ if (app.Environment.IsDevelopment())
     await db.Database.EnsureCreatedAsync();
 }
 
-app.UseHttpsRedirection();
+// app.UseHttpsRedirection();
 
 // CORS must be before Auth
 app.UseCors("GamingEduFrontend");

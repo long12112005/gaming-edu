@@ -119,10 +119,12 @@ public class ApplicationDbContext : DbContext
             e.Property(q => q.CreatedAt).HasColumnType("datetime2").HasDefaultValueSql("GETUTCDATE()");
             e.Property(q => q.UpdatedAt).HasColumnType("datetime2").HasDefaultValueSql("GETUTCDATE()");
 
+            e.HasQueryFilter(q => !q.IsDeleted);
+
             e.HasOne(q => q.Creator)
                 .WithMany(u => u.Quizzes)
                 .HasForeignKey(q => q.CreatorId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.NoAction);
         });
 
         // ── slides ─────────────────────────────────────────────────────
@@ -137,10 +139,12 @@ public class ApplicationDbContext : DbContext
             e.Property(s => s.Status).HasMaxLength(50).HasDefaultValue("PUBLISHED");
             e.Property(s => s.CreatedAt).HasColumnType("datetime2").HasDefaultValueSql("GETUTCDATE()");
 
+            e.HasQueryFilter(s => !s.IsDeleted);
+
             e.HasOne(s => s.Quiz)
                 .WithMany(q => q.Slides)
                 .HasForeignKey(s => s.QuizId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.NoAction);
         });
 
         // ── slide_options ──────────────────────────────────────────────
@@ -155,7 +159,7 @@ public class ApplicationDbContext : DbContext
             e.HasOne(so => so.Slide)
                 .WithMany(s => s.Options)
                 .HasForeignKey(so => so.SlideId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.NoAction);
         });
 
         // ── ai_jobs ────────────────────────────────────────────────────
