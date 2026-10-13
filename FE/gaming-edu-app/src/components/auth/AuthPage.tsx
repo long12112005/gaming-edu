@@ -144,9 +144,17 @@ export default function AuthPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-teal-800 uppercase tracking-wider flex items-center gap-1.5">
-                    <Key size={14} className="text-amber-600" /> Mật Khẩu
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-teal-800 uppercase tracking-wider flex items-center gap-1.5">
+                      <Key size={14} className="text-amber-600" /> Mật Khẩu
+                    </label>
+                    <Link
+                      href="/forgot-password"
+                      className="text-xs font-bold text-teal-700 hover:text-amber-600 transition-colors"
+                    >
+                      Quên mật khẩu?
+                    </Link>
+                  </div>
                   <input
                     type="password"
                     required

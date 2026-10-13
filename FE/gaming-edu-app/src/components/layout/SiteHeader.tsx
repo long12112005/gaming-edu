@@ -10,7 +10,10 @@ import {
   User, 
   LayoutDashboard, 
   ChevronDown, 
-  Sparkles 
+  Sparkles,
+  BookOpen,
+  Users,
+  Shield
 } from "lucide-react";
 import { useAuthStore } from "@/store/useAuthStore";
 
@@ -184,6 +187,29 @@ export default function SiteHeader() {
                         <LayoutDashboard size={16} className="text-cyan-300" />
                         <span>Bảng Điều Khiển</span>
                       </button>
+                      <button
+                        onClick={() => go("/quizzes")}
+                        className="w-full flex items-center gap-3 px-4 py-2 text-sm text-cyan-100 hover:text-white hover:bg-white/10 transition-colors text-left font-medium"
+                      >
+                        <BookOpen size={16} className="text-cyan-300" />
+                        <span>Kho Bộ Đề</span>
+                      </button>
+                      <button
+                        onClick={() => go("/groups")}
+                        className="w-full flex items-center gap-3 px-4 py-2 text-sm text-cyan-100 hover:text-white hover:bg-white/10 transition-colors text-left font-medium"
+                      >
+                        <Users size={16} className="text-cyan-300" />
+                        <span>Nhóm & Lớp Học</span>
+                      </button>
+                      {user?.is_admin && (
+                        <button
+                          onClick={() => go("/admin/users")}
+                          className="w-full flex items-center gap-3 px-4 py-2 text-sm text-amber-200 hover:text-amber-100 hover:bg-amber-500/20 transition-colors text-left font-medium"
+                        >
+                          <Shield size={16} className="text-amber-400" />
+                          <span>Quản Trị Người Dùng</span>
+                        </button>
+                      )}
                     </div>
 
                     {/* Đăng xuất */}
