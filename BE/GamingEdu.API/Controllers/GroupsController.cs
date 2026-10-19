@@ -96,4 +96,41 @@ public class GroupsController : ControllerBase
             return BadRequest(new ApiResponse<string>(false, ex.Message, null));
         }
     }
+
+    [HttpPost("{id:guid}/leave")]
+    [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> LeaveGroup(Guid id)
+    {
+        try
+        {
+            await _groupService.LeaveGroupAsync(GetCurrentUserId(), id);
+            return Ok(new ApiResponse<string>(true, "Bạn đã rời khỏi nhóm thành công.", null));
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new ApiResponse<string>(false, ex.Message, null));
+        }
+    }
+
+    [HttpPut("{id:guid}")]
+    [ProducesResponseType(typeof(ApiResponse<GroupDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> UpdateGroup(Guid id, [FromBody] UpdateGroupRequest request)
+    {
+        try
+        {
+            var updatedGroup = await _groupService.UpdateGroupAsync(GetCurrentUserId(), id, request);
+            return Ok(new ApiResponse<GroupDto>(true, "Cập nhật thông tin nhóm thành công.", updatedGroup));
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new ApiResponse<string>(false, ex.Message, null));
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new ApiResponse<string>(false, ex.Message, null));
+        }
+    }
 }

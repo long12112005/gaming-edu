@@ -39,6 +39,11 @@ public record AuthResponse(
 
 // ─── User DTOs ─────────────────────────────────────────────────────────────
 
+public record UserStatsDto(
+    int TotalQuizzesCreated,
+    int TotalRoomsHosted
+);
+
 public record UserProfileDto(
     Guid Id,
     string Email,
@@ -46,7 +51,8 @@ public record UserProfileDto(
     string? AvatarUrl,
     bool IsAdmin,
     string Status,
-    UserQuotaDto? Quota
+    UserQuotaDto? Quota,
+    UserStatsDto? Stats = null
 );
 
 public record UserQuotaDto(
@@ -59,6 +65,18 @@ public record UserQuotaDto(
 public record UpdateProfileRequest(
     [MaxLength(100)] string? Nickname,
     [MaxLength(500)] string? AvatarUrl
+);
+
+public record AdminUserItemDto(
+    Guid Id,
+    string Email,
+    string Nickname,
+    string? AvatarUrl,
+    bool IsAdmin,
+    string Status,
+    DateTime? LockedUntil,
+    DateTime CreatedAt,
+    DateTime UpdatedAt
 );
 
 // ─── Quiz DTOs ─────────────────────────────────────────────────────────────
@@ -186,6 +204,25 @@ public record JoinRoomRequest(
     string? AvatarUrl
 );
 
+public record HostedRoomHistoryDto(
+    Guid RoomId,
+    string PinCode,
+    string QuizTitle,
+    string Mode,
+    string Status,
+    int PlayerCount,
+    DateTime CreatedAt
+);
+
+public record PlayedRoomHistoryDto(
+    Guid RoomId,
+    string QuizTitle,
+    string HostNickname,
+    int TotalScore,
+    int Rank,
+    DateTime PlayedAt
+);
+
 // ─── Game (SignalR) DTOs ───────────────────────────────────────────────────
 
 public record SubmitAnswerRequest(
@@ -200,7 +237,8 @@ public record AnswerResultDto(
     int TotalScore,
     string CorrectAnswer,
     int Rank = 0,          // hạng hiện tại (1-based), 0 = chưa xác định
-    int RankChange = 0     // >0: leo hạng, <0: tụt hạng
+    int RankChange = 0,    // >0: leo hạng, <0: tụt hạng
+    bool IsTournamentLocked = false
 );
 
 public record LeaderboardEntryDto(
@@ -247,6 +285,11 @@ public record AIJobStatusDto(
 // ─── Group DTOs ────────────────────────────────────────────────────────────
 
 public record CreateGroupRequest(
+    [Required, MaxLength(255)] string Name,
+    string? Description
+);
+
+public record UpdateGroupRequest(
     [Required, MaxLength(255)] string Name,
     string? Description
 );
@@ -302,7 +345,16 @@ public record AskQuestionRequest(
     [Required] string Content
 );
 
+// ─── File Upload DTOs ──────────────────────────────────────────────────────
+public record FileUploadResponseDto(
+    string FileUrl,
+    string FileName,
+    long FileSize,
+    string Extension
+);
+
 // ─── Common ────────────────────────────────────────────────────────────────
 
 public record ApiResponse<T>(bool Success, string? Message, T? Data);
 public record PaginatedResponse<T>(IEnumerable<T> Items, int Total, int Page, int PageSize);
+

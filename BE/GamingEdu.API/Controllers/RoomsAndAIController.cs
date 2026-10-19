@@ -102,12 +102,26 @@ public class RoomsController : ControllerBase
     }
 
     // PUT /api/rooms/answers/draft
-    /// <summary>Auto-save draft answer every 30s.</summary>
+    /// <summary>Auto-save draft answer every 30s to Redis cache.</summary>
     [HttpPut("answers/draft")]
     public async Task<IActionResult> SaveDraftAnswer([FromBody] SaveDraftRequest request)
     {
         await _roomService.SaveDraftAnswerAsync(request.RoomPlayerId, request.SlideId, request.AnswerData);
-        return Ok(new ApiResponse<string>(true, "Draft saved.", null));
+        return Ok(new ApiResponse<string>(true, "Đã lưu bản nháp vào Redis Cache.", null));
+    }
+
+    // GET /api/rooms/answers/draft
+    /// <summary>Lấy bản nháp câu trả lời từ Redis cache khi thí sinh tải lại trang.</summary>
+    [HttpGet("answers/draft")]
+    public async Task<IActionResult> GetDraftAnswer([FromQuery] Guid roomPlayerId, [FromQuery] Guid slideId)
+    {
+        var draft = await _roomService.GetDraftAnswerAsync(roomPlayerId, slideId);
+        if (draft is null)
+        {
+            return NotFound(new ApiResponse<string>(false, "Không có bản nháp nào được lưu.", null));
+        }
+
+        return Ok(new ApiResponse<string>(true, "Lấy bản nháp thành công.", draft));
     }
 
     // POST /api/rooms/{id}/finish
@@ -127,6 +141,32 @@ public class RoomsController : ControllerBase
         catch (KeyNotFoundException ex) { return NotFound(new ApiResponse<string>(false, ex.Message, null)); }
     }
 
+    // GET /api/rooms/history/hosted
+    /// <summary>Lấy danh sách các phòng do user đã tạo/chủ trì.</summary>
+    [HttpGet("history/hosted")]
+    [ProducesResponseType(typeof(ApiResponse<IEnumerable<HostedRoomHistoryDto>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetHostedRoomsHistory()
+    {
+        var userId = GetCurrentUserId();
+        if (userId is null) return Unauthorized();
+
+        var history = await _roomService.GetHostedRoomsHistoryAsync(userId.Value);
+        return Ok(new ApiResponse<IEnumerable<HostedRoomHistoryDto>>(true, "Lấy lịch sử phòng đã tạo thành công.", history));
+    }
+
+    // GET /api/rooms/history/played
+    /// <summary>Lấy lịch sử các phòng user đã tham gia chơi.</summary>
+    [HttpGet("history/played")]
+    [ProducesResponseType(typeof(ApiResponse<IEnumerable<PlayedRoomHistoryDto>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetPlayedRoomsHistory()
+    {
+        var userId = GetCurrentUserId();
+        if (userId is null) return Unauthorized();
+
+        var history = await _roomService.GetPlayedRoomsHistoryAsync(userId.Value);
+        return Ok(new ApiResponse<IEnumerable<PlayedRoomHistoryDto>>(true, "Lấy lịch sử phòng đã chơi thành công.", history));
+    }
+
     // GET /api/rooms/{id}/export
     /// <summary>Export room results to Excel.</summary>
     [HttpGet("{id:guid}/export")]
@@ -138,7 +178,9 @@ public class RoomsController : ControllerBase
         try
         {
             var fileBytes = await _roomService.ExportRoomReportAsync(id, userId.Value);
-            return File(fileBytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"Room_{id}_Report.xlsx");
+            var fileName = $"Room_{id}_Report.xlsx";
+            Response.Headers.Append("Content-Disposition", $"attachment; filename=\"{fileName}\"");
+            return File(fileBytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
         }
         catch (UnauthorizedAccessException ex) { return StatusCode(403, new ApiResponse<string>(false, ex.Message, null)); }
         catch (KeyNotFoundException ex) { return NotFound(new ApiResponse<string>(false, ex.Message, null)); }
