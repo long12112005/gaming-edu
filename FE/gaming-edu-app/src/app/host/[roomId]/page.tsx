@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
 import Cookies from "js-cookie";
 import confetti from "canvas-confetti";
 import { useGameHub } from "@/hooks/useGameHub";
@@ -21,7 +22,8 @@ import {
   Pin,
   CheckCircle,
   EyeOff,
-  Home
+  Home,
+  X,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import Link from "next/link";
@@ -286,14 +288,23 @@ export default function HostLobbyPage() {
 
   if (!pinCode) {
     return (
-      <div className="min-h-screen bg-[#F4F1FA] flex items-center justify-center font-sans">
-        <div className="flex flex-col items-center gap-6 p-10 bg-white rounded-[40px] border-4 border-red-100 shadow-[4px_4px_16px_rgba(0,0,0,0.05)] text-center">
-          <div className="w-24 h-24 bg-red-100 border-4 border-red-200 rounded-[24px] flex items-center justify-center transform rotate-6">
+      <div className="min-h-screen flex items-center justify-center font-sans relative overflow-hidden">
+        <div
+          className="fixed inset-0 z-0"
+          style={{
+            backgroundImage: "url('/bg-cloud-valley.jpg')",
+            backgroundSize: "cover",
+            backgroundPosition: "center",
+          }}
+        />
+        <div className="fixed inset-0 z-0" style={{ background: "rgba(240,249,246,0.65)" }} />
+        <div className="relative z-10 flex flex-col items-center gap-6 p-10 bg-white/80 backdrop-blur-xl rounded-[40px] border border-white/80 shadow-[0_16px_40px_rgba(8,38,42,0.12)] text-center max-w-md mx-4">
+          <div className="w-24 h-24 bg-red-100 border-2 border-red-200 rounded-[24px] flex items-center justify-center transform rotate-6">
             <span className="text-5xl">⚠️</span>
           </div>
           <div>
             <h2 className="font-900 text-3xl text-gray-900 mb-2">Thiếu mã PIN</h2>
-            <p className="text-lg text-gray-500 font-600">
+            <p className="text-lg text-gray-600 font-semibold">
               Phòng chơi này cần có mã PIN trên URL.
             </p>
           </div>
@@ -309,9 +320,21 @@ export default function HostLobbyPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F4F1FA] flex flex-col font-sans">
+    <div className="min-h-screen text-[#1B2A2E] flex flex-col font-sans relative overflow-hidden">
+      {/* Landscape background */}
+      <div
+        className="fixed inset-0 z-0"
+        style={{
+          backgroundImage: "url('/bg-cloud-valley.jpg')",
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+        }}
+      />
+      {/* White fog overlay */}
+      <div className="fixed inset-0 z-0" style={{ background: "rgba(240,249,246,0.65)" }} />
+
       {/* ── HEADER ─────────────────────────────────────────────────────── */}
-      <header className="bg-white border-b-4 border-gray-200 shadow-sm sticky top-0 z-40 px-4 py-3">
+      <header className="bg-white/75 backdrop-blur-xl border-b border-teal-500/20 shadow-sm sticky top-0 z-40 px-4 py-3">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 bg-gradient-to-br from-violet-600 to-fuchsia-600 rounded-[16px] flex items-center justify-center shadow-md">
@@ -341,7 +364,7 @@ export default function HostLobbyPage() {
         </div>
       </header>
 
-      <main className="flex-1 max-w-6xl w-full mx-auto px-4 py-8">
+      <main className="flex-1 max-w-6xl w-full mx-auto px-4 py-8 relative z-10">
         {/* ════════════════════════════════════════════════════════════
             LOBBY STATE (CHỜ NGƯỜI CHƠI)
         ════════════════════════════════════════════════════════════ */}
