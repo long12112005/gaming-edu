@@ -30,7 +30,7 @@ public class EmailService : IEmailService
             var pass = _config["Smtp:Pass"];
 
             // Mock email sending for local development if SMTP is not configured
-            if (string.IsNullOrEmpty(user) || user == "your-email@gmail.com")
+            if (string.IsNullOrEmpty(user) || string.IsNullOrEmpty(pass) || user == "your-email@gmail.com")
             {
                 _logger.LogWarning("⚠️ MOCK EMAIL (Không có cấu hình SMTP). Sẽ không gửi mail thực tế.");
                 _logger.LogWarning("Mô phỏng gửi email tới: {Email}\nNội dung: {Body}", toEmail, body);

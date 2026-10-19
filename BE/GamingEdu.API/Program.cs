@@ -197,7 +197,8 @@ builder.Services.AddCors(options =>
             )
             .AllowAnyHeader()
             .AllowAnyMethod()
-            .AllowCredentials(); // Required for SignalR
+            .AllowCredentials() // Required for SignalR
+            .WithExposedHeaders("Content-Disposition");
     });
 });
 
@@ -252,7 +253,14 @@ if (app.Environment.IsDevelopment())
     await db.Database.EnsureCreatedAsync();
 }
 
-// app.UseHttpsRedirection();
+// Ensure uploads folder exists
+var uploadsPath = Path.Combine(app.Environment.WebRootPath ?? Path.Combine(builder.Environment.ContentRootPath, "wwwroot"), "uploads");
+if (!Directory.Exists(uploadsPath))
+{
+    Directory.CreateDirectory(uploadsPath);
+}
+
+app.UseStaticFiles();
 
 // CORS must be before Auth
 app.UseCors("GamingEduFrontend");

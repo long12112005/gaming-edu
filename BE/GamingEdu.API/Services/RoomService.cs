@@ -23,8 +23,11 @@ public interface IRoomService
     Task InviteGroupAsync(Guid hostId, Guid roomId, Guid groupId);
     Task RemovePlayerAsync(Guid roomId, Guid playerId);
     Task SaveDraftAnswerAsync(Guid roomPlayerId, Guid slideId, string answerData);
+    Task<string?> GetDraftAnswerAsync(Guid roomPlayerId, Guid slideId);
     Task<IEnumerable<LeaderboardEntryDto>> FinishRoomAsync(Guid roomId, Guid hostId);
     Task<byte[]> ExportRoomReportAsync(Guid roomId, Guid hostId);
+    Task<IEnumerable<HostedRoomHistoryDto>> GetHostedRoomsHistoryAsync(Guid hostId);
+    Task<IEnumerable<PlayedRoomHistoryDto>> GetPlayedRoomsHistoryAsync(Guid userId);
 }
 
 public class RoomService : IRoomService
@@ -33,7 +36,7 @@ public class RoomService : IRoomService
     private readonly ILogger<RoomService>  _logger;
     private readonly FuzzyMatchingService  _fuzzy;
     private readonly IHubContext<NotificationHub> _notificationHub;
-    private readonly IMemoryCache _cache;
+    private readonly ICacheStore _cacheStore;
     private readonly ILeaderboardStore _leaderboard;
 
     public RoomService(
@@ -41,14 +44,14 @@ public class RoomService : IRoomService
         ILogger<RoomService> logger,
         FuzzyMatchingService fuzzy,
         IHubContext<NotificationHub> notificationHub,
-        IMemoryCache cache,
+        ICacheStore cacheStore,
         ILeaderboardStore leaderboard)
     {
         _db     = db;
         _logger = logger;
         _fuzzy  = fuzzy;
         _notificationHub = notificationHub;
-        _cache  = cache;
+        _cacheStore = cacheStore;
         _leaderboard = leaderboard;
     }
 
@@ -311,11 +314,17 @@ public class RoomService : IRoomService
         await _db.SaveChangesAsync();
     }
 
-    // ── AUTO-SAVE DRAFT ────────────────────────────────────────────────
+    // ── AUTO-SAVE DRAFT (REDIS CACHE) ──────────────────────────────────
     public async Task SaveDraftAnswerAsync(Guid roomPlayerId, Guid slideId, string answerData)
     {
         var draftKey = $"draft_answer:{roomPlayerId}:{slideId}";
-        _cache.Set(draftKey, answerData, TimeSpan.FromHours(2));
+        await _cacheStore.SetStringAsync(draftKey, answerData, TimeSpan.FromHours(4));
+    }
+
+    public async Task<string?> GetDraftAnswerAsync(Guid roomPlayerId, Guid slideId)
+    {
+        var draftKey = $"draft_answer:{roomPlayerId}:{slideId}";
+        return await _cacheStore.GetStringAsync(draftKey);
     }
 
     // ── FINISH ROOM (PODIUM) ───────────────────────────────────────────
@@ -377,6 +386,70 @@ public class RoomService : IRoomService
         using var stream = new MemoryStream();
         workbook.SaveAs(stream);
         return stream.ToArray();
+    }
+
+    // ── ROOM HISTORY ───────────────────────────────────────────────────
+    public async Task<IEnumerable<HostedRoomHistoryDto>> GetHostedRoomsHistoryAsync(Guid hostId)
+    {
+        var rooms = await _db.Rooms
+            .AsNoTracking()
+            .Include(r => r.Quiz)
+            .Include(r => r.Players)
+            .Where(r => r.HostId == hostId)
+            .OrderByDescending(r => r.CreatedAt)
+            .Select(r => new HostedRoomHistoryDto(
+                r.Id,
+                r.PinCode,
+                r.Quiz.Title,
+                r.Mode,
+                r.Status,
+                r.Players.Count,
+                r.CreatedAt
+            ))
+            .ToListAsync();
+
+        return rooms;
+    }
+
+    public async Task<IEnumerable<PlayedRoomHistoryDto>> GetPlayedRoomsHistoryAsync(Guid userId)
+    {
+        var playerRecords = await _db.RoomPlayers
+            .AsNoTracking()
+            .Include(rp => rp.Room)
+                .ThenInclude(r => r.Quiz)
+            .Include(rp => rp.Room)
+                .ThenInclude(r => r.Host)
+            .Include(rp => rp.Room)
+                .ThenInclude(r => r.Players)
+            .Where(rp => rp.UserId == userId)
+            .OrderByDescending(rp => rp.JoinedAt)
+            .ToListAsync();
+
+        var result = new List<PlayedRoomHistoryDto>();
+
+        foreach (var rp in playerRecords)
+        {
+            if (rp.Room == null) continue;
+
+            var sortedPlayers = rp.Room.Players
+                .OrderByDescending(p => p.TotalScore)
+                .ThenBy(p => p.JoinedAt)
+                .ToList();
+
+            int rank = sortedPlayers.FindIndex(p => p.Id == rp.Id) + 1;
+            if (rank <= 0) rank = 1;
+
+            result.Add(new PlayedRoomHistoryDto(
+                rp.Room.Id,
+                rp.Room.Quiz?.Title ?? "Bộ đề không xác định",
+                rp.Room.Host?.Nickname ?? "Chủ phòng",
+                rp.TotalScore,
+                rank,
+                rp.JoinedAt
+            ));
+        }
+
+        return result;
     }
 
     // ── HELPERS ────────────────────────────────────────────────────────
