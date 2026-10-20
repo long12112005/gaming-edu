@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Mail, Key, User, ArrowLeft, Sparkles, Compass } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
@@ -8,16 +8,40 @@ import { useAuthStore } from "@/store/useAuthStore";
 import Link from "next/link";
 import SiteHeader from "@/components/layout/SiteHeader";
 
-export default function AuthPage() {
+export default function AuthPage({ defaultTab = "login" }: { defaultTab?: "login" | "register" }) {
   const router = useRouter();
   const { login } = useAuthStore();
-  const [activeTab, setActiveTab] = useState<"login" | "register">("login");
+  const [activeTab, setActiveTab] = useState<"login" | "register">(defaultTab);
   const [registerStep, setRegisterStep] = useState<1 | 2>(1);
   const [isLoading, setIsLoading] = useState(false);
   const [globalError, setGlobalError] = useState("");
 
   const [loginForm, setLoginForm] = useState({ email: "", password: "" });
   const [registerForm, setRegisterForm] = useState({ nickname: "", email: "", password: "", otp: "" });
+
+  // Countdown timer 60s cho gửi lại OTP đăng ký
+  const [countdown, setCountdown] = useState(60);
+  const [canResend, setCanResend] = useState(false);
+  const [isResending, setIsResending] = useState(false);
+  const [resendSuccess, setResendSuccess] = useState("");
+
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (activeTab === "register" && registerStep === 2 && countdown > 0) {
+      timer = setInterval(() => {
+        setCountdown((prev) => {
+          if (prev <= 1) {
+            setCanResend(true);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [activeTab, registerStep, countdown]);
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,10 +66,30 @@ export default function AuthPage() {
       await api.post("/auth/send-register-otp", { email: registerForm.email });
       setRegisterStep(2);
       setGlobalError("");
+      setCountdown(60);
+      setCanResend(false);
+      setResendSuccess("");
     } catch (error: any) {
       setGlobalError(error.response?.data?.message || "Không thể truyền linh thư (OTP).");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (!canResend || isResending) return;
+    setGlobalError("");
+    setResendSuccess("");
+    setIsResending(true);
+    try {
+      await api.post("/auth/send-register-otp", { email: registerForm.email });
+      setResendSuccess("Đã gửi lại mã OTP mới đến email của bạn.");
+      setCountdown(60);
+      setCanResend(false);
+    } catch (error: any) {
+      setGlobalError(error.response?.data?.message || "Không thể gửi lại mã OTP.");
+    } finally {
+      setIsResending(false);
     }
   };
 
@@ -245,6 +289,29 @@ export default function AuthPage() {
                         value={registerForm.otp}
                         onChange={(e) => setRegisterForm({ ...registerForm, otp: e.target.value })}
                       />
+                    </div>
+
+                    {resendSuccess && (
+                      <p className="text-center text-xs text-emerald-700 font-semibold bg-emerald-50 py-1.5 px-3 rounded-lg border border-emerald-200">
+                        {resendSuccess}
+                      </p>
+                    )}
+
+                    <div className="text-center">
+                      {canResend ? (
+                        <button
+                          type="button"
+                          onClick={handleResendOtp}
+                          disabled={isResending}
+                          className="text-xs font-bold text-amber-600 hover:text-amber-700 underline transition-colors"
+                        >
+                          {isResending ? "Đang gửi lại mã..." : "Chưa nhận được mã? Gửi lại OTP"}
+                        </button>
+                      ) : (
+                        <span className="text-xs text-teal-800/60 font-semibold">
+                          Gửi lại mã mới sau <b>{countdown}s</b>
+                        </span>
+                      )}
                     </div>
                     <div className="flex gap-3 pt-2">
                       <button

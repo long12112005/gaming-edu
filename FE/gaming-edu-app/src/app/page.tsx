@@ -23,18 +23,30 @@ export default function LandingTuTien() {
     setIsLoggedIn(!!Cookies.get("token"));
   }, []);
 
-  // Tinh tú / linh khí
+  // Tinh tú / linh khí với thuật toán pseudo-random xác định (pure)
   const particles = useMemo(() => {
     if (!mounted) return [];
-    return Array.from({ length: 32 }, (_, i) => ({
-      id: i,
-      left: Math.random() * 100,
-      size: 1.8 + Math.random() * 2.8,
-      duration: 12 + Math.random() * 14,
-      delay: -Math.random() * 20,
-      drift: (Math.random() - 0.5) * 120,
-      color: PARTICLE_COLORS[i % PARTICLE_COLORS.length],
-    }));
+    return Array.from({ length: 32 }, (_, i) => {
+      const pseudoRand = (seed: number) => {
+        const x = Math.sin(seed) * 10000;
+        return x - Math.floor(x);
+      };
+      const r1 = pseudoRand(i * 1.618 + 1);
+      const r2 = pseudoRand(i * 2.718 + 2);
+      const r3 = pseudoRand(i * 3.141 + 3);
+      const r4 = pseudoRand(i * 4.414 + 4);
+      const r5 = pseudoRand(i * 5.618 + 5);
+
+      return {
+        id: i,
+        left: r1 * 100,
+        size: 1.8 + r2 * 2.8,
+        duration: 12 + r3 * 14,
+        delay: -r4 * 20,
+        drift: (r5 - 0.5) * 120,
+        color: PARTICLE_COLORS[i % PARTICLE_COLORS.length],
+      };
+    });
   }, [mounted]);
 
   const handleMouseMove = (e: React.MouseEvent) => {

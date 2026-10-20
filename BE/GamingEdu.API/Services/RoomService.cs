@@ -28,6 +28,7 @@ public interface IRoomService
     Task<byte[]> ExportRoomReportAsync(Guid roomId, Guid hostId);
     Task<IEnumerable<HostedRoomHistoryDto>> GetHostedRoomsHistoryAsync(Guid hostId);
     Task<IEnumerable<PlayedRoomHistoryDto>> GetPlayedRoomsHistoryAsync(Guid userId);
+    string GenerateQrCodeBase64(string pin);
 }
 
 public class RoomService : IRoomService
@@ -96,7 +97,7 @@ public class RoomService : IRoomService
             room.QuizId, quiz.Title, room.CreatedAt, qrCodeBase64);
     }
 
-    private string GenerateQrCodeBase64(string pin)
+    public string GenerateQrCodeBase64(string pin)
     {
         // Example URL: https://game.edu/join?pin={pin}
         string url = $"https://game.edu/join?pin={pin}";

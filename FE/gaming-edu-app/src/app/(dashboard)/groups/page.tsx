@@ -261,9 +261,8 @@ export default function GroupsPage() {
       variant: "warning",
       onConfirm: async () => {
         try {
-          // Gửi request rời nhóm (nếu BE có endpoint /leave hoặc xóa chính bản thân khỏi group)
-          await api.delete(`/groups/${group.id}/members/me`).catch(async () => {
-            // fallback nếu BE dùng endpoint generic
+          // Gửi request rời nhóm (BE hỗ trợ POST /groups/{id}/leave và DELETE /groups/{id}/leave)
+          await api.post(`/groups/${group.id}/leave`).catch(async () => {
             await api.delete(`/groups/${group.id}/leave`);
           });
           setSelectedGroup(null);

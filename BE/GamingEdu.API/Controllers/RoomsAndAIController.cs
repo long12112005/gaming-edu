@@ -66,9 +66,10 @@ public class RoomsController : ControllerBase
         if (room is null)
             return NotFound(new ApiResponse<string>(false, "Không tìm thấy phòng với mã PIN này.", null));
 
+        var qrCode = _roomService.GenerateQrCodeBase64(room.PinCode);
         var dto = new RoomDto(
             room.Id, room.PinCode, room.Mode, room.Status,
-            room.QuizId, room.Quiz?.Title ?? "", room.CreatedAt);
+            room.QuizId, room.Quiz?.Title ?? "", room.CreatedAt, qrCode);
 
         return Ok(new ApiResponse<RoomDto>(true, null, dto));
     }

@@ -17,7 +17,6 @@ export interface QAQuestion {
 }
 
 export function useQAHub(roomId: string | null) {
-  const [connection, setConnection] = useState<signalR.HubConnection | null>(null);
   const [questions, setQuestions] = useState<QAQuestion[]>([]);
   const [error, setError] = useState<string | null>(null);
 
@@ -50,7 +49,7 @@ export function useQAHub(roomId: string | null) {
 
     // ── Events ──
     newConnection.on("LoadQuestions", (loadedQuestions: QAQuestion[]) => {
-      setQuestions(loadedQuestions);
+      setQuestions(loadedQuestions || []);
     });
 
     newConnection.on("QuestionAdded", (newQuestion: QAQuestion) => {
@@ -82,8 +81,6 @@ export function useQAHub(roomId: string | null) {
     newConnection.on("QAError", (errMessage: string) => {
       setError(errMessage);
     });
-
-    setConnection(newConnection);
 
     return () => {
       newConnection.stop();
