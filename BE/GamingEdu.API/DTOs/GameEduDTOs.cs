@@ -240,7 +240,38 @@ public record AnswerResultDto(
     string CorrectAnswer,
     int Rank = 0,          // hạng hiện tại (1-based), 0 = chưa xác định
     int RankChange = 0,    // >0: leo hạng, <0: tụt hạng
-    bool IsTournamentLocked = false
+    bool IsTournamentLocked = false,
+    int Streak = 0,
+    double SpeedMultiplier = 1.0,
+    int StreakBonus = 0
+);
+
+public record OptionDistributionDto(
+    Guid OptionId,
+    string Content,
+    int OrderIndex,
+    bool IsCorrect,
+    int Count,
+    double Percentage
+);
+
+public record SlideDistributionDto(
+    Guid SlideId,
+    int TotalAnswers,
+    int TotalPlayers,
+    List<OptionDistributionDto> Options
+);
+
+public record PlayerRejoinDataDto(
+    Guid RoomId,
+    Guid PlayerId,
+    string PinCode,
+    string Mode,
+    string Status,
+    string PlayerNickname,
+    int TotalScore,
+    int Rank,
+    string Theme
 );
 
 public record LeaderboardEntryDto(

@@ -128,6 +128,16 @@ public class AnswerProcessingWorker : BackgroundService
                         var leaderboard = await roomService.GetLeaderboardAsync(payload.RoomId, top: 10);
                         await _hubContext.Clients.Group(payload.GroupName).SendAsync("LeaderboardUpdated", leaderboard, cancellationToken: stoppingToken);
                     }
+
+                    // 4. Phát sóng tiến độ nộp bài và phân bổ đáp án (Answer Distribution) thời gian thực
+                    var distribution = await roomService.GetSlideAnswerDistributionAsync(payload.RoomId, payload.Request.SlideId);
+                    await _hubContext.Clients.Group(payload.GroupName).SendAsync("AnswerCountUpdated", new
+                    {
+                        SlideId = payload.Request.SlideId,
+                        AnsweredCount = distribution.TotalAnswers,
+                        TotalPlayers = distribution.TotalPlayers,
+                        Distribution = distribution
+                    }, cancellationToken: stoppingToken);
                 }
             }
             catch (Exception ex)

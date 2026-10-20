@@ -28,6 +28,7 @@ import {
 import { api } from "@/lib/api";
 import Link from "next/link";
 import { getThemeById } from "@/lib/gameThemes";
+import SpeedRacerHostTrack from "@/components/games/speed-racer/SpeedRacerHostTrack";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
@@ -170,6 +171,9 @@ export default function HostLobbyPage() {
     players,
     currentSlide,
     leaderboard,
+    slideTimeLeft,
+    answerProgress,
+    distribution,
     joinRoom,
     hostJoinRoom,
     roomInfo,
@@ -534,114 +538,130 @@ export default function HostLobbyPage() {
         {/* ════════════════════════════════════════════════════════════
             PLAYING STATE (ĐANG CHƠI / TRẢ LỜI CÂU HỎI)
         ════════════════════════════════════════════════════════════ */}
+        {/* ════════════════════════════════════════════════════════════
+            PLAYING STATE (ĐANG CHƠI / TRẢ LỜI CÂU HỎI)
+        ════════════════════════════════════════════════════════════ */}
         {(gameState === "PLAYING" || gameState === "LEADERBOARD" || gameState === "STARTING") && (
-          <div className="flex flex-col items-center gap-8 animate-fade-in-up">
-            
-            {/* Hiển thị câu hỏi hiện tại trên màn chiếu */}
-            {currentSlide ? (
-              <div className="w-full bg-white rounded-[40px] shadow-[4px_4px_16px_rgba(0,0,0,0.05)] border-4 border-violet-100 p-8 md:p-14 text-center">
-                <div className="flex items-center justify-center gap-3 mb-8">
-                  <div className="inline-block bg-violet-100 border-2 border-violet-200 text-violet-700 font-900 px-6 py-2 rounded-2xl uppercase tracking-widest text-sm shadow-sm">
-                    Câu hỏi {currentSlide?.index !== undefined ? currentSlide.index + 1 : "?"}
-                  </div>
-                  <div className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-2xl text-xs font-900 border ${currentTheme.badgeClass}`}>
-                    <span>{currentTheme.icon}</span>
-                    <span>{currentTheme.name}</span>
-                  </div>
-                </div>
-                <h2 className="text-3xl md:text-5xl font-black text-gray-900 mb-12 leading-tight tracking-tight max-w-4xl mx-auto">
-                  {currentSlide.questionText}
-                </h2>
-                {currentSlide.options && currentSlide.options.length > 0 && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-5xl mx-auto">
-                    {currentSlide.options.map((opt: any, idx: number) => {
-                      const colors = [
-                        "bg-red-500 border-red-700 shadow-[0_6px_0_0_#b91c1c]",
-                        "bg-blue-500 border-blue-700 shadow-[0_6px_0_0_#1d4ed8]",
-                        "bg-amber-400 border-amber-600 shadow-[0_6px_0_0_#b45309]",
-                        "bg-emerald-500 border-emerald-700 shadow-[0_6px_0_0_#047857]",
-                      ];
-                      const letters = ["A", "B", "C", "D"];
-                      return (
-                        <div
-                          key={opt.id}
-                          className={`${
-                            colors[idx % 4]
-                          } text-white rounded-[24px] border-4 p-6 text-left flex items-center gap-6 transform transition-transform hover:-translate-y-1`}
-                        >
-                          <div className="w-14 h-14 bg-white/20 rounded-2xl border-2 border-white/30 flex items-center justify-center text-2xl font-black shrink-0 shadow-inner">
-                            {letters[idx]}
-                          </div>
-                          <span className="font-800 text-2xl leading-snug">{opt.content}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="bg-white rounded-[40px] shadow-xl border-4 border-gray-100 p-16 text-center w-full max-w-3xl">
-                <div className="w-32 h-32 bg-gray-50 rounded-[32px] border-4 border-gray-200 flex items-center justify-center mx-auto mb-8 animate-bounce">
-                  <span className="text-6xl">🎮</span>
-                </div>
-                <h2 className="text-4xl font-black text-gray-900 tracking-tight">
-                  Trò chơi đang diễn ra!
-                </h2>
-                <p className="text-xl font-700 text-gray-500 mt-4">
-                  Người chơi hãy nhìn lên màn hình này.
-                </p>
-              </div>
-            )}
-
-            {/* Bảng xếp hạng thu gọn trực tiếp */}
-            {leaderboard.length > 0 && (
-              <div className="w-full max-w-3xl bg-white rounded-[32px] border-4 border-gray-100 shadow-[4px_4px_16px_rgba(0,0,0,0.05)] p-8">
-                <div className="flex items-center gap-3 mb-6">
-                   <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center">
-                      <Trophy size={20} className="text-amber-600" />
-                   </div>
-                   <h3 className="text-xl font-900 text-gray-900 tracking-tight">
-                     Top Người Chơi Hiện Tại
-                   </h3>
-                </div>
-                <div className="space-y-3">
-                  {leaderboard.slice(0, 5).map((p, idx) => (
-                    <div
-                      key={p.playerId ?? idx}
-                      className="flex items-center gap-4 bg-gray-50 border-2 border-gray-100 p-3 rounded-2xl"
-                    >
-                      <div className="w-10 h-10 bg-white border-2 border-gray-200 rounded-xl flex items-center justify-center font-900 text-gray-500">
-                         {idx + 1}
-                      </div>
-                      <span className="flex-1 font-900 text-lg text-gray-900 truncate">
-                        {p.nickname}
-                      </span>
-                      <span className="font-black text-xl text-violet-600 bg-violet-100 px-4 py-1.5 rounded-xl border-2 border-violet-200">
-                        {p.totalScore?.toLocaleString("vi-VN")} pts
-                      </span>
+          selectedThemeId === "SPEED_RACER" ? (
+            <SpeedRacerHostTrack
+              currentSlide={currentSlide as any}
+              players={players}
+              leaderboard={leaderboard}
+              answerProgress={answerProgress}
+              distribution={distribution}
+              gameState={gameState}
+              slideTimeLeft={slideTimeLeft}
+              onNextSlide={nextSlide}
+              onEndGame={endGame}
+            />
+          ) : (
+            <div className="flex flex-col items-center gap-8 animate-fade-in-up">
+              {/* Hiển thị câu hỏi hiện tại trên màn chiếu */}
+              {currentSlide ? (
+                <div className="w-full bg-white rounded-[40px] shadow-[4px_4px_16px_rgba(0,0,0,0.05)] border-4 border-violet-100 p-8 md:p-14 text-center">
+                  <div className="flex items-center justify-center gap-3 mb-8">
+                    <div className="inline-block bg-violet-100 border-2 border-violet-200 text-violet-700 font-900 px-6 py-2 rounded-2xl uppercase tracking-widest text-sm shadow-sm">
+                      Câu hỏi {currentSlide?.index !== undefined ? currentSlide.index + 1 : "?"}
                     </div>
-                  ))}
+                    <div className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-2xl text-xs font-900 border ${currentTheme.badgeClass}`}>
+                      <span>{currentTheme.icon}</span>
+                      <span>{currentTheme.name}</span>
+                    </div>
+                  </div>
+                  <h2 className="text-3xl md:text-5xl font-black text-gray-900 mb-12 leading-tight tracking-tight max-w-4xl mx-auto">
+                    {currentSlide.questionText}
+                  </h2>
+                  {currentSlide.options && currentSlide.options.length > 0 && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-5xl mx-auto">
+                      {currentSlide.options.map((opt: any, idx: number) => {
+                        const colors = [
+                          "bg-red-500 border-red-700 shadow-[0_6px_0_0_#b91c1c]",
+                          "bg-blue-500 border-blue-700 shadow-[0_6px_0_0_#1d4ed8]",
+                          "bg-amber-400 border-amber-600 shadow-[0_6px_0_0_#b45309]",
+                          "bg-emerald-500 border-emerald-700 shadow-[0_6px_0_0_#047857]",
+                        ];
+                        const letters = ["A", "B", "C", "D"];
+                        return (
+                          <div
+                            key={opt.id}
+                            className={`${
+                              colors[idx % 4]
+                            } text-white rounded-[24px] border-4 p-6 text-left flex items-center gap-6 transform transition-transform hover:-translate-y-1`}
+                          >
+                            <div className="w-14 h-14 bg-white/20 rounded-2xl border-2 border-white/30 flex items-center justify-center text-2xl font-black shrink-0 shadow-inner">
+                              {letters[idx]}
+                            </div>
+                            <span className="font-800 text-2xl leading-snug">{opt.content}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
-              </div>
-            )}
+              ) : (
+                <div className="bg-white rounded-[40px] shadow-xl border-4 border-gray-100 p-16 text-center w-full max-w-3xl">
+                  <div className="w-32 h-32 bg-gray-50 rounded-[32px] border-4 border-gray-200 flex items-center justify-center mx-auto mb-8 animate-bounce">
+                    <span className="text-6xl">🎮</span>
+                  </div>
+                  <h2 className="text-4xl font-black text-gray-900 tracking-tight">
+                    Trò chơi đang diễn ra!
+                  </h2>
+                  <p className="text-xl font-700 text-gray-500 mt-4">
+                    Người chơi hãy nhìn lên màn hình này.
+                  </p>
+                </div>
+              )}
 
-            {/* Bộ Điều Khiển Host */}
-            <div className="flex gap-4 w-full max-w-3xl">
-              <ActionButton
-                variant="primary"
-                fullWidth
-                onClick={nextSlide}
-                label="Qua Câu Tiếp Theo"
-                icon={ChevronRight}
-              />
-              <ActionButton
-                variant="danger"
-                onClick={endGame}
-                label="Kết Thúc Trò Chơi"
-                icon={X}
-              />
+              {/* Bảng xếp hạng thu gọn trực tiếp */}
+              {leaderboard.length > 0 && (
+                <div className="w-full max-w-3xl bg-white rounded-[32px] border-4 border-gray-100 shadow-[4px_4px_16px_rgba(0,0,0,0.05)] p-8">
+                  <div className="flex items-center gap-3 mb-6">
+                     <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center">
+                        <Trophy size={20} className="text-amber-600" />
+                     </div>
+                     <h3 className="text-xl font-900 text-gray-900 tracking-tight">
+                       Top Người Chơi Hiện Tại
+                     </h3>
+                  </div>
+                  <div className="space-y-3">
+                    {leaderboard.slice(0, 5).map((p, idx) => (
+                      <div
+                        key={p.playerId ?? idx}
+                        className="flex items-center gap-4 bg-gray-50 border-2 border-gray-100 p-3 rounded-2xl"
+                      >
+                        <div className="w-10 h-10 bg-white border-2 border-gray-200 rounded-xl flex items-center justify-center font-900 text-gray-500">
+                           {idx + 1}
+                        </div>
+                        <span className="flex-1 font-900 text-lg text-gray-900 truncate">
+                          {p.nickname}
+                        </span>
+                        <span className="font-black text-xl text-violet-600 bg-violet-100 px-4 py-1.5 rounded-xl border-2 border-violet-200">
+                          {p.totalScore?.toLocaleString("vi-VN")} pts
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Bộ Điều Khiển Host */}
+              <div className="flex gap-4 w-full max-w-3xl">
+                <ActionButton
+                  variant="primary"
+                  fullWidth
+                  onClick={nextSlide}
+                  label="Qua Câu Tiếp Theo"
+                  icon={ChevronRight}
+                />
+                <ActionButton
+                  variant="danger"
+                  onClick={endGame}
+                  label="Kết Thúc Trò Chơi"
+                  icon={X}
+                />
+              </div>
             </div>
-          </div>
+          )
         )}
 
         {/* ════════════════════════════════════════════════════════════

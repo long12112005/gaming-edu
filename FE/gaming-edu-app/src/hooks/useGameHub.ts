@@ -42,6 +42,13 @@ export function useGameHub() {
   const [slideTimeLeft, setSlideTimeLeft] = useState<number | null>(null);
   const [leaderboard, setLeaderboard] = useState<any[]>([]);
   const [answerResult, setAnswerResult] = useState<any>(null);
+  const [answerProgress, setAnswerProgress] = useState<{
+    slideId: string;
+    answeredCount: number;
+    totalPlayers: number;
+    distribution?: any;
+  } | null>(null);
+  const [distribution, setDistribution] = useState<any | null>(null);
 
   // Keep a ref to the connection to avoid closure issues
   const connectionRef = useRef<signalR.HubConnection | null>(null);
@@ -82,6 +89,22 @@ export function useGameHub() {
       setRoomInfo((prev: any) => ({ ...prev, ...info }));
     });
 
+    newConnection.on("RejoinedRoom", (data: any) => {
+      setRoomInfo(data);
+      if (data.status === "PLAYING" && data.currentSlide) {
+        setCurrentSlide(data.currentSlide);
+        setGameState("PLAYING");
+        setSlideTimeLeft(data.remainingSeconds);
+        if (data.hasAnswered && data.previousResult) {
+          setAnswerResult(data.previousResult);
+        }
+      } else if (data.status === "FINISHED") {
+        setGameState("FINISHED");
+      } else {
+        setGameState("WAITING");
+      }
+    });
+
     newConnection.on("PlayerJoined", (player: PlayerInfo) => {
       setPlayers((prev) => {
         if (prev.find((p) => p.playerId === player.playerId)) return prev;
@@ -107,6 +130,8 @@ export function useGameHub() {
       setGameState("PLAYING");
       setSlideTimeLeft(slide.timeLimit);
       setAnswerResult(null); // Reset previous answer
+      setAnswerProgress(null);
+      setDistribution(null);
     });
 
     newConnection.on("CountdownStarted", (seconds: number) => {
@@ -132,6 +157,17 @@ export function useGameHub() {
 
     newConnection.on("AnswerAccepted", (data: any) => {
       // Logic when answer is accepted
+    });
+
+    newConnection.on("AnswerCountUpdated", (data: any) => {
+      setAnswerProgress(data);
+      if (data.distribution) {
+        setDistribution(data.distribution);
+      }
+    });
+
+    newConnection.on("DistributionUpdated", (data: any) => {
+      setDistribution(data);
     });
 
     newConnection.on("AnswerResult", (result: any) => {
@@ -221,6 +257,18 @@ export function useGameHub() {
     }
   }, []);
 
+  const rejoinRoom = useCallback(async (pinCode: string, playerId?: string, nickname?: string) => {
+    if (connectionRef.current?.state === signalR.HubConnectionState.Connected) {
+      await connectionRef.current.invoke("RejoinRoom", pinCode, playerId, nickname);
+    }
+  }, []);
+
+  const getSlideDistribution = useCallback(async (roomId: string, slideId: string) => {
+    if (connectionRef.current?.state === signalR.HubConnectionState.Connected) {
+      await connectionRef.current.invoke("GetSlideDistribution", roomId, slideId);
+    }
+  }, []);
+
   return {
     connection,
     isConnected,
@@ -233,8 +281,12 @@ export function useGameHub() {
     slideTimeLeft,
     leaderboard,
     answerResult,
+    answerProgress,
+    distribution,
     joinRoom,
     hostJoinRoom,
+    rejoinRoom,
+    getSlideDistribution,
     startGame,
     nextSlide,
     startCountdown,

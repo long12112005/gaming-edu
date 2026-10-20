@@ -120,6 +120,95 @@ public class GameHub : Hub
     }
 
     // ═══════════════════════════════════════════════════════════════════
+    // ── REJOIN ROOM (FAULT TOLERANCE / RECOVERY) ────────────────────────
+    // Cho phép người chơi rớt mạng / F5 kết nối lại phòng
+    // ═══════════════════════════════════════════════════════════════════
+    public async Task RejoinRoom(string pinCode, Guid? playerId, string? nickname)
+    {
+        try
+        {
+            var playerData = await _roomService.RejoinRoomPlayerAsync(pinCode, playerId, nickname);
+            if (playerData is null)
+            {
+                // Fallback: nếu phòng vẫn WAITING thì gọi JoinRoom thông thường
+                await JoinRoom(new JoinRoomRequest(pinCode, nickname ?? "Player", null));
+                return;
+            }
+
+            var groupName = $"room_{playerData.PinCode}";
+            await Groups.AddToGroupAsync(Context.ConnectionId, groupName);
+
+            Context.Items["RoomId"]    = playerData.RoomId;
+            Context.Items["PlayerId"]  = playerData.PlayerId;
+            Context.Items["GroupName"] = groupName;
+            Context.Items["PinCode"]   = playerData.PinCode;
+
+            // Lấy slide hiện tại nếu game đang chạy
+            var currentSlideDto = await GetCurrentSlideAsync(playerData.RoomId, playerData.PinCode);
+            bool hasAnswered = false;
+            AnswerResultDto? previousResult = null;
+            int remainingSeconds = 0;
+
+            if (currentSlideDto != null)
+            {
+                var response = await _roomService.GetPlayerResponseAsync(playerData.PlayerId, currentSlideDto.SlideId);
+                if (response != null)
+                {
+                    hasAnswered = true;
+                    previousResult = new AnswerResultDto(
+                        response.IsCorrect,
+                        response.ScoreAwarded,
+                        playerData.TotalScore,
+                        "",
+                        playerData.Rank,
+                        0
+                    );
+                }
+
+                // Check remaining timer
+                var timerCheck = await _timer.CheckAsync(playerData.RoomId, playerData.PlayerId, currentSlideDto.SlideId);
+                remainingSeconds = Math.Max(0, currentSlideDto.TimeLimit - (timerCheck.ElapsedMs / 1000));
+            }
+
+            await Clients.Caller.SendAsync("RejoinedRoom", new
+            {
+                playerData.RoomId,
+                playerData.PlayerId,
+                playerData.PinCode,
+                playerData.Mode,
+                playerData.Status,
+                playerData.PlayerNickname,
+                playerData.TotalScore,
+                playerData.Rank,
+                playerData.Theme,
+                CurrentSlide = currentSlideDto,
+                RemainingSeconds = remainingSeconds,
+                HasAnswered = hasAnswered,
+                PreviousResult = previousResult,
+            });
+
+            _logger.LogInformation("Player '{Nickname}' successfully rejoined room {PinCode}", playerData.PlayerNickname, playerData.PinCode);
+        }
+        catch (Exception ex)
+        {
+            await SendErrorAsync(ex.Message);
+        }
+    }
+
+    public async Task GetSlideDistribution(Guid roomId, Guid slideId)
+    {
+        try
+        {
+            var distribution = await _roomService.GetSlideAnswerDistributionAsync(roomId, slideId);
+            await Clients.Caller.SendAsync("DistributionUpdated", distribution);
+        }
+        catch (Exception ex)
+        {
+            await SendErrorAsync(ex.Message);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
     // ── HOST JOIN ROOM ─────────────────────────────────────────────────
     // Host gắn kết nối vào phòng (không tạo room_players) để điều khiển game
     // ═══════════════════════════════════════════════════════════════════

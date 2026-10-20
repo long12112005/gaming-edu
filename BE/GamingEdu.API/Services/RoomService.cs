@@ -31,6 +31,9 @@ public interface IRoomService
     Task<IEnumerable<PlayedRoomHistoryDto>> GetPlayedRoomsHistoryAsync(Guid userId);
     Task<string> GetRoomThemeAsync(Guid roomId);
     Task SetRoomThemeAsync(Guid roomId, string theme);
+    Task<SlideDistributionDto> GetSlideAnswerDistributionAsync(Guid roomId, Guid slideId);
+    Task<PlayerRejoinDataDto?> RejoinRoomPlayerAsync(string pinCode, Guid? playerId, string? nickname);
+    Task<PlayerResponse?> GetPlayerResponseAsync(Guid roomPlayerId, Guid slideId);
 }
 
 public class RoomService : IRoomService
@@ -184,10 +187,13 @@ public class RoomService : IRoomService
         double maxTime    = slide.TimeLimit * 1000.0; // ms
         double elapsed    = Math.Min(request.ResponseTimeMs, maxTime);
         double speedFactor = Math.Max(0.1, 1.0 - (elapsed / maxTime));
+        double speedMultiplier = Math.Round(1.0 + (speedFactor * 0.5), 2);
 
         // ── Chấm điểm theo loại câu hỏi ──────────────────────────────
         bool   isCorrect    = false;
         int    scoreAwarded = 0;
+        int    streak       = 0;
+        int    streakBonus  = 0;
         string correctAnswer;
 
         if (slide.Type == "FILL_IN_BLANK")
@@ -237,6 +243,26 @@ public class RoomService : IRoomService
                 scoreAwarded = (int)Math.Round(slide.Points * speedFactor);
         }
 
+        // ── Tính Streak và Streak Bonus ───────────────────────────────
+        string streakKey = $"room_streak:{roomPlayerId}";
+        if (isCorrect)
+        {
+            var rawStreak = await _cacheStore.GetStringAsync(streakKey);
+            int.TryParse(rawStreak, out streak);
+            streak += 1;
+            await _cacheStore.SetStringAsync(streakKey, streak.ToString(), TimeSpan.FromHours(4));
+
+            if (streak >= 2)
+            {
+                streakBonus = Math.Min(streak - 1, 5) * 50; // max +250
+                scoreAwarded += streakBonus;
+            }
+        }
+        else
+        {
+            await _cacheStore.SetStringAsync(streakKey, "0", TimeSpan.FromHours(4));
+        }
+
         // Save response to player_responses table
         var response = new PlayerResponse
         {
@@ -265,8 +291,57 @@ public class RoomService : IRoomService
         int? rankAfter = await _leaderboard.GetRankAsync(player.RoomId, roomPlayerId);
         int rankChange = (rankBefore.HasValue && rankAfter.HasValue) ? rankBefore.Value - rankAfter.Value : 0;
 
-        return new AnswerResultDto(isCorrect, scoreAwarded, player.TotalScore, correctAnswer,
-            rankAfter ?? 0, rankChange);
+        return new AnswerResultDto(
+            isCorrect, 
+            scoreAwarded, 
+            player.TotalScore, 
+            correctAnswer,
+            rankAfter ?? 0, 
+            rankChange,
+            false,
+            streak,
+            speedMultiplier,
+            streakBonus
+        );
+    }
+
+    public async Task<SlideDistributionDto> GetSlideAnswerDistributionAsync(Guid roomId, Guid slideId)
+    {
+        var slide = await _db.Slides
+            .Include(s => s.Options)
+            .FirstOrDefaultAsync(s => s.Id == slideId);
+
+        if (slide == null)
+            return new SlideDistributionDto(slideId, 0, 0, []);
+
+        var totalPlayers = await _db.RoomPlayers.CountAsync(rp => rp.RoomId == roomId);
+
+        var responses = await _db.PlayerResponses
+            .Where(pr => pr.SlideId == slideId && pr.RoomPlayer.RoomId == roomId)
+            .ToListAsync();
+
+        var totalAnswers = responses.Count;
+
+        var optionsDto = slide.Options
+            .OrderBy(o => o.OrderIndex)
+            .Select(o =>
+            {
+                int count = responses.Count(r => 
+                    r.AnswerData == o.Id.ToString() || 
+                    (r.AnswerData != null && r.AnswerData.Equals(o.Content, StringComparison.OrdinalIgnoreCase)));
+                double pct = totalAnswers > 0 ? Math.Round((double)count / totalAnswers * 100, 1) : 0;
+                return new OptionDistributionDto(
+                    o.Id,
+                    o.Content,
+                    o.OrderIndex,
+                    o.IsCorrect,
+                    count,
+                    pct
+                );
+            })
+            .ToList();
+
+        return new SlideDistributionDto(slideId, totalAnswers, totalPlayers, optionsDto);
     }
 
     // ── LEADERBOARD ────────────────────────────────────────────────────
@@ -332,6 +407,44 @@ public class RoomService : IRoomService
     {
         var draftKey = $"draft_answer:{roomPlayerId}:{slideId}";
         return await _cacheStore.GetStringAsync(draftKey);
+    }
+
+    public async Task<PlayerRejoinDataDto?> RejoinRoomPlayerAsync(string pinCode, Guid? playerId, string? nickname)
+    {
+        var room = await _db.Rooms.FirstOrDefaultAsync(r => r.PinCode == pinCode);
+        if (room is null) return null;
+
+        RoomPlayer? player = null;
+        if (playerId.HasValue)
+        {
+            player = await _db.RoomPlayers.FirstOrDefaultAsync(p => p.Id == playerId.Value && p.RoomId == room.Id);
+        }
+        if (player is null && !string.IsNullOrWhiteSpace(nickname))
+        {
+            player = await _db.RoomPlayers.FirstOrDefaultAsync(p => p.Nickname == nickname.Trim() && p.RoomId == room.Id);
+        }
+        if (player is null) return null;
+
+        var theme = await GetRoomThemeAsync(room.Id);
+        var rank = await _leaderboard.GetRankAsync(room.Id, player.Id) ?? 1;
+
+        return new PlayerRejoinDataDto(
+            room.Id,
+            player.Id,
+            room.PinCode,
+            room.Mode,
+            room.Status,
+            player.Nickname,
+            player.TotalScore,
+            rank,
+            theme
+        );
+    }
+
+    public async Task<PlayerResponse?> GetPlayerResponseAsync(Guid roomPlayerId, Guid slideId)
+    {
+        return await _db.PlayerResponses
+            .FirstOrDefaultAsync(pr => pr.RoomPlayerId == roomPlayerId && pr.SlideId == slideId);
     }
 
     // ── FINISH ROOM (PODIUM) ───────────────────────────────────────────
