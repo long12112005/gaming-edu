@@ -90,6 +90,8 @@ public class GameHub : Hub
             _logger.LogInformation(
                 "Player '{Nickname}' joined room {PinCode}", player.Nickname, room.PinCode);
 
+            var theme = await _roomService.GetRoomThemeAsync(room.Id);
+
             // Confirm to the joining player
             await Clients.Caller.SendAsync("JoinedRoom", new
             {
@@ -99,6 +101,7 @@ public class GameHub : Hub
                 Mode       = room.Mode,
                 QuizId     = room.QuizId,
                 PlayerNickname = player.Nickname,
+                Theme      = theme,
             });
 
             // Broadcast to all players in the room (including host)
@@ -151,6 +154,8 @@ public class GameHub : Hub
             Context.Items["GroupName"] = groupName;
             Context.Items["PinCode"]   = room.PinCode;
 
+            var hostTheme = await _roomService.GetRoomThemeAsync(room.Id);
+
             // Gửi danh sách người chơi hiện có (phòng hợp lệ khi host F5 trang)
             var players = room.Players
                 .OrderBy(p => p.JoinedAt)
@@ -158,10 +163,11 @@ public class GameHub : Hub
             await Clients.Caller.SendAsync("LoadPlayers", players);
             await Clients.Caller.SendAsync("HostJoined", new
             {
-                RoomId  = room.Id,
-                PinCode = room.PinCode,
-                Status  = room.Status,
+                RoomId   = room.Id,
+                PinCode  = room.PinCode,
+                Status   = room.Status,
                 IsLocked = LockedRooms.Contains(room.PinCode),
+                Theme    = hostTheme,
             });
         }
         catch (Exception ex)

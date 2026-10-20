@@ -78,6 +78,10 @@ export function useGameHub() {
       setRoomInfo(info);
     });
 
+    newConnection.on("HostJoined", (info: any) => {
+      setRoomInfo((prev: any) => ({ ...prev, ...info }));
+    });
+
     newConnection.on("PlayerJoined", (player: PlayerInfo) => {
       setPlayers((prev) => {
         if (prev.find((p) => p.playerId === player.playerId)) return prev;
@@ -157,6 +161,12 @@ export function useGameHub() {
     }
   }, []);
 
+  const hostJoinRoom = useCallback(async (pinCode: string) => {
+    if (connectionRef.current?.state === signalR.HubConnectionState.Connected) {
+      await connectionRef.current.invoke("HostJoinRoom", pinCode);
+    }
+  }, []);
+
   const startGame = useCallback(async (roomId: string) => {
     if (connectionRef.current?.state === signalR.HubConnectionState.Connected) {
       await connectionRef.current.invoke("StartGame", roomId);
@@ -224,6 +234,7 @@ export function useGameHub() {
     leaderboard,
     answerResult,
     joinRoom,
+    hostJoinRoom,
     startGame,
     nextSlide,
     startCountdown,

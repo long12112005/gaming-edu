@@ -26,8 +26,11 @@ public interface IRoomService
     Task<string?> GetDraftAnswerAsync(Guid roomPlayerId, Guid slideId);
     Task<IEnumerable<LeaderboardEntryDto>> FinishRoomAsync(Guid roomId, Guid hostId);
     Task<byte[]> ExportRoomReportAsync(Guid roomId, Guid hostId);
+    Task<HostedRoomHistoryDto?> GetHostedRoomDetailsAsync(Guid roomId, Guid hostId) => Task.FromResult<HostedRoomHistoryDto?>(null);
     Task<IEnumerable<HostedRoomHistoryDto>> GetHostedRoomsHistoryAsync(Guid hostId);
     Task<IEnumerable<PlayedRoomHistoryDto>> GetPlayedRoomsHistoryAsync(Guid userId);
+    Task<string> GetRoomThemeAsync(Guid roomId);
+    Task SetRoomThemeAsync(Guid roomId, string theme);
 }
 
 public class RoomService : IRoomService
@@ -88,12 +91,16 @@ public class RoomService : IRoomService
         _db.Rooms.Add(room);
         await _db.SaveChangesAsync();
 
-        _logger.LogInformation("Room created: PIN={Pin}, Mode={Mode}", pin, request.Mode);
+        var theme = string.IsNullOrWhiteSpace(request.GameModeTheme) ? "SPEED_RACER" : request.GameModeTheme.Trim();
+        await _cacheStore.SetStringAsync($"room_theme:{room.Id}", theme, TimeSpan.FromDays(2));
+        await _cacheStore.SetStringAsync($"room_theme:pin:{pin}", theme, TimeSpan.FromDays(2));
+
+        _logger.LogInformation("Room created: PIN={Pin}, Mode={Mode}, Theme={Theme}", pin, request.Mode, theme);
 
         string qrCodeBase64 = GenerateQrCodeBase64(pin);
 
         return new RoomDto(room.Id, room.PinCode, room.Mode, room.Status,
-            room.QuizId, quiz.Title, room.CreatedAt, qrCodeBase64);
+            room.QuizId, quiz.Title, room.CreatedAt, qrCodeBase64, theme);
     }
 
     private string GenerateQrCodeBase64(string pin)
@@ -573,5 +580,16 @@ public class RoomService : IRoomService
                 .SelectMany(o => (o.BlankKeywords ?? "").Split(',', StringSplitOptions.TrimEntries)));
 
         return "–";
+    }
+
+    public async Task<string> GetRoomThemeAsync(Guid roomId)
+    {
+        var theme = await _cacheStore.GetStringAsync($"room_theme:{roomId}");
+        return string.IsNullOrWhiteSpace(theme) ? "SPEED_RACER" : theme;
+    }
+
+    public async Task SetRoomThemeAsync(Guid roomId, string theme)
+    {
+        await _cacheStore.SetStringAsync($"room_theme:{roomId}", theme, TimeSpan.FromDays(2));
     }
 }

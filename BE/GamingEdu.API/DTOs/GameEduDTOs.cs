@@ -184,7 +184,8 @@ public record ApproveAllResult(int ApprovedCount);
 
 public record CreateRoomRequest(
     [Required] Guid QuizId,
-    [Required] string Mode   // HOST_PACED | PLAYER_PACED | ASYNC_TOURNAMENT
+    [Required] string Mode,   // HOST_PACED | PLAYER_PACED | ASYNC_TOURNAMENT
+    string? GameModeTheme = "SPEED_RACER"
 );
 
 public record RoomDto(
@@ -195,7 +196,8 @@ public record RoomDto(
     Guid QuizId,
     string QuizTitle,
     DateTime CreatedAt,
-    string? QrCodeBase64 = null
+    string? QrCodeBase64 = null,
+    string? GameModeTheme = "SPEED_RACER"
 );
 
 public record JoinRoomRequest(

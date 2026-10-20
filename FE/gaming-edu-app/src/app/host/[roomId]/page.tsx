@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { api } from "@/lib/api";
 import Link from "next/link";
+import { getThemeById } from "@/lib/gameThemes";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
@@ -170,6 +171,8 @@ export default function HostLobbyPage() {
     currentSlide,
     leaderboard,
     joinRoom,
+    hostJoinRoom,
+    roomInfo,
     startGame: hubStartGame,
     nextSlide: hubNextSlide,
     endGame: hubEndGame,
@@ -187,6 +190,24 @@ export default function HostLobbyPage() {
   const [starting, setStarting] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [showQA, setShowQA] = useState(false);
+  const [selectedThemeId, setSelectedThemeId] = useState<string>("SPEED_RACER");
+
+  // Read theme from URL or roomInfo
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const themeParam = urlParams.get("theme");
+    if (themeParam) {
+      setSelectedThemeId(themeParam);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (roomInfo?.theme) {
+      setSelectedThemeId(roomInfo.theme);
+    }
+  }, [roomInfo?.theme]);
+
+  const currentTheme = getThemeById(selectedThemeId);
 
   // ── Init SignalR ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -205,10 +226,14 @@ export default function HostLobbyPage() {
         setPinCode(pin);
         const userStr = Cookies.get("user");
         const user = userStr ? JSON.parse(userStr) : null;
-        joinRoom(pin, user?.nickname ?? "Host");
+        if (hostJoinRoom) {
+          hostJoinRoom(pin);
+        } else {
+          joinRoom(pin, user?.nickname ?? "Host");
+        }
       }
     }
-  }, [isConnected, joinRoom]);
+  }, [isConnected, hostJoinRoom, joinRoom]);
 
   useEffect(() => {
     if (gameState === "FINISHED") {
@@ -341,11 +366,15 @@ export default function HostLobbyPage() {
               <Trophy size={24} className="text-white" />
             </div>
             <div>
-              <div className="font-900 text-gray-900 text-xl tracking-tight">
-                Màn Hình Trình Chiếu (Host)
+              <div className="font-900 text-gray-900 text-xl tracking-tight flex items-center gap-2.5">
+                <span>Màn Hình Trình Chiếu (Host)</span>
+                <span className={`inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-900 border ${currentTheme.badgeClass}`}>
+                  <span>{currentTheme.icon}</span>
+                  <span>{currentTheme.name}</span>
+                </span>
               </div>
               <div className="text-sm font-700 text-gray-500">
-                {gameState === "WAITING" && "Đang chờ người chơi vào phòng..."}
+                {gameState === "WAITING" && `Đang chờ người chơi vào phòng • ${currentTheme.tagline}`}
                 {gameState === "STARTING" && "Chuẩn bị bắt đầu..."}
                 {(gameState === "PLAYING" || gameState === "LEADERBOARD") &&
                   `Câu ${currentSlide?.index !== undefined ? currentSlide.index + 1 : "?"} đang diễn ra`}
@@ -370,6 +399,46 @@ export default function HostLobbyPage() {
         ════════════════════════════════════════════════════════════ */}
         {gameState === "WAITING" && (
           <div className="space-y-8 animate-fade-in-up">
+            {/* Mini-Game Theme Showcase Banner */}
+            <div className="bg-white rounded-[32px] border-4 border-violet-100 shadow-[4px_4px_16px_rgba(0,0,0,0.05)] p-6 relative overflow-hidden">
+              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 relative z-10">
+                <div className="flex items-center gap-4">
+                  <div className={`w-16 h-16 rounded-[22px] bg-gradient-to-br ${currentTheme.gradient} flex items-center justify-center text-3xl shadow-lg shrink-0`}>
+                    {currentTheme.icon}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span className="text-[11px] font-900 tracking-wider uppercase px-2.5 py-0.5 rounded-full bg-violet-100 text-violet-700 border border-violet-200">
+                        Chủ Đề Mini-Game
+                      </span>
+                      <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${currentTheme.badgeClass}`}>
+                        {currentTheme.categoryLabel}
+                      </span>
+                    </div>
+                    <h2 className="text-2xl font-900 text-gray-900">
+                      {currentTheme.name}{" "}
+                      <span className="text-sm font-700 text-gray-400 font-mono">({currentTheme.tagline})</span>
+                    </h2>
+                    <p className="text-sm font-semibold text-gray-600 mt-1 max-w-2xl">
+                      {currentTheme.description}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="bg-slate-50 border-2 border-slate-200/80 rounded-2xl px-4 py-2.5 max-w-xs shrink-0 w-full md:w-auto">
+                  <div className="text-[10px] font-800 text-gray-400 uppercase tracking-wider mb-0.5 flex items-center gap-1">
+                    <Zap size={12} className="text-amber-500" />
+                    Điểm Nhấn Kỹ Thuật
+                  </div>
+                  <div className="text-xs font-bold text-slate-700 leading-snug">
+                    {currentTheme.techHighlight}
+                  </div>
+                </div>
+              </div>
+
+              <div className={`absolute top-0 right-0 w-80 h-full bg-gradient-to-l ${currentTheme.gradient} opacity-5 pointer-events-none`} />
+            </div>
+
             {/* PIN Display Card (Khối hiển thị mã PIN bự chà bá) */}
             <div className="bg-white rounded-[40px] border-4 border-violet-100 shadow-[4px_4px_16px_rgba(0,0,0,0.05),_inset_-4px_-4px_8px_rgba(0,0,0,0.02)] p-10 text-center relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-8">
               
@@ -471,8 +540,14 @@ export default function HostLobbyPage() {
             {/* Hiển thị câu hỏi hiện tại trên màn chiếu */}
             {currentSlide ? (
               <div className="w-full bg-white rounded-[40px] shadow-[4px_4px_16px_rgba(0,0,0,0.05)] border-4 border-violet-100 p-8 md:p-14 text-center">
-                <div className="inline-block bg-violet-100 border-2 border-violet-200 text-violet-700 font-900 px-6 py-2 rounded-2xl uppercase tracking-widest text-sm shadow-sm mb-8">
-                  Câu hỏi {currentSlide?.index !== undefined ? currentSlide.index + 1 : "?"}
+                <div className="flex items-center justify-center gap-3 mb-8">
+                  <div className="inline-block bg-violet-100 border-2 border-violet-200 text-violet-700 font-900 px-6 py-2 rounded-2xl uppercase tracking-widest text-sm shadow-sm">
+                    Câu hỏi {currentSlide?.index !== undefined ? currentSlide.index + 1 : "?"}
+                  </div>
+                  <div className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-2xl text-xs font-900 border ${currentTheme.badgeClass}`}>
+                    <span>{currentTheme.icon}</span>
+                    <span>{currentTheme.name}</span>
+                  </div>
                 </div>
                 <h2 className="text-3xl md:text-5xl font-black text-gray-900 mb-12 leading-tight tracking-tight max-w-4xl mx-auto">
                   {currentSlide.questionText}
