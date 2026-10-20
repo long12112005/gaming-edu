@@ -370,6 +370,13 @@ public class GameHub : Hub
             var pinCode   = Context.Items["PinCode"] as string ?? "";
             var groupName = $"room_{pinCode}";
 
+            // Xử lý phạt timeout cho những người không nộp ở câu hỏi trước (cho Battle Royale)
+            var prevSlide = await GetCurrentSlideAsync(roomId, pinCode);
+            if (prevSlide != null)
+            {
+                await _roomService.ApplyBattleRoyaleTimeoutPenaltyAsync(roomId, prevSlide.SlideId);
+            }
+
             // Increment slide index
             RoomSlideIndex.TryGetValue(pinCode, out int currentIdx);
             RoomSlideIndex[pinCode] = currentIdx + 1;
@@ -530,6 +537,19 @@ public class GameHub : Hub
             });
 
             _logger.LogInformation("Game ended in room {RoomId}", roomId);
+        }
+        catch (Exception ex)
+        {
+            await SendErrorAsync(ex.Message);
+        }
+    }
+
+    public async Task GetBattleRoyaleState(Guid roomId)
+    {
+        try
+        {
+            var state = await _roomService.GetBattleRoyaleStateAsync(roomId);
+            await Clients.Caller.SendAsync("SurvivalStatusUpdated", state);
         }
         catch (Exception ex)
         {

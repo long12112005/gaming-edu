@@ -34,6 +34,10 @@ public interface IRoomService
     Task<SlideDistributionDto> GetSlideAnswerDistributionAsync(Guid roomId, Guid slideId);
     Task<PlayerRejoinDataDto?> RejoinRoomPlayerAsync(string pinCode, Guid? playerId, string? nickname);
     Task<PlayerResponse?> GetPlayerResponseAsync(Guid roomPlayerId, Guid slideId);
+    Task<int> GetPlayerHpAsync(Guid roomId, Guid roomPlayerId);
+    Task SetPlayerHpAsync(Guid roomId, Guid roomPlayerId, int hp);
+    Task<BattleRoyaleStateDto> GetBattleRoyaleStateAsync(Guid roomId);
+    Task ApplyBattleRoyaleTimeoutPenaltyAsync(Guid roomId, Guid slideId);
 }
 
 public class RoomService : IRoomService
@@ -154,6 +158,9 @@ public class RoomService : IRoomService
         await EnsureLeaderboardAsync(room.Id);
         await _leaderboard.SetScoreAsync(room.Id, player.Id, 0);
 
+        // Khởi tạo HP mặc định 100 cho người chơi
+        await SetPlayerHpAsync(room.Id, player.Id, 100);
+
         return (room, player);
     }
 
@@ -191,12 +198,51 @@ public class RoomService : IRoomService
 
         // ── Chấm điểm theo loại câu hỏi ──────────────────────────────
         bool   isCorrect    = false;
+        double partialRatio = 1.0;
         int    scoreAwarded = 0;
         int    streak       = 0;
         int    streakBonus  = 0;
         string correctAnswer;
 
-        if (slide.Type == "FILL_IN_BLANK")
+        if (slide.Type == "QUIZ")
+        {
+            var selectedIds = ParseOptionIds(request.AnswerData);
+            var correctOptions = slide.Options.Where(o => o.IsCorrect).Select(o => o.Id).ToHashSet();
+            int totalCorrect = correctOptions.Count;
+
+            if (totalCorrect == 0)
+            {
+                isCorrect = true;
+                partialRatio = 1.0;
+            }
+            else
+            {
+                int correctSelected = selectedIds.Count(id => correctOptions.Contains(id));
+                int wrongSelected = selectedIds.Count(id => !correctOptions.Contains(id));
+
+                if (correctSelected == totalCorrect && wrongSelected == 0)
+                {
+                    isCorrect = true;
+                    partialRatio = 1.0;
+                }
+                else if (correctSelected > 0)
+                {
+                    // Partial Credit: Tính tỷ lệ đúng trừ đi hình phạt nếu chọn nhầm
+                    double penalty = wrongSelected * 0.5 / Math.Max(1, slide.Options.Count - totalCorrect);
+                    partialRatio = Math.Max(0.0, Math.Round(((double)correctSelected / totalCorrect) - penalty, 2));
+                    isCorrect = partialRatio >= 0.99;
+                }
+                else
+                {
+                    isCorrect = false;
+                    partialRatio = 0.0;
+                }
+            }
+
+            correctAnswer = GetCorrectAnswer(slide);
+            scoreAwarded = (int)Math.Round(slide.Points * partialRatio * speedFactor);
+        }
+        else if (slide.Type == "FILL_IN_BLANK")
         {
             // answerData = JSON array: ["đáp án blank 1", "đáp án blank 2", ...]
             List<string> userAnswers;
@@ -225,6 +271,7 @@ public class RoomService : IRoomService
                 _fuzzy.GradeFillInBlank(userAnswers, keywordSets);
 
             isCorrect    = isFullyCorrect;
+            partialRatio = scoreRatio;
             scoreAwarded = (int)Math.Round(slide.Points * scoreRatio * speedFactor);
             correctAnswer = string.Join(" | ", correctOptions
                 .Select(o => FuzzyMatchingService.ParseKeywords(o.BlankKeywords)
@@ -241,6 +288,8 @@ public class RoomService : IRoomService
 
             if (isCorrect)
                 scoreAwarded = (int)Math.Round(slide.Points * speedFactor);
+            else
+                partialRatio = 0.0;
         }
 
         // ── Tính Streak và Streak Bonus ───────────────────────────────
@@ -261,6 +310,49 @@ public class RoomService : IRoomService
         else
         {
             await _cacheStore.SetStringAsync(streakKey, "0", TimeSpan.FromHours(4));
+        }
+
+        // ── Battle Royale Sinh Tồn Logic ──────────────────────────────
+        var theme = await GetRoomThemeAsync(player.RoomId);
+        int currentHp = 100;
+        int maxHp = 100;
+        int hpDeducted = 0;
+        bool isEliminated = false;
+
+        if (theme == "BATTLE_ROYALE")
+        {
+            currentHp = await GetPlayerHpAsync(player.RoomId, roomPlayerId);
+            if (currentHp <= 0)
+            {
+                isEliminated = true;
+                currentHp = 0;
+                hpDeducted = 0;
+                // Người hết HP chuyển sang Bóng ma, vẫn được tích điểm phụ (50%)
+                scoreAwarded = (int)Math.Round(scoreAwarded * 0.5);
+            }
+            else
+            {
+                if (isCorrect)
+                {
+                    hpDeducted = 0;
+                }
+                else if (partialRatio > 0.0)
+                {
+                    // Giảm lượng HP bị trừ theo Partial Credit (tối đa 35 HP)
+                    hpDeducted = (int)Math.Round(35.0 * (1.0 - partialRatio));
+                }
+                else
+                {
+                    hpDeducted = 35; // Sai hoàn toàn hoặc không khớp
+                }
+
+                currentHp = Math.Max(0, currentHp - hpDeducted);
+                if (currentHp == 0)
+                {
+                    isEliminated = true;
+                }
+                await SetPlayerHpAsync(player.RoomId, roomPlayerId, currentHp);
+            }
         }
 
         // Save response to player_responses table
@@ -301,7 +393,12 @@ public class RoomService : IRoomService
             false,
             streak,
             speedMultiplier,
-            streakBonus
+            streakBonus,
+            currentHp,
+            maxHp,
+            hpDeducted,
+            isEliminated,
+            partialRatio
         );
     }
 
@@ -427,6 +524,8 @@ public class RoomService : IRoomService
 
         var theme = await GetRoomThemeAsync(room.Id);
         var rank = await _leaderboard.GetRankAsync(room.Id, player.Id) ?? 1;
+        int hp = await GetPlayerHpAsync(room.Id, player.Id);
+        bool isEliminated = hp <= 0;
 
         return new PlayerRejoinDataDto(
             room.Id,
@@ -437,7 +536,10 @@ public class RoomService : IRoomService
             player.Nickname,
             player.TotalScore,
             rank,
-            theme
+            theme,
+            hp,
+            100,
+            isEliminated
         );
     }
 
@@ -704,5 +806,119 @@ public class RoomService : IRoomService
     public async Task SetRoomThemeAsync(Guid roomId, string theme)
     {
         await _cacheStore.SetStringAsync($"room_theme:{roomId}", theme, TimeSpan.FromDays(2));
+    }
+
+    private static List<Guid> ParseOptionIds(string answerData)
+    {
+        var result = new List<Guid>();
+        if (string.IsNullOrWhiteSpace(answerData)) return result;
+
+        if (Guid.TryParse(answerData, out var singleId))
+        {
+            result.Add(singleId);
+            return result;
+        }
+
+        try
+        {
+            var parsed = JsonSerializer.Deserialize<List<string>>(answerData);
+            if (parsed != null)
+            {
+                foreach (var s in parsed)
+                {
+                    if (Guid.TryParse(s, out var g)) result.Add(g);
+                }
+                if (result.Count > 0) return result;
+            }
+        }
+        catch { }
+
+        var parts = answerData.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        foreach (var p in parts)
+        {
+            if (Guid.TryParse(p, out var g)) result.Add(g);
+        }
+
+        return result;
+    }
+
+    public async Task<int> GetPlayerHpAsync(Guid roomId, Guid roomPlayerId)
+    {
+        var raw = await _cacheStore.GetStringAsync($"room_hp:{roomPlayerId}");
+        if (int.TryParse(raw, out int hp)) return hp;
+
+        // Default 100 HP
+        await SetPlayerHpAsync(roomId, roomPlayerId, 100);
+        return 100;
+    }
+
+    public async Task SetPlayerHpAsync(Guid roomId, Guid roomPlayerId, int hp)
+    {
+        await _cacheStore.SetStringAsync($"room_hp:{roomPlayerId}", hp.ToString(), TimeSpan.FromHours(4));
+    }
+
+    public async Task<BattleRoyaleStateDto> GetBattleRoyaleStateAsync(Guid roomId)
+    {
+        var players = await _db.RoomPlayers
+            .AsNoTracking()
+            .Where(rp => rp.RoomId == roomId)
+            .OrderByDescending(rp => rp.TotalScore)
+            .ToListAsync();
+
+        int total = players.Count;
+        int survivors = 0;
+        int eliminated = 0;
+        var statusList = new List<PlayerSurvivalStatusDto>();
+
+        for (int i = 0; i < players.Count; i++)
+        {
+            var p = players[i];
+            int hp = await GetPlayerHpAsync(roomId, p.Id);
+            bool isDead = hp <= 0;
+            if (isDead) eliminated++;
+            else survivors++;
+
+            statusList.Add(new PlayerSurvivalStatusDto(
+                p.Id,
+                p.Nickname,
+                p.AvatarUrl,
+                hp,
+                100,
+                isDead,
+                p.TotalScore,
+                i + 1
+            ));
+        }
+
+        return new BattleRoyaleStateDto(total, survivors, eliminated, statusList);
+    }
+
+    public async Task ApplyBattleRoyaleTimeoutPenaltyAsync(Guid roomId, Guid slideId)
+    {
+        var theme = await GetRoomThemeAsync(roomId);
+        if (theme != "BATTLE_ROYALE") return;
+
+        var allPlayers = await _db.RoomPlayers
+            .Where(rp => rp.RoomId == roomId)
+            .ToListAsync();
+
+        var answeredPlayerIds = await _db.PlayerResponses
+            .Where(pr => pr.SlideId == slideId && pr.RoomPlayer.RoomId == roomId)
+            .Select(pr => pr.RoomPlayerId)
+            .ToHashSetAsync();
+
+        foreach (var p in allPlayers)
+        {
+            if (!answeredPlayerIds.Contains(p.Id))
+            {
+                // Người chơi hết giờ không trả lời: trừ 35 HP
+                int hp = await GetPlayerHpAsync(roomId, p.Id);
+                if (hp > 0)
+                {
+                    int newHp = Math.Max(0, hp - 35);
+                    await SetPlayerHpAsync(roomId, p.Id, newHp);
+                }
+            }
+        }
     }
 }

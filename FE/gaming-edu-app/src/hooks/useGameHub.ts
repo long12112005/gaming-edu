@@ -28,6 +28,24 @@ export interface SlideStartedPayload {
   options: SlideOptionPublic[];
 }
 
+export interface PlayerSurvivalStatus {
+  playerId: string;
+  nickname: string;
+  avatarUrl?: string;
+  currentHp: number;
+  maxHp: number;
+  isEliminated: boolean;
+  score: number;
+  rank: number;
+}
+
+export interface BattleRoyaleState {
+  totalPlayers: number;
+  survivorsCount: number;
+  eliminatedCount: number;
+  players: PlayerSurvivalStatus[];
+}
+
 export function useGameHub() {
   const [connection, setConnection] = useState<signalR.HubConnection | null>(null);
   const [isConnected, setIsConnected] = useState(false);
@@ -47,8 +65,10 @@ export function useGameHub() {
     answeredCount: number;
     totalPlayers: number;
     distribution?: any;
+    battleRoyale?: BattleRoyaleState;
   } | null>(null);
   const [distribution, setDistribution] = useState<any | null>(null);
+  const [battleRoyaleState, setBattleRoyaleState] = useState<BattleRoyaleState | null>(null);
 
   // Keep a ref to the connection to avoid closure issues
   const connectionRef = useRef<signalR.HubConnection | null>(null);
@@ -164,6 +184,13 @@ export function useGameHub() {
       if (data.distribution) {
         setDistribution(data.distribution);
       }
+      if (data.battleRoyale) {
+        setBattleRoyaleState(data.battleRoyale);
+      }
+    });
+
+    newConnection.on("SurvivalStatusUpdated", (data: BattleRoyaleState) => {
+      setBattleRoyaleState(data);
     });
 
     newConnection.on("DistributionUpdated", (data: any) => {
@@ -269,6 +296,12 @@ export function useGameHub() {
     }
   }, []);
 
+  const getBattleRoyaleState = useCallback(async (roomId: string) => {
+    if (connectionRef.current?.state === signalR.HubConnectionState.Connected) {
+      await connectionRef.current.invoke("GetBattleRoyaleState", roomId);
+    }
+  }, []);
+
   return {
     connection,
     isConnected,
@@ -283,10 +316,12 @@ export function useGameHub() {
     answerResult,
     answerProgress,
     distribution,
+    battleRoyaleState,
     joinRoom,
     hostJoinRoom,
     rejoinRoom,
     getSlideDistribution,
+    getBattleRoyaleState,
     startGame,
     nextSlide,
     startCountdown,

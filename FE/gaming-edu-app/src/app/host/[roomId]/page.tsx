@@ -29,6 +29,7 @@ import { api } from "@/lib/api";
 import Link from "next/link";
 import { getThemeById } from "@/lib/gameThemes";
 import SpeedRacerHostTrack from "@/components/games/speed-racer/SpeedRacerHostTrack";
+import BattleRoyaleHostArena from "@/components/games/battle-royale/BattleRoyaleHostArena";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
@@ -174,6 +175,7 @@ export default function HostLobbyPage() {
     slideTimeLeft,
     answerProgress,
     distribution,
+    battleRoyaleState,
     joinRoom,
     hostJoinRoom,
     roomInfo,
@@ -551,6 +553,18 @@ export default function HostLobbyPage() {
               distribution={distribution}
               gameState={gameState}
               slideTimeLeft={slideTimeLeft}
+              onNextSlide={nextSlide}
+              onEndGame={endGame}
+            />
+          ) : selectedThemeId === "BATTLE_ROYALE" ? (
+            <BattleRoyaleHostArena
+              currentSlide={currentSlide as any}
+              slideTimeLeft={slideTimeLeft}
+              answerProgress={answerProgress}
+              distribution={distribution}
+              leaderboard={leaderboard}
+              battleRoyaleState={battleRoyaleState}
+              players={players}
               onNextSlide={nextSlide}
               onEndGame={endGame}
             />

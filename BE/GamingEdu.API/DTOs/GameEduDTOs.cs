@@ -243,7 +243,12 @@ public record AnswerResultDto(
     bool IsTournamentLocked = false,
     int Streak = 0,
     double SpeedMultiplier = 1.0,
-    int StreakBonus = 0
+    int StreakBonus = 0,
+    int CurrentHp = 100,
+    int MaxHp = 100,
+    int HpDeducted = 0,
+    bool IsEliminated = false,
+    double PartialRatio = 1.0
 );
 
 public record OptionDistributionDto(
@@ -262,6 +267,24 @@ public record SlideDistributionDto(
     List<OptionDistributionDto> Options
 );
 
+public record PlayerSurvivalStatusDto(
+    Guid PlayerId,
+    string Nickname,
+    string? AvatarUrl,
+    int CurrentHp,
+    int MaxHp,
+    bool IsEliminated,
+    int Score,
+    int Rank
+);
+
+public record BattleRoyaleStateDto(
+    int TotalPlayers,
+    int SurvivorsCount,
+    int EliminatedCount,
+    List<PlayerSurvivalStatusDto> Players
+);
+
 public record PlayerRejoinDataDto(
     Guid RoomId,
     Guid PlayerId,
@@ -271,7 +294,10 @@ public record PlayerRejoinDataDto(
     string PlayerNickname,
     int TotalScore,
     int Rank,
-    string Theme
+    string Theme,
+    int CurrentHp = 100,
+    int MaxHp = 100,
+    bool IsEliminated = false
 );
 
 public record LeaderboardEntryDto(

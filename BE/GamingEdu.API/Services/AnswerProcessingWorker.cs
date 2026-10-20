@@ -131,13 +131,26 @@ public class AnswerProcessingWorker : BackgroundService
 
                     // 4. Phát sóng tiến độ nộp bài và phân bổ đáp án (Answer Distribution) thời gian thực
                     var distribution = await roomService.GetSlideAnswerDistributionAsync(payload.RoomId, payload.Request.SlideId);
+                    var theme = await roomService.GetRoomThemeAsync(payload.RoomId);
+                    BattleRoyaleStateDto? survival = null;
+                    if (theme == "BATTLE_ROYALE")
+                    {
+                        survival = await roomService.GetBattleRoyaleStateAsync(payload.RoomId);
+                    }
+
                     await _hubContext.Clients.Group(payload.GroupName).SendAsync("AnswerCountUpdated", new
                     {
                         SlideId = payload.Request.SlideId,
                         AnsweredCount = distribution.TotalAnswers,
                         TotalPlayers = distribution.TotalPlayers,
-                        Distribution = distribution
+                        Distribution = distribution,
+                        BattleRoyale = survival
                     }, cancellationToken: stoppingToken);
+
+                    if (survival != null)
+                    {
+                        await _hubContext.Clients.Group(payload.GroupName).SendAsync("SurvivalStatusUpdated", survival, cancellationToken: stoppingToken);
+                    }
                 }
             }
             catch (Exception ex)
