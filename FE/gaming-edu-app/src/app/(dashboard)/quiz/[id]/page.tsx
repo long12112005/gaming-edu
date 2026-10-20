@@ -20,6 +20,7 @@ import {
   Plus,
   Sparkles,
   Compass,
+  Link2,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import SiteHeader from "@/components/layout/SiteHeader";
@@ -104,9 +105,10 @@ function SlidePreviewCard({ slide, index }: { slide: any; index: number }) {
         {slide.questionText}
       </p>
 
-      {slide.type === "QUIZ" && slide.options && slide.options.length > 0 && (
+      {/* QUIZ & POLL Options */}
+      {(slide.type === "QUIZ" || slide.type === "POLL") && slide.options && slide.options.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-          {slide.options.slice(0, 4).map((opt: any, idx: number) => (
+          {slide.options.slice(0, 6).map((opt: any, idx: number) => (
             <div
               key={opt.id}
               className={`flex items-center gap-2.5 p-2.5 rounded-xl border text-sm font-semibold transition-all ${
@@ -124,6 +126,61 @@ function SlidePreviewCard({ slide, index }: { slide: any; index: number }) {
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* MATCHING Pairs Preview */}
+      {slide.type === "MATCHING" && slide.options && slide.options.length > 0 && (
+        <div className="space-y-2">
+          <div className="text-xs font-bold text-cyan-300 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+            <Link2 size={13} /> Các cặp ghép nối ({slide.options.length} cặp):
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {slide.options.map((opt: any, idx: number) => (
+              <div
+                key={opt.id}
+                className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-cyan-950/40 border border-cyan-400/30 text-xs font-bold"
+              >
+                <span className="text-white truncate max-w-[45%]">{opt.content}</span>
+                <span className="text-cyan-400 shrink-0 font-black">🔗</span>
+                <span className="text-amber-300 truncate max-w-[45%] text-right">{opt.matchingPair || "–"}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* FILL_IN_BLANK Blanks Preview */}
+      {slide.type === "FILL_IN_BLANK" && slide.options && slide.options.length > 0 && (
+        <div className="space-y-2">
+          <div className="text-xs font-bold text-amber-300 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+            <span>✏️</span> Vị trí từ khóa ({slide.options.length} ô trống):
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {slide.options.map((opt: any, idx: number) => (
+              <div
+                key={opt.id}
+                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-950/40 border border-amber-400/30 text-xs font-bold text-amber-200"
+              >
+                <span className="w-5 h-5 rounded-md bg-amber-500/20 text-amber-300 flex items-center justify-center text-[10px] font-black shrink-0">
+                  #{idx + 1}
+                </span>
+                <span className="text-white font-extrabold">{opt.content}</span>
+                {opt.blankKeywords && opt.blankKeywords !== opt.content && (
+                  <span className="text-amber-300/60 text-[11px] font-medium truncate max-w-[150px]">
+                    ({opt.blankKeywords})
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* WORD_CLOUD Preview */}
+      {slide.type === "WORD_CLOUD" && (
+        <div className="p-3 rounded-xl bg-sky-950/40 border border-sky-400/20 text-xs text-sky-200/80 italic text-center">
+          ☁️ Khảo sát và tổng hợp đám mây từ trực tiếp từ người chơi
         </div>
       )}
     </div>

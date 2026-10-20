@@ -89,10 +89,10 @@ export default function CreateQuizPage() {
               <ScrollText size={15} /> Khởi Tạo Bộ Đề Mới
             </div>
             <h1 className="text-3xl md:text-4xl font-bold font-serif text-[#0C3138] tracking-tight">
-              Tạo Bộ Câu Hỏi Trắc Nghiệm Mới
+              Tạo Bộ Đề Học Tập Mới
             </h1>
-            <p className="text-[#28535B] font-sans text-base max-w-md mx-auto">
-              Nhập tiêu đề và phân loại môn học để bắt đầu soạn thảo các câu hỏi trắc nghiệm.
+            <p className="text-[#28535B] font-sans text-base max-w-lg mx-auto">
+              Nhập tiêu đề và phân loại môn học để bắt đầu tạo các câu hỏi đa dạng: Trắc nghiệm, Điền khuyết, Ghép nối...
             </p>
           </div>
 

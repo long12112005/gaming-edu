@@ -26,6 +26,7 @@ import {
   Upload,
   AlignLeft,
   CheckCheck,
+  Link2,
 } from "lucide-react";
 import { api } from "@/lib/api";
 
@@ -37,6 +38,8 @@ interface OptionDraft {
   id: string; // temp uuid for UI
   content: string;
   isCorrect: boolean;
+  matchingPair?: string;  // Vế phải tương ứng cho MATCHING
+  blankKeywords?: string; // Các từ khóa chấp nhận cho FILL_IN_BLANK ("kw1, kw2")
 }
 
 interface SlideDraft {
@@ -69,22 +72,54 @@ const optionBgColors = [
 
 const tempId = () => `new-${Math.random().toString(36).slice(2, 9)}`;
 
-const blankSlide = (type: SlideType = "QUIZ"): SlideDraft => ({
-  id: tempId(),
-  type,
-  questionText: "",
-  timeLimit: 30,
-  points: 1000,
-  status: "DRAFT",
-  options: [
-    { id: tempId(), content: "", isCorrect: true },
-    { id: tempId(), content: "", isCorrect: false },
-    { id: tempId(), content: "", isCorrect: false },
-    { id: tempId(), content: "", isCorrect: false },
-  ],
-  isExpanded: true,
-  isSaving: false,
-});
+const blankSlide = (type: SlideType = "QUIZ"): SlideDraft => {
+  let defaultOptions: OptionDraft[] = [];
+  let defaultQuestion = "";
+
+  if (type === "MATCHING") {
+    defaultQuestion = "Hãy ghép nối các vế ở Cột A với đáp án tương ứng ở Cột B:";
+    defaultOptions = [
+      { id: tempId(), content: "Thủ đô của Việt Nam", isCorrect: true, matchingPair: "Hà Nội" },
+      { id: tempId(), content: "Thủ đô của nước Pháp", isCorrect: true, matchingPair: "Paris" },
+      { id: tempId(), content: "Thủ đô của nước Nhật", isCorrect: true, matchingPair: "Tokyo" },
+    ];
+  } else if (type === "FILL_IN_BLANK") {
+    defaultQuestion = "Thủ đô của nước Cộng hòa Xã hội Chủ nghĩa Việt Nam là [...]";
+    defaultOptions = [
+      { id: tempId(), content: "Hà Nội", isCorrect: true, blankKeywords: "Hà Nội, Ha Noi, hanoi" },
+    ];
+  } else if (type === "WORD_CLOUD") {
+    defaultQuestion = "Chia sẻ 1 từ khóa thể hiện cảm xúc của bạn:";
+    defaultOptions = [];
+  } else if (type === "POLL") {
+    defaultQuestion = "Theo bạn, phương án nào là phù hợp nhất?";
+    defaultOptions = [
+      { id: tempId(), content: "Phương án A", isCorrect: false },
+      { id: tempId(), content: "Phương án B", isCorrect: false },
+      { id: tempId(), content: "Phương án C", isCorrect: false },
+    ];
+  } else {
+    defaultQuestion = "";
+    defaultOptions = [
+      { id: tempId(), content: "", isCorrect: true },
+      { id: tempId(), content: "", isCorrect: false },
+      { id: tempId(), content: "", isCorrect: false },
+      { id: tempId(), content: "", isCorrect: false },
+    ];
+  }
+
+  return {
+    id: tempId(),
+    type,
+    questionText: defaultQuestion,
+    timeLimit: 30,
+    points: 1000,
+    status: "DRAFT",
+    options: defaultOptions,
+    isExpanded: true,
+    isSaving: false,
+  };
+};
 
 // ─── Option Input Row ──────────────────────────────────────────────────────────
 function OptionRow({
@@ -171,9 +206,63 @@ function SlideCard({
 }) {
   const hasError =
     !slide.questionText.trim() ||
-    ((slide.type === "QUIZ" || slide.type === "FILL_IN_BLANK") &&
-      !slide.options.some((o) => o.isCorrect && o.content.trim()));
+    (slide.type === "QUIZ" &&
+      (!slide.options.some((o) => o.isCorrect && o.content.trim()) || slide.options.filter((o) => o.content.trim()).length < 2)) ||
+    (slide.type === "MATCHING" &&
+      slide.options.filter((o) => o.content.trim() && (o.matchingPair ?? "").trim()).length < 2) ||
+    (slide.type === "FILL_IN_BLANK" &&
+      (slide.options.length === 0 || slide.options.some((o) => !o.content.trim() && !(o.blankKeywords ?? "").trim())));
 
+  // Chuyển đổi loại slide và nạp cấu trúc đáp án mặc định tương ứng
+  const changeSlideType = (newType: SlideType) => {
+    if (newType === slide.type) return;
+    let newOptions = [...slide.options];
+    let newQuestionText = slide.questionText;
+
+    if (newType === "MATCHING") {
+      const hasPairs = newOptions.some((o) => (o.matchingPair ?? "").trim());
+      if (!hasPairs || newOptions.length < 2) {
+        newOptions = [
+          { id: tempId(), content: "", isCorrect: true, matchingPair: "" },
+          { id: tempId(), content: "", isCorrect: true, matchingPair: "" },
+          { id: tempId(), content: "", isCorrect: true, matchingPair: "" },
+        ];
+      }
+    } else if (newType === "FILL_IN_BLANK") {
+      const hasKeywords = newOptions.some((o) => (o.blankKeywords ?? "").trim());
+      if (!hasKeywords || newOptions.length < 1) {
+        newOptions = [
+          { id: tempId(), content: "", isCorrect: true, blankKeywords: "" },
+        ];
+        if (!newQuestionText.includes("[...]")) {
+          newQuestionText = newQuestionText ? `${newQuestionText} [...]` : "Nội dung câu hỏi có chỗ trống [...]";
+        }
+      }
+    } else if (newType === "QUIZ") {
+      if (newOptions.length < 2 || newOptions.some((o) => o.matchingPair !== undefined)) {
+        newOptions = [
+          { id: tempId(), content: "", isCorrect: true },
+          { id: tempId(), content: "", isCorrect: false },
+          { id: tempId(), content: "", isCorrect: false },
+          { id: tempId(), content: "", isCorrect: false },
+        ];
+      }
+    } else if (newType === "POLL") {
+      if (newOptions.length < 2) {
+        newOptions = [
+          { id: tempId(), content: "", isCorrect: false },
+          { id: tempId(), content: "", isCorrect: false },
+          { id: tempId(), content: "", isCorrect: false },
+        ];
+      }
+    } else if (newType === "WORD_CLOUD") {
+      newOptions = [];
+    }
+
+    onUpdate({ type: newType, options: newOptions, questionText: newQuestionText });
+  };
+
+  // ── Handlers cho QUIZ & POLL ──────────────────────────────
   const addOption = () => {
     if (slide.options.length >= 6) return;
     onUpdate({
@@ -201,10 +290,61 @@ function SlideCard({
   };
 
   const deleteOption = (optId: string) => {
-    if (slide.options.length <= 2) return;
+    const minOptions = slide.type === "FILL_IN_BLANK" ? 1 : 2;
+    if (slide.options.length <= minOptions) return;
     onUpdate({
       options: slide.options.filter((o) => o.id !== optId),
     });
+  };
+
+  // ── Handlers cho MATCHING ─────────────────────────────────
+  const addMatchingPair = () => {
+    if (slide.options.length >= 8) return;
+    onUpdate({
+      options: [
+        ...slide.options,
+        { id: tempId(), content: "", isCorrect: true, matchingPair: "" },
+      ],
+    });
+  };
+
+  const updateMatchingOption = (optId: string, field: "content" | "matchingPair", val: string) => {
+    onUpdate({
+      options: slide.options.map((o) =>
+        o.id === optId ? { ...o, [field]: val } : o
+      ),
+    });
+  };
+
+  // ── Handlers cho FILL_IN_BLANK ────────────────────────────
+  const addBlankPosition = () => {
+    if (slide.options.length >= 6) return;
+    onUpdate({
+      options: [
+        ...slide.options,
+        { id: tempId(), content: "", isCorrect: true, blankKeywords: "" },
+      ],
+    });
+  };
+
+  const updateBlankOption = (optId: string, field: "content" | "blankKeywords", val: string) => {
+    onUpdate({
+      options: slide.options.map((o) => {
+        if (o.id !== optId) return o;
+        const updated = { ...o, [field]: val };
+        // Tự động đồng bộ sang blankKeywords nếu người dùng chỉ nhập đáp án chuẩn
+        if (field === "content" && !o.blankKeywords) {
+          updated.blankKeywords = val;
+        }
+        return updated;
+      }),
+    });
+  };
+
+  const insertBlankTag = () => {
+    const text = slide.questionText.trim();
+    const newText = text ? `${text} [...]` : "Nội dung câu hỏi có chỗ trống [...]";
+    onUpdate({ questionText: newText });
   };
 
   return (
@@ -251,7 +391,11 @@ function SlideCard({
               </span>
             )}
 
-            {hasError && <AlertCircle size={18} className="text-amber-500" />}
+            {hasError && (
+              <span className="text-xs font-bold text-amber-600 bg-amber-50 px-2.5 py-1 rounded-[10px] border border-amber-200 flex items-center gap-1">
+                <AlertCircle size={14} className="text-amber-500" /> Chưa đủ thông tin
+              </span>
+            )}
           </div>
           <p className="text-lg font-black text-gray-900 truncate mt-2">
             {slide.questionText || (
@@ -285,8 +429,8 @@ function SlideCard({
                   <button
                     key={t.type}
                     type="button"
-                    onClick={() => onUpdate({ type: t.type })}
-                    className={`text-xs font-bold px-3 py-2 rounded-[12px] border-2 transition-all ${
+                    onClick={() => changeSlideType(t.type)}
+                    className={`text-xs font-bold px-3 py-2 rounded-[12px] border-2 transition-all cursor-pointer ${
                       slide.type === t.type
                         ? "border-violet-500 bg-violet-100 text-violet-700 shadow-[0_2px_0_#8b5cf6] translate-y-[-2px]"
                         : "border-gray-200 bg-white text-gray-600 hover:border-gray-300"
@@ -337,19 +481,36 @@ function SlideCard({
 
           {/* Question Text */}
           <div>
-            <label className="text-sm font-black text-gray-800 block mb-2">
-              Nội Dung Câu Hỏi
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm font-black text-gray-800">
+                Nội Dung Câu Hỏi <span className="text-amber-500">*</span>
+              </label>
+              {slide.type === "FILL_IN_BLANK" && (
+                <button
+                  type="button"
+                  onClick={insertBlankTag}
+                  className="text-xs font-black text-amber-700 hover:text-amber-900 bg-amber-100 hover:bg-amber-200 px-3 py-1 rounded-[10px] transition-colors border border-amber-300 flex items-center gap-1 cursor-pointer"
+                >
+                  <Plus size={13} className="stroke-[3px]" /> Chèn nhanh ký hiệu [...]
+                </button>
+              )}
+            </div>
             <textarea
               value={slide.questionText}
               onChange={(e) => onUpdate({ questionText: e.target.value })}
-              placeholder="Nhập câu hỏi của bạn vào đây..."
+              placeholder={
+                slide.type === "FILL_IN_BLANK"
+                  ? "VD: Thủ đô của nước Việt Nam là [...] và thành phố đông dân nhất là [...]"
+                  : slide.type === "MATCHING"
+                  ? "VD: Hãy ghép nối các phát minh tương ứng với nhà bác học:"
+                  : "Nhập câu hỏi của bạn vào đây..."
+              }
               rows={3}
               className="w-full px-5 py-4 text-lg border-4 border-gray-100 rounded-[24px] bg-gray-50 focus:bg-white focus:border-violet-400 focus:shadow-[0_8px_24px_rgba(124,58,237,0.1)] outline-none transition-all resize-none font-bold text-gray-900 placeholder-gray-400"
             />
           </div>
 
-          {/* Options */}
+          {/* ── 1. DẠNG TRẮC NGHIỆM (QUIZ) & BÌNH CHỌN (POLL) ─────────────── */}
           {(slide.type === "QUIZ" || slide.type === "POLL") && (
             <div className="bg-white p-5 rounded-[24px] border-4 border-gray-100">
               <div className="flex items-center justify-between mb-4">
@@ -357,7 +518,7 @@ function SlideCard({
                   Các Lựa Chọn Đáp Án{" "}
                   {slide.type === "QUIZ" && (
                     <span className="text-gray-400 font-bold ml-2 text-xs">
-                      (Đánh dấu ✔️ cho câu đúng)
+                      (Đánh dấu ✔️ cho câu đúng, hỗ trợ chọn nhiều câu đúng)
                     </span>
                   )}
                 </label>
@@ -365,7 +526,7 @@ function SlideCard({
                   type="button"
                   onClick={addOption}
                   disabled={slide.options.length >= 6}
-                  className="text-xs font-black text-violet-600 hover:text-white bg-violet-50 hover:bg-violet-500 flex items-center gap-1.5 px-3 py-2 rounded-[12px] transition-colors disabled:opacity-50"
+                  className="text-xs font-black text-violet-600 hover:text-white bg-violet-50 hover:bg-violet-500 flex items-center gap-1.5 px-3 py-2 rounded-[12px] transition-colors disabled:opacity-50 cursor-pointer"
                 >
                   <Plus size={14} className="stroke-[3px]" /> Thêm Lựa Chọn
                 </button>
@@ -386,20 +547,215 @@ function SlideCard({
             </div>
           )}
 
-          {/* FILL_IN_BLANK helper */}
+          {/* ── 2. DẠNG GHÉP NỐI (MATCHING) ──────────────────────────────── */}
+          {slide.type === "MATCHING" && (
+            <div className="bg-gradient-to-br from-cyan-50/50 via-white to-blue-50/40 p-6 rounded-[28px] border-4 border-cyan-100 shadow-xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">🔗</span>
+                    <h4 className="text-base font-black text-gray-900 tracking-tight">
+                      Các Cặp Ghép Nối (Cột A ↔ Cột B)
+                    </h4>
+                  </div>
+                  <p className="text-xs font-bold text-gray-500 mt-1">
+                    Nhập nội dung vế trái và đáp án ghép đôi tương ứng ở vế phải (Tối thiểu 2 cặp, tối đa 8 cặp).
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={addMatchingPair}
+                  disabled={slide.options.length >= 8}
+                  className="text-xs font-black text-cyan-700 hover:text-white bg-cyan-100/80 hover:bg-cyan-600 flex items-center gap-1.5 px-4 py-2.5 rounded-[14px] transition-all disabled:opacity-50 shadow-xs cursor-pointer"
+                >
+                  <Plus size={16} className="stroke-[3px]" /> Thêm Cặp Ghép Nối
+                </button>
+              </div>
+
+              {/* Header guide row */}
+              <div className="hidden md:grid grid-cols-12 gap-3 mb-2 px-3 text-xs font-black text-gray-400 uppercase tracking-wider">
+                <div className="col-span-1 text-center">#</div>
+                <div className="col-span-5">Vế A (Khái niệm / Từ vựng)</div>
+                <div className="col-span-1 text-center">Khớp với</div>
+                <div className="col-span-4">Vế B (Đáp án ghép nối)</div>
+                <div className="col-span-1 text-center">Xóa</div>
+              </div>
+
+              {/* Pairs list */}
+              <div className="space-y-3">
+                {slide.options.map((opt, optIdx) => (
+                  <div
+                    key={opt.id}
+                    className="p-3.5 bg-white rounded-[20px] border-2 border-cyan-100/80 shadow-xs flex flex-col md:grid md:grid-cols-12 gap-3 items-center transition-all hover:border-cyan-300"
+                  >
+                    {/* Index badge */}
+                    <div className="w-8 h-8 rounded-xl bg-cyan-500 text-white font-black text-sm flex items-center justify-center shrink-0 col-span-1 shadow-xs">
+                      {optIdx + 1}
+                    </div>
+
+                    {/* Left input (Content) */}
+                    <div className="w-full col-span-5">
+                      <label className="text-[11px] font-bold text-gray-500 md:hidden block mb-1">
+                        Vế A (Từ khóa/Khái niệm) <span className="text-cyan-600">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="VD: Thủ đô Việt Nam, Nước sôi ở..."
+                        value={opt.content}
+                        onChange={(e) => updateMatchingOption(opt.id, "content", e.target.value)}
+                        className="w-full px-4 py-2.5 text-sm font-bold border-2 border-gray-100 rounded-[14px] bg-gray-50 focus:bg-white focus:border-cyan-500 outline-none transition-all placeholder-gray-400 text-gray-800"
+                      />
+                    </div>
+
+                    {/* Connector Icon */}
+                    <div className="hidden md:flex items-center justify-center col-span-1 text-cyan-600">
+                      <div className="p-1.5 rounded-lg bg-cyan-50 border border-cyan-200">
+                        <Link2 size={16} />
+                      </div>
+                    </div>
+
+                    {/* Right input (MatchingPair) */}
+                    <div className="w-full col-span-4">
+                      <label className="text-[11px] font-bold text-gray-500 md:hidden block mb-1">
+                        Vế B (Đáp án ghép nối tương ứng) <span className="text-cyan-600">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="VD: Hà Nội, 100°C..."
+                        value={opt.matchingPair ?? ""}
+                        onChange={(e) => updateMatchingOption(opt.id, "matchingPair", e.target.value)}
+                        className="w-full px-4 py-2.5 text-sm font-bold border-2 border-gray-100 rounded-[14px] bg-gray-50 focus:bg-white focus:border-cyan-500 outline-none transition-all placeholder-gray-400 text-gray-800"
+                      />
+                    </div>
+
+                    {/* Delete button */}
+                    <div className="w-full md:w-auto flex justify-end md:justify-center col-span-1">
+                      <button
+                        type="button"
+                        onClick={() => deleteOption(opt.id)}
+                        disabled={slide.options.length <= 2}
+                        className="w-9 h-9 rounded-[12px] bg-red-50 hover:bg-red-100 text-red-400 hover:text-red-600 flex items-center justify-center transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                        title={slide.options.length <= 2 ? "Cần tối thiểu 2 cặp ghép" : "Xóa cặp này"}
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── 3. DẠNG ĐIỀN KHUYẾT (FILL_IN_BLANK) ────────────────────────── */}
           {slide.type === "FILL_IN_BLANK" && (
-            <div className="bg-white p-5 rounded-[24px] border-4 border-gray-100">
-              <label className="text-sm font-black text-gray-800 block mb-2">
-                Từ Khóa Đáp Án Đúng (Học sinh nhập đúng từ này sẽ có điểm)
-              </label>
-              <OptionRow
-                opt={slide.options[0] || { id: tempId(), content: "", isCorrect: true }}
-                idx={0}
-                slideType="FILL_IN_BLANK"
-                onChange={(val) => updateOption(slide.options[0]?.id || "", val)}
-                onToggleCorrect={() => {}}
-                onDelete={() => {}}
-              />
+            <div className="bg-gradient-to-br from-amber-50/50 via-white to-orange-50/40 p-6 rounded-[28px] border-4 border-amber-100 shadow-xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">✏️</span>
+                    <h4 className="text-base font-black text-gray-900 tracking-tight">
+                      Các Vị Trí Điền Khuyết (Chỗ Trống)
+                    </h4>
+                  </div>
+                  <p className="text-xs font-bold text-gray-500 mt-1">
+                    Mỗi ô tương ứng với 1 vị trí cần điền trong câu hỏi (Tối thiểu 1 ô, tối đa 6 ô).
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={insertBlankTag}
+                    className="text-xs font-black text-amber-800 bg-amber-100 hover:bg-amber-200 flex items-center gap-1.5 px-3.5 py-2 rounded-[14px] transition-colors border border-amber-300 shadow-xs cursor-pointer"
+                    title="Chèn ký hiệu [...] vào câu hỏi"
+                  >
+                    + Chèn [...] Vào Câu Hỏi
+                  </button>
+                  <button
+                    type="button"
+                    onClick={addBlankPosition}
+                    disabled={slide.options.length >= 6}
+                    className="text-xs font-black text-amber-700 hover:text-white bg-amber-100/80 hover:bg-amber-600 flex items-center gap-1.5 px-4 py-2 rounded-[14px] transition-all disabled:opacity-50 shadow-xs cursor-pointer"
+                  >
+                    <Plus size={16} className="stroke-[3px]" /> Thêm Ô Trống
+                  </button>
+                </div>
+              </div>
+
+              {/* Helper guide alert */}
+              <div className="mb-4 p-3.5 bg-amber-50/90 border border-amber-200 rounded-[18px] text-xs font-bold text-amber-950 flex items-center gap-2.5">
+                <span className="text-base">💡</span>
+                <span>
+                  <strong>Hướng dẫn:</strong> Đặt ký hiệu <code className="bg-white px-2 py-0.5 rounded-md border border-amber-300 font-mono text-amber-900 font-black">[...]</code> vào các vị trí trong nội dung câu hỏi phía trên để học sinh nhận biết chỗ cần gõ từ.
+                </span>
+              </div>
+
+              {/* Blanks List */}
+              <div className="space-y-4">
+                {slide.options.map((opt, optIdx) => (
+                  <div
+                    key={opt.id}
+                    className="p-4 bg-white rounded-[22px] border-2 border-amber-200/80 shadow-xs space-y-3 transition-all hover:border-amber-400"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="inline-flex items-center gap-2 px-3 py-1 bg-amber-500/15 text-amber-900 rounded-full font-black text-xs">
+                        <span>Vị Trí Chỗ Trống #{optIdx + 1}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => deleteOption(opt.id)}
+                        disabled={slide.options.length <= 1}
+                        className="text-xs font-bold text-red-500 hover:text-red-700 flex items-center gap-1 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer px-2 py-1 rounded-lg hover:bg-red-50 transition-colors"
+                      >
+                        <Trash2 size={14} /> Xóa ô này
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs font-black text-gray-700 block mb-1.5">
+                          Đáp Án Chuẩn Hiển Thị <span className="text-amber-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="VD: Hà Nội, Quang Trung..."
+                          value={opt.content}
+                          onChange={(e) => updateBlankOption(opt.id, "content", e.target.value)}
+                          className="w-full px-4 py-2.5 text-sm font-bold border-2 border-gray-100 rounded-[14px] bg-gray-50 focus:bg-white focus:border-amber-500 outline-none transition-all placeholder-gray-400 text-gray-800"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-black text-gray-700 block mb-1.5 flex items-center justify-between">
+                          <span>Từ Đồng Nghĩa / Chấp Nhận Được</span>
+                          <span className="text-[10px] text-gray-400 font-bold">(Ngăn cách bởi dấu phẩy)</span>
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="VD: Ha Noi, Hà nội, hanoi..."
+                          value={opt.blankKeywords ?? ""}
+                          onChange={(e) => updateBlankOption(opt.id, "blankKeywords", e.target.value)}
+                          className="w-full px-4 py-2.5 text-sm font-bold border-2 border-gray-100 rounded-[14px] bg-gray-50 focus:bg-white focus:border-amber-500 outline-none transition-all placeholder-gray-400 text-gray-800"
+                        />
+                      </div>
+                    </div>
+
+                    <p className="text-[11px] font-bold text-gray-400 flex items-center gap-1">
+                      <span>⚡</span> Hệ thống tự động bỏ qua viết hoa/thường, khử dấu Tiếng Việt và chuẩn hóa khoảng trắng khi chấm điểm.
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── 4. DẠNG ĐÁM MÂY TỪ (WORD_CLOUD) ──────────────────────────── */}
+          {slide.type === "WORD_CLOUD" && (
+            <div className="bg-sky-50/60 p-6 rounded-[28px] border-4 border-sky-100 text-center space-y-2">
+              <div className="text-3xl">☁️</div>
+              <h4 className="text-base font-black text-sky-950">Chế Độ Thu Thập Từ Khóa (Word Cloud)</h4>
+              <p className="text-xs font-bold text-sky-700/80 max-w-md mx-auto">
+                Dạng câu hỏi này không có đáp án đúng/sai. Người chơi tự do nhập các từ khóa hoặc cảm xúc để hệ thống tổng hợp thành đám mây từ trực quan theo thời gian thực.
+              </p>
             </div>
           )}
 
@@ -484,7 +840,7 @@ export default function QuizEditorPage() {
           const q = res.data.data;
           setQuiz(q);
           const draftSlides: SlideDraft[] = (q.slides ?? []).map(
-            (s: { id: string; type: SlideType; questionText: string; timeLimit?: number; points?: number; status?: SlideStatus; options?: { id: string; content: string; isCorrect?: boolean }[]; isAIGenerated?: boolean }, idx: number) => ({
+            (s: { id: string; type: SlideType; questionText: string; timeLimit?: number; points?: number; status?: SlideStatus; options?: { id: string; content: string; isCorrect?: boolean; matchingPair?: string; blankKeywords?: string }[]; isAIGenerated?: boolean }, idx: number) => ({
               id: s.id,
               type: s.type,
               questionText: s.questionText,
@@ -496,6 +852,8 @@ export default function QuizEditorPage() {
                 id: o.id,
                 content: o.content,
                 isCorrect: o.isCorrect ?? false,
+                matchingPair: o.matchingPair ?? "",
+                blankKeywords: o.blankKeywords ?? "",
               })),
               isExpanded: idx === 0,
               isSaving: false,
@@ -709,22 +1067,86 @@ export default function QuizEditorPage() {
       showToast("Vui lòng nhập nội dung câu hỏi", "err");
       return;
     }
+
+    // Kiểm tra tính hợp lệ tùy theo loại câu hỏi
+    if (slide.type === "QUIZ") {
+      const validOptions = slide.options.filter((o) => o.content.trim());
+      if (validOptions.length < 2) {
+        showToast("Câu trắc nghiệm cần ít nhất 2 phương án trả lời.", "err");
+        return;
+      }
+      if (!validOptions.some((o) => o.isCorrect)) {
+        showToast("Vui lòng đánh dấu ít nhất 1 đáp án đúng (✔️) cho câu trắc nghiệm.", "err");
+        return;
+      }
+    } else if (slide.type === "MATCHING") {
+      const validPairs = slide.options.filter(
+        (o) => o.content.trim() && (o.matchingPair ?? "").trim()
+      );
+      if (validPairs.length < 2) {
+        showToast("Câu ghép nối cần ít nhất 2 cặp (Cột A và Cột B không được để trống).", "err");
+        return;
+      }
+    } else if (slide.type === "FILL_IN_BLANK") {
+      const validBlanks = slide.options.filter(
+        (o) => o.content.trim() || (o.blankKeywords ?? "").trim()
+      );
+      if (validBlanks.length < 1) {
+        showToast("Câu điền khuyết cần ít nhất 1 vị trí chỗ trống với từ khóa đúng.", "err");
+        return;
+      }
+    }
+
     updateSlide(id, { isSaving: true });
+
+    let finalOptions: any[] = [];
+    if (slide.type === "MATCHING") {
+      finalOptions = slide.options
+        .filter((o) => o.content.trim() && (o.matchingPair ?? "").trim())
+        .map((o, i) => ({
+          content: o.content.trim(),
+          isCorrect: true,
+          matchingPair: (o.matchingPair ?? "").trim(),
+          blankKeywords: null,
+          orderIndex: i,
+        }));
+    } else if (slide.type === "FILL_IN_BLANK") {
+      finalOptions = slide.options
+        .filter((o) => o.content.trim() || (o.blankKeywords ?? "").trim())
+        .map((o, i) => {
+          const content = o.content.trim() || o.blankKeywords?.split(",")[0]?.trim() || `Chỗ trống ${i + 1}`;
+          const blankKeywords = (o.blankKeywords ?? "").trim() || content;
+          return {
+            content,
+            isCorrect: true,
+            matchingPair: null,
+            blankKeywords,
+            orderIndex: i,
+          };
+        });
+    } else if (slide.type === "POLL" || slide.type === "QUIZ") {
+      finalOptions = slide.options
+        .filter((o) => o.content.trim())
+        .map((o, i) => ({
+          content: o.content.trim(),
+          isCorrect: slide.type === "POLL" ? false : o.isCorrect,
+          matchingPair: null,
+          blankKeywords: null,
+          orderIndex: i,
+        }));
+    } else {
+      finalOptions = [];
+    }
+
     const payload = {
       quizId,
       type: slide.type,
-      questionText: slide.questionText,
+      questionText: slide.questionText.trim(),
       timeLimit: slide.timeLimit,
       points: slide.points,
       status: slide.status,
       orderIndex: slides.findIndex((s) => s.id === id),
-      options: slide.options
-        .filter((o) => o.content.trim())
-        .map((o, i) => ({
-          content: o.content,
-          isCorrect: o.isCorrect,
-          orderIndex: i,
-        })),
+      options: finalOptions,
     };
 
     try {
