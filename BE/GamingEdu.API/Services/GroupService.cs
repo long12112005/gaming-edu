@@ -16,6 +16,8 @@ public interface IGroupService
     Task DisbandGroupAsync(Guid hostId, Guid groupId);
     Task<IEnumerable<GroupDto>> GetMyGroupsAsync(Guid userId);
     Task<IEnumerable<GroupMemberDto>> GetGroupMembersAsync(Guid groupId);
+    Task LeaveGroupAsync(Guid userId, Guid groupId);
+    Task<GroupDto> UpdateGroupAsync(Guid hostId, Guid groupId, UpdateGroupRequest request);
 }
 
 public class GroupService : IGroupService
@@ -180,5 +182,68 @@ public class GroupService : IGroupService
             .Select(gm => new GroupMemberDto(gm.Id, gm.UserId, gm.User.Nickname, gm.User.AvatarUrl, gm.Status, gm.JoinedAt))
             .ToListAsync();
         return members;
+    }
+
+    // 2.5 Thành viên tự rời nhóm
+    public async Task LeaveGroupAsync(Guid userId, Guid groupId)
+    {
+        var group = await _db.Groups.FindAsync(groupId)
+            ?? throw new KeyNotFoundException("Không tìm thấy nhóm.");
+
+        if (group.Status == "DISBANDED")
+            throw new InvalidOperationException("Nhóm này đã bị giải tán.");
+
+        if (group.HostId == userId)
+            throw new InvalidOperationException("Chủ nhóm không thể tự rời nhóm. Hãy giải tán nhóm nếu bạn muốn đóng nhóm.");
+
+        var member = await _db.GroupMembers.FirstOrDefaultAsync(gm => gm.GroupId == groupId && gm.UserId == userId)
+            ?? throw new KeyNotFoundException("Bạn không phải thành viên của nhóm này.");
+
+        _db.GroupMembers.Remove(member);
+        await _db.SaveChangesAsync();
+
+        var user = await _db.Users.FindAsync(userId);
+        await _hubContext.Clients.Group($"user_{group.HostId}").SendAsync("NotificationReceived", new
+        {
+            Message = $"{user?.Nickname ?? "Một thành viên"} đã rời khỏi nhóm {group.Name}.",
+            Type = "MEMBER_LEFT"
+        });
+    }
+
+    // 2.6 Chỉnh sửa thông tin nhóm (Tên & Mô tả)
+    public async Task<GroupDto> UpdateGroupAsync(Guid hostId, Guid groupId, UpdateGroupRequest request)
+    {
+        var group = await _db.Groups
+            .Include(g => g.Host)
+            .Include(g => g.Members)
+            .FirstOrDefaultAsync(g => g.Id == groupId)
+            ?? throw new KeyNotFoundException("Không tìm thấy nhóm.");
+
+        if (group.HostId != hostId)
+            throw new UnauthorizedAccessException("Bạn không có quyền chỉnh sửa nhóm này.");
+
+        if (group.Status == "DISBANDED")
+            throw new InvalidOperationException("Nhóm đã bị giải tán, không thể chỉnh sửa.");
+
+        if (string.IsNullOrWhiteSpace(request.Name))
+            throw new ArgumentException("Tên nhóm không được để trống.");
+
+        group.Name = request.Name.Trim();
+        group.Description = request.Description?.Trim();
+        group.UpdatedAt = DateTime.UtcNow;
+
+        await _db.SaveChangesAsync();
+
+        int activeMemberCount = group.Members.Count(m => m.Status == "ACTIVE");
+        return new GroupDto(
+            group.Id,
+            group.Name,
+            group.Description,
+            group.GroupCode,
+            group.Status,
+            group.Host.Nickname,
+            activeMemberCount,
+            group.CreatedAt
+        );
     }
 }

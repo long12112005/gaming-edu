@@ -109,6 +109,21 @@ public class AIJobWorker : BackgroundService
         {
             // ── Step 2: Generate AI content via Gemini API ─────────
             var prompt = $"Vui lòng phân tích tài liệu/từ khóa sau và tạo ra 5 câu hỏi trắc nghiệm: {job.FileUrl}";
+            var localFilePath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", job.FileUrl.TrimStart('/'));
+            if (File.Exists(localFilePath))
+            {
+                var ext = Path.GetExtension(localFilePath).ToLowerInvariant();
+                if (ext == ".txt")
+                {
+                    var textContent = await File.ReadAllTextAsync(localFilePath, ct);
+                    if (!string.IsNullOrWhiteSpace(textContent))
+                    {
+                        if (textContent.Length > 20000) textContent = textContent[..20000];
+                        prompt = $"Vui lòng phân tích nội dung tài liệu sau và tạo ra 5 câu hỏi trắc nghiệm chất lượng:\n\n{textContent}";
+                    }
+                }
+            }
+
             var jsonDraft = await geminiService.GenerateQuizJsonAsync(prompt, job.FileUrl);
 
             // ── Step 3: Lưu Draft vào Cache để FE gọi lên lấy ─────
