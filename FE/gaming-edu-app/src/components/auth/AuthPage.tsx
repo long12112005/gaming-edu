@@ -26,10 +26,10 @@ import { useAuthStore } from "@/store/useAuthStore";
 import Link from "next/link";
 import SiteHeader from "@/components/layout/SiteHeader";
 
-export default function AuthPage() {
+export default function AuthPage({ defaultTab = "login" }: { defaultTab?: "login" | "register" } = {}) {
   const router = useRouter();
   const { login } = useAuthStore();
-  const [activeTab, setActiveTab] = useState<"login" | "register">("login");
+  const [activeTab, setActiveTab] = useState<"login" | "register">(defaultTab);
   const [registerStep, setRegisterStep] = useState<1 | 2 | 3>(1);
   const [isLoading, setIsLoading] = useState(false);
   const [globalError, setGlobalError] = useState("");

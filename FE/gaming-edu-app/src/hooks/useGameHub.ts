@@ -207,13 +207,31 @@ export interface CircuitConnectState {
   recentSubmissions: CircuitConnectPlayerResult[];
 }
 
+export interface AnswerRejectedPayload {
+  slideId: string;
+  reason: string;
+  message: string;
+}
+
+export interface RoomInfoPayload {
+  roomId?: string;
+  pinCode?: string;
+  quizTitle?: string;
+  title?: string;
+  playerId?: string;
+  roomPlayerId?: string;
+  playerNickname?: string;
+  status?: string;
+  isLocked?: boolean;
+}
+
 export function useGameHub() {
   const [connection, setConnection] = useState<signalR.HubConnection | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+
   // Game State
-  const [roomInfo, setRoomInfo] = useState<any>(null);
+  const [roomInfo, setRoomInfo] = useState<RoomInfoPayload | null>(null);
   const [players, setPlayers] = useState<PlayerInfo[]>([]);
   const [gameState, setGameState] = useState<"WAITING" | "STARTING" | "PLAYING" | "LEADERBOARD" | "FINISHED">("WAITING");
   const [currentSlide, setCurrentSlide] = useState<SlideStartedPayload | null>(null);
@@ -240,6 +258,8 @@ export function useGameHub() {
   const [wordHunterState, setWordHunterState] = useState<WordHunterState | null>(null);
   const [bridgeBuilderState, setBridgeBuilderState] = useState<BridgeBuilderState | null>(null);
   const [circuitConnectState, setCircuitConnectState] = useState<CircuitConnectState | null>(null);
+  const [answerRejected, setAnswerRejected] = useState<AnswerRejectedPayload | null>(null);
+  const [wordCloudData, setWordCloudData] = useState<Record<string, number>>({});
 
   // Keep a ref to the connection to avoid closure issues
   const connectionRef = useRef<signalR.HubConnection | null>(null);
@@ -261,6 +281,7 @@ export function useGameHub() {
       .then(() => {
         setIsConnected(true);
         setError(null);
+        setConnection(newConnection);
       })
       .catch((err) => {
         console.error("SignalR Connection Error: ", err);
@@ -269,15 +290,22 @@ export function useGameHub() {
 
     // ── Events ──
     newConnection.on("Error", (err: { message: string }) => {
-      setError(err.message);
+      setError(err?.message || "Đã xảy ra lỗi kết nối.");
     });
 
-    newConnection.on("JoinedRoom", (info: any) => {
+    // Khi người chơi gia nhập phòng
+    newConnection.on("JoinedRoom", (info: RoomInfoPayload) => {
       setRoomInfo(info);
     });
 
+    // Khi Host gia nhập phòng
     newConnection.on("HostJoined", (info: any) => {
       setRoomInfo((prev: any) => ({ ...prev, ...info }));
+    });
+
+    // Tải danh sách người chơi ban đầu cho Host
+    newConnection.on("LoadPlayers", (loadedPlayers: PlayerInfo[]) => {
+      setPlayers(loadedPlayers || []);
     });
 
     newConnection.on("RejoinedRoom", (data: any) => {
@@ -295,7 +323,6 @@ export function useGameHub() {
         setGameState("WAITING");
       }
     });
-
     newConnection.on("PlayerJoined", (player: PlayerInfo) => {
       setPlayers((prev) => {
         if (prev.find((p) => p.playerId === player.playerId)) return prev;
@@ -303,19 +330,22 @@ export function useGameHub() {
       });
     });
 
+    // Người chơi bị kick
     newConnection.on("PlayerKicked", (playerId: string) => {
       setPlayers((prev) => prev.filter((p) => p.playerId !== playerId));
-      // If we are the one kicked, handle it in the UI (by checking context player ID)
     });
 
+    // Trạng thái khóa phòng
     newConnection.on("RoomLockedStatusChanged", (isLocked: boolean) => {
-      setRoomInfo((prev: any) => prev ? { ...prev, isLocked } : prev);
+      setRoomInfo((prev) => prev ? { ...prev, isLocked } : prev);
     });
 
-    newConnection.on("GameStarted", (data: any) => {
+    // Bắt đầu game
+    newConnection.on("GameStarted", () => {
       setGameState("STARTING");
     });
 
+    // Bắt đầu slide câu hỏi
     newConnection.on("SlideStarted", (slide: any) => {
       const normalizedSlide: SlideStartedPayload = {
         index: slide.slideIndex ?? slide.index ?? 0,
@@ -331,6 +361,8 @@ export function useGameHub() {
       setGameState("PLAYING");
       setSlideTimeLeft(normalizedSlide.timeLimit);
       setAnswerResult(null); // Reset previous answer
+      setAnswerRejected(null);
+      setCountdown(null);
       setAnswerProgress(null);
       setDistribution(null);
       setWagerPool(null);
@@ -340,6 +372,7 @@ export function useGameHub() {
       setCircuitConnectState(null);
     });
 
+    // Đồng hồ đếm ngược 3-2-1 trước câu hỏi
     newConnection.on("CountdownStarted", (seconds: number) => {
       setCountdown(seconds);
     });
@@ -352,17 +385,25 @@ export function useGameHub() {
       setCountdown(null);
     });
 
-    newConnection.on("SlideTimeTick", (data: { slideId: string, remaining: number }) => {
+    newConnection.on("SlideTimeTick", (data: { slideId: string; remaining: number }) => {
       setSlideTimeLeft(data.remaining);
     });
 
-    newConnection.on("SlideTimeOut", (slideId: string) => {
+    newConnection.on("SlideTimeOut", () => {
       setSlideTimeLeft(0);
       setGameState("LEADERBOARD");
     });
 
-    newConnection.on("AnswerAccepted", (data: any) => {
-      // Logic when answer is accepted
+    newConnection.on("AnswerAccepted", () => {
+      // Đã nhận câu trả lời vào hàng đợi chấm
+    });
+
+    newConnection.on("AnswerRecorded", () => {
+      // Đã lưu câu trả lời vào database
+    });
+
+    newConnection.on("AnswerRejected", (rejectData: AnswerRejectedPayload) => {
+      setAnswerRejected(rejectData);
     });
 
     newConnection.on("AnswerCountUpdated", (data: any) => {
@@ -425,23 +466,25 @@ export function useGameHub() {
       setAnswerResult(result);
     });
 
+    newConnection.on("WordCloudUpdated", (data: Record<string, number>) => {
+      setWordCloudData(data || {});
+    });
+
     newConnection.on("LeaderboardUpdated", (data: any[]) => {
-      setLeaderboard(data);
+      setLeaderboard(data || []);
     });
 
     newConnection.on("GameEnded", (data: any) => {
       setGameState("FINISHED");
-      setLeaderboard(data.leaderboard);
+      setLeaderboard(data.leaderboard || []);
     });
-
-    setConnection(newConnection);
 
     return () => {
       newConnection.stop();
     };
   }, []);
 
-  // Tự động đếm ngược thời gian cho câu hỏi hiện tại
+  // ── Client-side timer đếm ngược câu hỏi ──
   useEffect(() => {
     if (gameState !== "PLAYING" || slideTimeLeft === null || slideTimeLeft <= 0) {
       return;
@@ -460,13 +503,32 @@ export function useGameHub() {
     return () => clearInterval(timer);
   }, [gameState, currentSlide?.slideId, slideTimeLeft]);
 
+  // ── Client-side timer đếm ngược 3-2-1 ──
+  useEffect(() => {
+    if (countdown === null || countdown <= 0) return;
+
+    const timer = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev === null || prev <= 1) {
+          clearInterval(timer);
+          return null;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [countdown]);
+
   // ── Actions ──
+  // Tham gia phòng với tư cách Thí sinh
   const joinRoom = useCallback(async (pinCode: string, nickname?: string) => {
     if (connectionRef.current?.state === signalR.HubConnectionState.Connected) {
       await connectionRef.current.invoke("JoinRoom", { pinCode, nickname });
     }
   }, []);
 
+  // Tham gia phòng với tư cách Host
   const hostJoinRoom = useCallback(async (pinCode: string) => {
     if (connectionRef.current?.state === signalR.HubConnectionState.Connected) {
       await connectionRef.current.invoke("HostJoinRoom", pinCode);
@@ -493,7 +555,10 @@ export function useGameHub() {
 
   const startSlideTimer = useCallback(async (timeLimitSeconds: number, slideId: string) => {
     if (connectionRef.current?.state === signalR.HubConnectionState.Connected) {
-      await connectionRef.current.invoke("StartSlideTimer", timeLimitSeconds, slideId);
+      // Chế độ Async: gọi StartPlayerSlide
+      await connectionRef.current.invoke("StartPlayerSlide", slideId).catch(() => {
+        // Fallback an toàn nếu cần
+      });
     }
   }, []);
 
@@ -601,6 +666,8 @@ export function useGameHub() {
     wordHunterState,
     bridgeBuilderState,
     circuitConnectState,
+    answerRejected,
+    wordCloudData,
     joinRoom,
     hostJoinRoom,
     rejoinRoom,

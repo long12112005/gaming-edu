@@ -50,6 +50,7 @@ public interface IRoomService
     Task RecordBridgeBuilderCrossingAsync(Guid roomId, Guid slideId, Guid roomPlayerId, string nickname, string? avatarUrl, bool isFullyCrossed, int builtSpans, int totalSpans, List<bool> spanBridges, int responseTimeMs, int scoreAwarded);
     Task<CircuitConnectStateDto> GetCircuitConnectStateAsync(Guid roomId, Guid slideId);
     Task RecordCircuitConnectResultAsync(Guid roomId, Guid slideId, Guid roomPlayerId, string nickname, string? avatarUrl, bool isFullCircuit, int correctWires, int totalWires, List<bool> wireResults, int responseTimeMs, int scoreAwarded);
+    string GenerateQrCodeBase64(string pin);
 }
 
 public class RoomService : IRoomService
@@ -122,7 +123,7 @@ public class RoomService : IRoomService
             room.QuizId, quiz.Title, room.CreatedAt, qrCodeBase64, theme);
     }
 
-    private string GenerateQrCodeBase64(string pin)
+    public string GenerateQrCodeBase64(string pin)
     {
         // Example URL: https://game.edu/join?pin={pin}
         string url = $"https://game.edu/join?pin={pin}";

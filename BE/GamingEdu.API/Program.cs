@@ -273,10 +273,19 @@ if (app.Environment.IsDevelopment())
         c.RoutePrefix = string.Empty; // Swagger at root URL
     });
 
-    // Auto-apply migrations in development (do NOT use in production)
+    // Auto-apply migrations in development (with safe fallback)
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-    await db.Database.EnsureCreatedAsync();
+    try
+    {
+        await db.Database.MigrateAsync();
+    }
+    catch (Exception ex)
+    {
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+        logger.LogWarning(ex, "MigrateAsync encountered an issue. Falling back to EnsureCreatedAsync.");
+        await db.Database.EnsureCreatedAsync();
+    }
 }
 
 // Ensure uploads folder exists

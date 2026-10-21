@@ -132,12 +132,12 @@ export default function GroupsPage() {
     }
   };
 
-  const filteredGroups = groups.filter((g) => {
-    const isOwner = g.hostNickname === user?.nickname;
-    if (activeTab === "hosted") return isOwner;
-    if (activeTab === "joined") return !isOwner;
-    return true;
-  });
+  const isHost = (group: GroupItem) => group.groupCode !== "HIDDEN" || (user?.nickname && group.hostNickname === user.nickname);
+  const hostedGroups = groups.filter(isHost);
+  const joinedGroups = groups.filter((g) => !isHost(g));
+
+  const filteredGroups =
+    activeTab === "hosted" ? hostedGroups : activeTab === "joined" ? joinedGroups : groups;
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900 flex flex-col">

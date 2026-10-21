@@ -16,12 +16,16 @@ import {
   Shield,
   Gamepad2,
   BarChart3,
-  Compass,
   PlusCircle,
   Hash,
+  Bell,
+  Play,
+  X,
+  CheckCheck
 } from "lucide-react";
 import { useAuthStore } from "@/store/useAuthStore";
 import CreateRoomModal from "@/components/modals/CreateRoomModal";
+import { useNotificationHub } from "@/hooks/useNotificationHub";
 
 const NAV_ITEMS = [
   { label: "Trang Chủ", href: "/" },
@@ -31,6 +35,10 @@ const NAV_ITEMS = [
   { label: "Báo Cáo", href: "/reports" },
 ];
 
+/**
+ * Thanh menu chính Gaming Edu phong cách Dual-Tone Modern Gamified SaaS
+ * Kết hợp thông báo Realtime, AI Quota badge và Quản lý phòng thi đấu
+ */
 export default function SiteHeader() {
   const router = useRouter();
   const pathname = usePathname();
@@ -38,8 +46,19 @@ export default function SiteHeader() {
   const [mounted, setMounted] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
+  const [notifDropdownOpen, setNotifDropdownOpen] = useState(false);
   const [isCreateRoomOpen, setIsCreateRoomOpen] = useState(false);
+
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const notifRef = useRef<HTMLDivElement>(null);
+
+  const {
+    notifications,
+    unreadCount,
+    activeInvite,
+    markAllAsRead,
+    dismissInvite,
+  } = useNotificationHub();
 
   useEffect(() => {
     setMounted(true);
@@ -54,6 +73,9 @@ export default function SiteHeader() {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setUserDropdownOpen(false);
       }
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
+        setNotifDropdownOpen(false);
+      }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
@@ -63,6 +85,7 @@ export default function SiteHeader() {
 
   const handleLogout = () => {
     setUserDropdownOpen(false);
+    setNotifDropdownOpen(false);
     logout();
     Cookies.remove("token");
     Cookies.remove("user");
@@ -71,6 +94,40 @@ export default function SiteHeader() {
 
   return (
     <>
+      {/* ── Banner Mời Vào Phòng Thi Đấu Realtime ── */}
+      {activeInvite && (
+        <div className="bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 text-white px-4 py-2.5 shadow-md relative z-50 animate-in fade-in slide-in-from-top-2">
+          <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3 text-sm">
+            <div className="flex items-center gap-2 font-bold">
+              <span className="text-xl">🎮</span>
+              <span>
+                Bạn được mời tham gia phòng thi đấu{" "}
+                <span className="text-amber-300 font-extrabold">{activeInvite.quizTitle || "Gaming Edu"}</span>{" "}
+                (PIN: <span className="font-mono bg-black/25 px-2 py-0.5 rounded-lg text-amber-200">{activeInvite.pinCode}</span>)!
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  dismissInvite();
+                  router.push(`/play/${activeInvite.pinCode}`);
+                }}
+                className="bg-amber-400 hover:bg-amber-300 text-slate-900 font-black px-4 py-1.5 rounded-xl text-xs uppercase tracking-wider flex items-center gap-1.5 shadow-sm active:scale-95 transition-all"
+              >
+                <Play size={13} className="fill-current" /> Tham Gia Ngay
+              </button>
+              <button
+                onClick={dismissInvite}
+                className="p-1.5 hover:bg-white/20 rounded-xl transition-colors text-white/80"
+                title="Bỏ qua"
+              >
+                <X size={16} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <header
         className={`sticky top-0 z-40 w-full transition-all duration-200 border-b ${
           scrolled
@@ -172,6 +229,82 @@ export default function SiteHeader() {
                 >
                   <Sparkles size={12} className="text-indigo-600 animate-pulse" />
                   <span>AI Quota: 15/20</span>
+                </div>
+
+                {/* Chuông thông báo Realtime */}
+                <div className="relative" ref={notifRef}>
+                  <button
+                    onClick={() => {
+                      setNotifDropdownOpen((prev) => !prev);
+                      if (!notifDropdownOpen) markAllAsRead();
+                    }}
+                    className="relative p-2 rounded-xl border border-slate-200/80 bg-slate-50 hover:bg-slate-100 text-slate-700 transition-colors"
+                    title="Thông báo"
+                    aria-label="Thông báo"
+                  >
+                    <Bell size={17} className="text-slate-600" />
+                    {unreadCount > 0 && (
+                      <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 bg-rose-500 text-white rounded-full text-[10px] font-black flex items-center justify-center shadow-sm animate-pulse">
+                        {unreadCount > 9 ? "9+" : unreadCount}
+                      </span>
+                    )}
+                  </button>
+
+                  {/* Dropdown thông báo */}
+                  {notifDropdownOpen && (
+                    <div className="absolute right-0 mt-2 w-80 sm:w-96 rounded-2xl bg-white border border-slate-200 shadow-xl py-2 z-50 animate-in fade-in slide-in-from-top-2">
+                      <div className="px-4 py-2.5 border-b border-slate-100 flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                          <Bell size={14} className="text-indigo-600" /> Thông Báo
+                        </span>
+                        {notifications.length > 0 && (
+                          <button
+                            onClick={markAllAsRead}
+                            className="text-[11px] font-medium text-indigo-600 hover:text-indigo-700 flex items-center gap-1"
+                          >
+                            <CheckCheck size={13} />
+                            Đã đọc tất cả
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="max-h-72 overflow-y-auto divide-y divide-slate-100 py-1">
+                        {notifications.length === 0 ? (
+                          <div className="px-4 py-8 text-center text-xs text-slate-400">
+                            Chưa có thông báo mới nào.
+                          </div>
+                        ) : (
+                          notifications.map((n) => (
+                            <div
+                              key={n.id}
+                              className="px-4 py-3 hover:bg-slate-50/80 transition-colors flex flex-col gap-1 text-left"
+                            >
+                              <div className="flex items-center justify-between text-[11px] text-slate-400">
+                                <span className="font-bold uppercase tracking-wider text-indigo-600">
+                                  {n.type === "INVITE_ROOM" ? "🎮 Lời Mời Chơi" : "Hệ Thống"}
+                                </span>
+                                <span>{n.timestamp}</span>
+                              </div>
+                              <p className="text-xs text-slate-700 leading-relaxed font-medium">
+                                {n.message}
+                              </p>
+                              {n.type === "INVITE_ROOM" && n.pinCode && (
+                                <button
+                                  onClick={() => {
+                                    setNotifDropdownOpen(false);
+                                    router.push(`/play/${n.pinCode}`);
+                                  }}
+                                  className="mt-1 self-start inline-flex items-center gap-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3 py-1 rounded-lg text-[11px] shadow-xs transition-colors"
+                                >
+                                  <Play size={10} className="fill-current" /> Vào Phòng (PIN: {n.pinCode})
+                                </button>
+                              )}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Profile Dropdown */}
