@@ -25,7 +25,7 @@ public class GeminiApiService : IGeminiApiService
     public async Task<string> GenerateQuizJsonAsync(string prompt, string? fileUrl)
     {
         var apiKey = _config["Gemini:ApiKey"];
-        var model = _config["Gemini:Model"] ?? "gemini-1.5-flash";
+        var model = _config["Gemini:Model"] ?? "gemini-flash-latest";
 
         if (string.IsNullOrEmpty(apiKey))
         {
