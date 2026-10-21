@@ -14,11 +14,11 @@ export interface MiniGameTheme {
 }
 
 export const MINI_GAME_CATEGORIES = [
-  { id: "ALL", label: "Tất Cả (10)", icon: "✨" },
-  { id: "QUIZ", label: "🎯 Trắc Nghiệm (3)", icon: "🎯" },
-  { id: "FILL_IN_BLANK", label: "✏️ Điền Khuyết (3)", icon: "✏️" },
-  { id: "MATCHING", label: "🔗 Ghép Cặp (3)", icon: "🔗" },
-  { id: "HYBRID", label: "🐉 Đánh Boss (1)", icon: "🐉" },
+  { id: "ALL", label: "Tất cả", icon: "✨", count: 10, badge: "10" },
+  { id: "QUIZ", label: "Game Trắc nghiệm", icon: "🎯", count: 3, badge: "3" },
+  { id: "FILL_IN_BLANK", label: "Game Điền khuyết", icon: "✏️", count: 3, badge: "3" },
+  { id: "MATCHING", label: "Game Ghép cặp", icon: "🔗", count: 3, badge: "3" },
+  { id: "HYBRID", label: "Game Tổng hợp (Mix)", icon: "🐉", count: 1, badge: "1" },
 ] as const;
 
 export const MINI_GAME_THEMES: MiniGameTheme[] = [
@@ -160,7 +160,7 @@ export const MINI_GAME_THEMES: MiniGameTheme[] = [
     name: "Công Thành Chiến / Đánh Boss",
     tagline: "Co-op Boss Raid / Tower Climb",
     category: "HYBRID",
-    categoryLabel: "Tổng Hợp",
+    categoryLabel: "Tổng Hợp (Mix)",
     icon: "🐉",
     gradient: "from-violet-600 via-fuchsia-600 to-pink-500",
     accentColor: "#c084fc",

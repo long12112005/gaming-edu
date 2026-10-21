@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import Cookies from "js-cookie";
@@ -22,6 +22,7 @@ import {
   Compass,
   Link2,
   Gamepad2,
+  Search,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import SiteHeader from "@/components/layout/SiteHeader";
@@ -318,6 +319,19 @@ export default function QuizDetailPage() {
   const [selectedMode, setSelectedMode] = useState<string>("HOST_PACED");
   const [selectedTheme, setSelectedTheme] = useState<string>("SPEED_RACER");
   const [themeCategory, setThemeCategory] = useState<string>("ALL");
+  const [themeSearch, setThemeSearch] = useState<string>("");
+
+  const filteredThemes = useMemo(() => {
+    return MINI_GAME_THEMES.filter((t) => {
+      const matchCategory = themeCategory === "ALL" || t.category === themeCategory;
+      const matchSearch =
+        !themeSearch.trim() ||
+        t.name.toLowerCase().includes(themeSearch.toLowerCase()) ||
+        t.tagline.toLowerCase().includes(themeSearch.toLowerCase()) ||
+        t.description.toLowerCase().includes(themeSearch.toLowerCase());
+      return matchCategory && matchSearch;
+    });
+  }, [themeCategory, themeSearch]);
 
   const isLoggedIn = !!Cookies.get("token");
 
@@ -623,22 +637,45 @@ export default function QuizDetailPage() {
               </div>
 
               {/* SECTION 2: CHỦ ĐỀ MINI-GAME (10 MINI-GAMES) */}
-              <div className="space-y-3">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <label className="text-xs sm:text-sm font-bold text-cyan-100 flex items-center gap-2 uppercase tracking-wider">
-                      <span className="w-5 h-5 rounded-lg bg-amber-400/20 text-amber-300 flex items-center justify-center text-xs">
-                        2
+              <div className="space-y-3.5">
+                <div className="space-y-2.5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs sm:text-sm font-bold text-cyan-100 flex items-center gap-2 uppercase tracking-wider">
+                        <span className="w-5 h-5 rounded-lg bg-amber-400/20 text-amber-300 flex items-center justify-center text-xs">
+                          2
+                        </span>
+                        Chủ Đề Mini-Game Tương Tác
+                      </label>
+                      <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/30">
+                        10 Kiểu Chơi
                       </span>
-                      Chủ Đề Mini-Game Tương Tác
-                    </label>
-                    <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/30">
-                      10 Kiểu Chơi
-                    </span>
+                    </div>
+
+                    {/* Ô tìm kiếm nhanh Mini-Game */}
+                    <div className="relative w-full sm:w-60">
+                      <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-cyan-400/60 pointer-events-none" />
+                      <input
+                        type="text"
+                        value={themeSearch}
+                        onChange={(e) => setThemeSearch(e.target.value)}
+                        placeholder="Tìm tên hoặc từ khóa game..."
+                        className="w-full pl-8 pr-7 py-1.5 bg-white/5 border border-cyan-400/25 rounded-xl text-xs text-white placeholder:text-cyan-300/40 outline-none focus:border-cyan-400 focus:bg-white/10 transition-all"
+                      />
+                      {themeSearch && (
+                        <button
+                          type="button"
+                          onClick={() => setThemeSearch("")}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-cyan-300/60 hover:text-white text-xs font-bold"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
                   </div>
 
-                  {/* Category Filter Tabs */}
-                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+                  {/* 4 Tab lọc nhanh: Tất cả, Game Trắc nghiệm, Game Điền khuyết, Game Ghép cặp, và Game Tổng hợp (Mix) */}
+                  <div className="flex items-center gap-2 overflow-x-auto pb-1.5 pt-0.5 text-xs no-scrollbar">
                     {MINI_GAME_CATEGORIES.map((cat) => {
                       const isActive = themeCategory === cat.id;
                       return (
@@ -646,14 +683,23 @@ export default function QuizDetailPage() {
                           key={cat.id}
                           type="button"
                           onClick={() => setThemeCategory(cat.id)}
-                          className={`px-2.5 py-1 rounded-xl text-xs font-bold whitespace-nowrap transition-all duration-150 flex items-center gap-1 ${
+                          className={`group relative px-3 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all duration-200 flex items-center gap-2 border ${
                             isActive
-                              ? "bg-gradient-to-r from-cyan-400 to-teal-400 text-teal-950 shadow-[0_0_12px_rgba(56,189,248,0.35)]"
-                              : "bg-white/5 hover:bg-white/10 text-cyan-200/80 border border-cyan-400/20"
+                              ? "bg-gradient-to-r from-cyan-400 via-teal-400 to-emerald-400 text-teal-950 border-cyan-200 shadow-[0_4px_16px_rgba(45,212,191,0.35)] font-black scale-[1.02]"
+                              : "bg-white/[0.04] hover:bg-white/[0.08] text-cyan-200/80 border-cyan-400/20 hover:border-cyan-300/40 hover:text-white"
                           }`}
                         >
-                          <span>{cat.icon}</span>
+                          <span className="text-sm">{cat.icon}</span>
                           <span>{cat.label}</span>
+                          <span
+                            className={`px-1.5 py-0.5 rounded-full text-[10px] font-black transition-colors ${
+                              isActive
+                                ? "bg-teal-950/20 text-teal-950"
+                                : "bg-cyan-500/15 text-cyan-300 border border-cyan-400/30 group-hover:bg-cyan-500/25"
+                            }`}
+                          >
+                            {cat.badge}
+                          </span>
                         </button>
                       );
                     })}
@@ -661,10 +707,8 @@ export default function QuizDetailPage() {
                 </div>
 
                 {/* 10 Theme Cards Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[360px] overflow-y-auto pr-1">
-                  {MINI_GAME_THEMES.filter(
-                    (t) => themeCategory === "ALL" || t.category === themeCategory
-                  ).map((theme) => (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[360px] overflow-y-auto pr-1 custom-scrollbar">
+                  {filteredThemes.map((theme) => (
                     <MiniGameThemeCard
                       key={theme.id}
                       theme={theme}
@@ -672,6 +716,17 @@ export default function QuizDetailPage() {
                       onClick={() => setSelectedTheme(theme.id)}
                     />
                   ))}
+                  {filteredThemes.length === 0 && (
+                    <div className="col-span-full py-10 text-center bg-white/[0.02] border border-cyan-400/20 rounded-2xl">
+                      <div className="text-2xl mb-2">🔍</div>
+                      <p className="text-sm font-bold text-cyan-200 mb-1">
+                        Không tìm thấy Mini-Game nào phù hợp
+                      </p>
+                      <p className="text-xs text-cyan-300/60">
+                        Thử chọn tab danh mục khác hoặc xóa từ khóa tìm kiếm.
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
