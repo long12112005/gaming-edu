@@ -31,6 +31,7 @@ import { getThemeById } from "@/lib/gameThemes";
 import SpeedRacerHostTrack from "@/components/games/speed-racer/SpeedRacerHostTrack";
 import BattleRoyaleHostArena from "@/components/games/battle-royale/BattleRoyaleHostArena";
 import QuizWagerHostView from "@/components/games/quiz-wager/QuizWagerHostView";
+import DefuseBombHostView from "@/components/games/defuse-bomb/DefuseBombHostView";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
@@ -178,6 +179,7 @@ export default function HostLobbyPage() {
     distribution,
     battleRoyaleState,
     wagerPool,
+    bombDefusalState,
     joinRoom,
     hostJoinRoom,
     roomInfo,
@@ -581,6 +583,15 @@ export default function HostLobbyPage() {
               players={players}
               onNextSlide={nextSlide}
               onEndGame={endGame}
+            />
+          ) : selectedThemeId === "DEFUSE_BOMB" ? (
+            <DefuseBombHostView
+              currentSlide={currentSlide as any}
+              slideTimeLeft={slideTimeLeft}
+              answerProgress={answerProgress}
+              leaderboard={leaderboard}
+              bombDefusalState={bombDefusalState}
+              onNextSlide={nextSlide}
             />
           ) : (
             <div className="flex flex-col items-center gap-8 animate-fade-in-up">

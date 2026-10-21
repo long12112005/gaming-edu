@@ -62,6 +62,40 @@ export interface WagerPoolState {
   wagers: PlayerWager[];
 }
 
+export interface WireDefuseResult {
+  wireIndex: number;
+  wireColor: string;
+  isCut: boolean;
+  userInput: string;
+  expectedKeyword: string;
+  normalizedKeyword: string;
+}
+
+export interface WireDistribution {
+  wireIndex: number;
+  wireColor: string;
+  cutCount: number;
+  totalCount: number;
+  cutPercent: number;
+}
+
+export interface NormalizedKeyword {
+  wireIndex: number;
+  wireColor: string;
+  originalKeywords: string;
+  normalizedKeyword: string;
+}
+
+export interface BombDefusalState {
+  slideId: string;
+  totalBombs: number;
+  defusedBombs: number;
+  explodedBombs: number;
+  inProgressBombs: number;
+  wireStats: WireDistribution[];
+  standardKeywords: NormalizedKeyword[];
+}
+
 export function useGameHub() {
   const [connection, setConnection] = useState<signalR.HubConnection | null>(null);
   const [isConnected, setIsConnected] = useState(false);
@@ -83,10 +117,12 @@ export function useGameHub() {
     distribution?: any;
     battleRoyale?: BattleRoyaleState;
     wagerPool?: WagerPoolState;
+    bombDefusal?: BombDefusalState;
   } | null>(null);
   const [distribution, setDistribution] = useState<any | null>(null);
   const [battleRoyaleState, setBattleRoyaleState] = useState<BattleRoyaleState | null>(null);
   const [wagerPool, setWagerPool] = useState<WagerPoolState | null>(null);
+  const [bombDefusalState, setBombDefusalState] = useState<BombDefusalState | null>(null);
 
   // Keep a ref to the connection to avoid closure issues
   const connectionRef = useRef<signalR.HubConnection | null>(null);
@@ -171,6 +207,7 @@ export function useGameHub() {
       setAnswerProgress(null);
       setDistribution(null);
       setWagerPool(null);
+      setBombDefusalState(null);
     });
 
     newConnection.on("CountdownStarted", (seconds: number) => {
@@ -209,6 +246,9 @@ export function useGameHub() {
       if (data.wagerPool) {
         setWagerPool(data.wagerPool);
       }
+      if (data.bombDefusal) {
+        setBombDefusalState(data.bombDefusal);
+      }
     });
 
     newConnection.on("SurvivalStatusUpdated", (data: BattleRoyaleState) => {
@@ -217,6 +257,10 @@ export function useGameHub() {
 
     newConnection.on("WagerPoolUpdated", (pool: WagerPoolState) => {
       setWagerPool(pool);
+    });
+
+    newConnection.on("BombDefusalUpdated", (state: BombDefusalState) => {
+      setBombDefusalState(state);
     });
 
     newConnection.on("DistributionUpdated", (data: any) => {
@@ -340,6 +384,12 @@ export function useGameHub() {
     }
   }, []);
 
+  const getBombDefusalState = useCallback(async (roomId: string, slideId: string) => {
+    if (connectionRef.current?.state === signalR.HubConnectionState.Connected) {
+      await connectionRef.current.invoke("GetBombDefusalState", roomId, slideId);
+    }
+  }, []);
+
   return {
     connection,
     isConnected,
@@ -356,6 +406,7 @@ export function useGameHub() {
     distribution,
     battleRoyaleState,
     wagerPool,
+    bombDefusalState,
     joinRoom,
     hostJoinRoom,
     rejoinRoom,
@@ -363,6 +414,7 @@ export function useGameHub() {
     getBattleRoyaleState,
     placeWager,
     getWagerPoolState,
+    getBombDefusalState,
     startGame,
     nextSlide,
     startCountdown,

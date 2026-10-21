@@ -235,6 +235,15 @@ public record SubmitAnswerRequest(
     int WagerAmount = 0
 );
 
+public record WireDefuseResultDto(
+    int WireIndex,
+    string WireColor,
+    bool IsCut,
+    string UserInput,
+    string ExpectedKeyword,
+    string NormalizedKeyword
+);
+
 public record AnswerResultDto(
     bool IsCorrect,
     int ScoreAwarded,
@@ -253,7 +262,11 @@ public record AnswerResultDto(
     double PartialRatio = 1.0,
     int WagerPercent = 0,
     int WagerAmount = 0,
-    int WagerNetGain = 0
+    int WagerNetGain = 0,
+    bool IsBombDefused = false,
+    int TotalWires = 0,
+    int DefusedWires = 0,
+    List<WireDefuseResultDto>? WireResults = null
 );
 
 public record OptionDistributionDto(
@@ -304,6 +317,31 @@ public record WagerPoolStateDto(
     int TotalWagersPlaced,
     int AllInCount,
     List<PlayerWagerDto> Wagers
+);
+
+public record WireDistributionDto(
+    int WireIndex,
+    string WireColor,
+    int CutCount,
+    int TotalCount,
+    double CutPercent
+);
+
+public record NormalizedKeywordDto(
+    int WireIndex,
+    string WireColor,
+    string OriginalKeywords,
+    string NormalizedKeyword
+);
+
+public record BombDefusalStateDto(
+    Guid SlideId,
+    int TotalBombs,
+    int DefusedBombs,
+    int ExplodedBombs,
+    int InProgressBombs,
+    List<WireDistributionDto> WireStats,
+    List<NormalizedKeywordDto> StandardKeywords
 );
 
 public record PlayerRejoinDataDto(

@@ -41,6 +41,8 @@ public interface IRoomService
     Task<WagerPoolStateDto> PlaceWagerAsync(Guid roomId, Guid roomPlayerId, Guid slideId, int wagerPercent, int wagerAmount);
     Task<WagerPoolStateDto> GetWagerPoolStateAsync(Guid roomId, Guid slideId);
     Task<(int percent, int amount)> GetPlayerWagerAsync(Guid roomPlayerId, Guid slideId);
+    Task<BombDefusalStateDto> GetBombDefusalStateAsync(Guid roomId, Guid slideId);
+    Task RecordBombDefusalResultAsync(Guid roomId, Guid slideId, Guid roomPlayerId, string nickname, bool isDefused, int defusedWires, int totalWires, List<bool> wireCuts);
 }
 
 public class RoomService : IRoomService
@@ -207,6 +209,12 @@ public class RoomService : IRoomService
         int    streakBonus  = 0;
         string correctAnswer;
 
+        // Mini-Game 04: Defuse the Bomb fields
+        bool isBombDefused = false;
+        int totalWires = 0;
+        int defusedWires = 0;
+        List<WireDefuseResultDto>? wireResults = null;
+
         if (slide.Type == "QUIZ")
         {
             var selectedIds = ParseOptionIds(request.AnswerData);
@@ -245,7 +253,7 @@ public class RoomService : IRoomService
             correctAnswer = GetCorrectAnswer(slide);
             scoreAwarded = (int)Math.Round(slide.Points * partialRatio * speedFactor);
         }
-        else if (slide.Type == "FILL_IN_BLANK")
+        else if (slide.Type == "FILL_IN_BLANK" || slide.Type == "FILL_IN_THE_BLANK")
         {
             // answerData = JSON array: ["đáp án blank 1", "đáp án blank 2", ...]
             List<string> userAnswers;
@@ -266,22 +274,46 @@ public class RoomService : IRoomService
                 .OrderBy(o => o.OrderIndex)
                 .ToList();
 
+            if (correctOptions.Count == 0 && slide.Options.Count > 0)
+            {
+                correctOptions = slide.Options.OrderBy(o => o.OrderIndex).ToList();
+            }
+
             var keywordSets = correctOptions
                 .Select(o => (IList<string>)FuzzyMatchingService.ParseKeywords(o.BlankKeywords))
                 .ToList();
 
-            var (isFullyCorrect, scoreRatio, correctCount, totalBlanks) =
-                _fuzzy.GradeFillInBlank(userAnswers, keywordSets);
+            if (keywordSets.Count == 0)
+            {
+                keywordSets = [[]];
+            }
+
+            var (isFullyCorrect, scoreRatio, correctCount, totalBlanks, details) =
+                _fuzzy.GradeFillInBlankDetailed(userAnswers, keywordSets);
 
             isCorrect    = isFullyCorrect;
             partialRatio = scoreRatio;
             scoreAwarded = (int)Math.Round(slide.Points * scoreRatio * speedFactor);
             correctAnswer = string.Join(" | ", correctOptions
                 .Select(o => FuzzyMatchingService.ParseKeywords(o.BlankKeywords)
-                                .FirstOrDefault() ?? ""));
+                                .FirstOrDefault() ?? o.Content));
+
+            string[] wireColorPalette = ["red", "blue", "yellow", "green", "purple", "orange"];
+            wireResults = details.Select(d => new WireDefuseResultDto(
+                WireIndex: d.Index + 1,
+                WireColor: wireColorPalette[d.Index % wireColorPalette.Length],
+                IsCut: d.IsCorrect,
+                UserInput: d.UserAnswer,
+                ExpectedKeyword: d.PrimaryKeyword,
+                NormalizedKeyword: d.NormalizedKeyword
+            )).ToList();
+
+            isBombDefused = isFullyCorrect;
+            totalWires = totalBlanks;
+            defusedWires = correctCount;
 
             _logger.LogDebug(
-                "FILL_IN_BLANK: {Correct}/{Total} blanks correct, ratio={Ratio:P0}",
+                "FILL_IN_BLANK / DEFUSE_BOMB: {Correct}/{Total} blanks correct, ratio={Ratio:P0}",
                 correctCount, totalBlanks, scoreRatio);
         }
         else
@@ -395,6 +427,12 @@ public class RoomService : IRoomService
             }
         }
 
+        if (theme == "DEFUSE_BOMB")
+        {
+            var wireCutList = wireResults?.Select(w => w.IsCut).ToList() ?? [isCorrect];
+            await RecordBombDefusalResultAsync(player.RoomId, slide.Id, player.Id, player.Nickname, isBombDefused, defusedWires, totalWires, wireCutList);
+        }
+
         // Save response to player_responses table
         var response = new PlayerResponse
         {
@@ -441,7 +479,11 @@ public class RoomService : IRoomService
             partialRatio,
             wagerPercent,
             wagerAmount,
-            wagerNetGain
+            wagerNetGain,
+            isBombDefused,
+            totalWires,
+            defusedWires,
+            wireResults
         );
     }
 
@@ -1026,5 +1068,101 @@ public class RoomService : IRoomService
             return (p, a);
         }
         return (0, 0);
+    }
+
+    // ── DEFUSE THE BOMB LOGIC ───────────────────────────────────────────
+    public record PlayerBombRecord(
+        Guid PlayerId,
+        string Nickname,
+        bool IsDefused,
+        int DefusedWires,
+        int TotalWires,
+        List<bool> WireCuts,
+        DateTime SubmittedAt
+    );
+
+    public async Task RecordBombDefusalResultAsync(
+        Guid roomId, Guid slideId, Guid roomPlayerId, string nickname, bool isDefused, int defusedWires, int totalWires, List<bool> wireCuts)
+    {
+        var key = $"bomb_defusal:{roomId}:{slideId}";
+        var raw = await _cacheStore.GetStringAsync(key);
+        var records = string.IsNullOrEmpty(raw)
+            ? new List<PlayerBombRecord>()
+            : JsonSerializer.Deserialize<List<PlayerBombRecord>>(raw) ?? new List<PlayerBombRecord>();
+
+        records.RemoveAll(r => r.PlayerId == roomPlayerId);
+        records.Add(new PlayerBombRecord(roomPlayerId, nickname, isDefused, defusedWires, totalWires, wireCuts, DateTime.UtcNow));
+
+        await _cacheStore.SetStringAsync(key, JsonSerializer.Serialize(records), TimeSpan.FromHours(4));
+    }
+
+    public async Task<BombDefusalStateDto> GetBombDefusalStateAsync(Guid roomId, Guid slideId)
+    {
+        var totalPlayers = await _db.RoomPlayers.CountAsync(rp => rp.RoomId == roomId);
+        if (totalPlayers == 0) totalPlayers = 1;
+
+        var slide = await _db.Slides
+            .Include(s => s.Options)
+            .FirstOrDefaultAsync(s => s.Id == slideId);
+
+        var correctOptions = slide?.Options
+            .Where(o => o.IsCorrect)
+            .OrderBy(o => o.OrderIndex)
+            .ToList() ?? [];
+
+        if (correctOptions.Count == 0 && slide?.Options != null && slide.Options.Count > 0)
+        {
+            correctOptions = slide.Options.OrderBy(o => o.OrderIndex).ToList();
+        }
+
+        string[] wireColorPalette = ["red", "blue", "yellow", "green", "purple", "orange"];
+        var standardKeywords = new List<NormalizedKeywordDto>();
+        for (int i = 0; i < correctOptions.Count; i++)
+        {
+            var opt = correctOptions[i];
+            var primary = FuzzyMatchingService.ParseKeywords(opt.BlankKeywords).FirstOrDefault() ?? opt.Content;
+            var norm = FuzzyMatchingService.Normalize(primary);
+            standardKeywords.Add(new NormalizedKeywordDto(
+                WireIndex: i + 1,
+                WireColor: wireColorPalette[i % wireColorPalette.Length],
+                OriginalKeywords: opt.BlankKeywords ?? opt.Content,
+                NormalizedKeyword: norm
+            ));
+        }
+
+        var key = $"bomb_defusal:{roomId}:{slideId}";
+        var raw = await _cacheStore.GetStringAsync(key);
+        var records = string.IsNullOrEmpty(raw)
+            ? new List<PlayerBombRecord>()
+            : JsonSerializer.Deserialize<List<PlayerBombRecord>>(raw) ?? new List<PlayerBombRecord>();
+
+        int defusedBombs = records.Count(r => r.IsDefused);
+        int explodedBombs = records.Count(r => !r.IsDefused);
+        int inProgressBombs = Math.Max(0, totalPlayers - records.Count);
+
+        int totalWireCount = Math.Max(1, correctOptions.Count);
+        var wireStats = new List<WireDistributionDto>();
+        for (int i = 0; i < totalWireCount; i++)
+        {
+            int cutCount = records.Count(r => r.WireCuts != null && r.WireCuts.Count > i && r.WireCuts[i]);
+            double cutPercent = records.Count > 0 ? Math.Round((double)cutCount / records.Count * 100, 1) : 0.0;
+            wireStats.Add(new WireDistributionDto(
+                WireIndex: i + 1,
+                WireColor: wireColorPalette[i % wireColorPalette.Length],
+                CutCount: cutCount,
+                TotalCount: records.Count,
+                CutPercent: cutPercent
+            ));
+        }
+
+        return new BombDefusalStateDto(
+            SlideId: slideId,
+            TotalBombs: totalPlayers,
+            DefusedBombs: defusedBombs,
+            ExplodedBombs: explodedBombs,
+            InProgressBombs: inProgressBombs,
+            WireStats: wireStats,
+            StandardKeywords: standardKeywords
+        );
     }
 }

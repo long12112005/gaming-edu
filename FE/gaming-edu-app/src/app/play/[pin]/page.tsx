@@ -24,6 +24,7 @@ import {
 import SpeedRacerPlayerCockpit from "@/components/games/speed-racer/SpeedRacerPlayerCockpit";
 import BattleRoyalePlayerArena from "@/components/games/battle-royale/BattleRoyalePlayerArena";
 import QuizWagerPlayerView from "@/components/games/quiz-wager/QuizWagerPlayerView";
+import DefuseBombPlayerView from "@/components/games/defuse-bomb/DefuseBombPlayerView";
 
 type ActionButtonProps = {
   icon?: React.ComponentType<{ size?: number; className?: string }>;
@@ -111,6 +112,7 @@ export default function PlayerGameRoom() {
   const isSpeedRacer = activeTheme === "SPEED_RACER";
   const isBattleRoyale = activeTheme === "BATTLE_ROYALE";
   const isQuizWager = activeTheme === "QUIZ_WAGER";
+  const isDefuseBomb = activeTheme === "DEFUSE_BOMB";
 
   // States riêng cho từng dạng câu hỏi
   const [blankAnswer, setBlankAnswer] = useState("");
@@ -456,7 +458,26 @@ export default function PlayerGameRoom() {
               });
             }}
           />
-        ) : !isSpeedRacer && !isBattleRoyale && !isQuizWager && gameState === "PLAYING" && currentSlide ? (
+        ) : isDefuseBomb && (gameState === "PLAYING" || ((gameState === "LEADERBOARD" || answerResult) && answerResult)) && currentSlide ? (
+          <DefuseBombPlayerView
+            currentSlide={currentSlide as any}
+            slideTimeLeft={slideTimeLeft}
+            hasAnswered={hasAnswered}
+            answerResult={answerResult}
+            roomMode={roomInfo?.mode || "HOST_PACED"}
+            roomPlayerId={roomInfo?.playerId || ""}
+            currentRank={answerResult?.rank ?? roomInfo?.rank ?? 1}
+            onSubmitDefusal={(userAnswers) => {
+              if (hasAnswered || !slideTimeLeft || slideTimeLeft === 0 || !currentSlide) return;
+              setHasAnswered(true);
+              const elapsedMs = Math.max(0, (currentSlide.timeLimit - slideTimeLeft) * 1000);
+              hubSubmitAnswer(currentSlide.slideId, {
+                answerData: JSON.stringify(userAnswers),
+                responseTimeMs: elapsedMs,
+              });
+            }}
+          />
+        ) : !isSpeedRacer && !isBattleRoyale && !isQuizWager && !isDefuseBomb && gameState === "PLAYING" && currentSlide ? (
           <div className="flex-1 flex flex-col animate-fade-in-up">
             {/* Thanh tiêu đề câu hỏi & đồng hồ đếm ngược */}
             <div className="flex items-center justify-between mb-6 bg-white/90 backdrop-blur-md p-4 rounded-[24px] border-2 border-teal-200/80 shadow-sm">

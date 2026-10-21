@@ -144,6 +144,12 @@ public class AnswerProcessingWorker : BackgroundService
                         wagerPool = await roomService.GetWagerPoolStateAsync(payload.RoomId, payload.Request.SlideId);
                     }
 
+                    BombDefusalStateDto? bombDefusal = null;
+                    if (theme == "DEFUSE_BOMB")
+                    {
+                        bombDefusal = await roomService.GetBombDefusalStateAsync(payload.RoomId, payload.Request.SlideId);
+                    }
+
                     await _hubContext.Clients.Group(payload.GroupName).SendAsync("AnswerCountUpdated", new
                     {
                         SlideId = payload.Request.SlideId,
@@ -151,7 +157,8 @@ public class AnswerProcessingWorker : BackgroundService
                         TotalPlayers = distribution.TotalPlayers,
                         Distribution = distribution,
                         BattleRoyale = survival,
-                        WagerPool = wagerPool
+                        WagerPool = wagerPool,
+                        BombDefusal = bombDefusal
                     }, cancellationToken: stoppingToken);
 
                     if (survival != null)
@@ -162,6 +169,11 @@ public class AnswerProcessingWorker : BackgroundService
                     if (wagerPool != null)
                     {
                         await _hubContext.Clients.Group(payload.GroupName).SendAsync("WagerPoolUpdated", wagerPool, cancellationToken: stoppingToken);
+                    }
+
+                    if (bombDefusal != null)
+                    {
+                        await _hubContext.Clients.Group(payload.GroupName).SendAsync("BombDefusalUpdated", bombDefusal, cancellationToken: stoppingToken);
                     }
                 }
             }

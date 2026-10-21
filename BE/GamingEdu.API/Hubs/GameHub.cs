@@ -305,6 +305,13 @@ public class GameHub : Hub
             // Ghi mốc thời gian server cho câu hỏi đầu (chống gian lận)
             await _timer.StartRoomSlideAsync(roomId, slideDto.SlideId, slideDto.TimeLimit);
             await Clients.Group(groupName).SendAsync("SlideStarted", slideDto);
+
+            var roomTheme = await _roomService.GetRoomThemeAsync(roomId);
+            if (roomTheme == "DEFUSE_BOMB")
+            {
+                var bombState = await _roomService.GetBombDefusalStateAsync(roomId, slideDto.SlideId);
+                await Clients.Group(groupName).SendAsync("BombDefusalUpdated", bombState);
+            }
         }
         catch (Exception ex)
         {
@@ -392,6 +399,13 @@ public class GameHub : Hub
 
             await _timer.StartRoomSlideAsync(roomId, slideDto.SlideId, slideDto.TimeLimit);
             await Clients.Group(groupName).SendAsync("SlideStarted", slideDto);
+
+            var roomTheme = await _roomService.GetRoomThemeAsync(roomId);
+            if (roomTheme == "DEFUSE_BOMB")
+            {
+                var bombState = await _roomService.GetBombDefusalStateAsync(roomId, slideDto.SlideId);
+                await Clients.Group(groupName).SendAsync("BombDefusalUpdated", bombState);
+            }
         }
         catch (Exception ex)
         {
@@ -586,6 +600,19 @@ public class GameHub : Hub
         {
             var poolState = await _roomService.GetWagerPoolStateAsync(roomId, slideId);
             await Clients.Caller.SendAsync("WagerPoolUpdated", poolState);
+        }
+        catch (Exception ex)
+        {
+            await SendErrorAsync(ex.Message);
+        }
+    }
+
+    public async Task GetBombDefusalState(Guid roomId, Guid slideId)
+    {
+        try
+        {
+            var state = await _roomService.GetBombDefusalStateAsync(roomId, slideId);
+            await Clients.Caller.SendAsync("BombDefusalUpdated", state);
         }
         catch (Exception ex)
         {

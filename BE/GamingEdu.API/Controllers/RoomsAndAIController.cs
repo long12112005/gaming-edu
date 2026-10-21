@@ -101,18 +101,20 @@ public class RoomsController : ControllerBase
         catch (KeyNotFoundException ex) { return NotFound(new ApiResponse<string>(false, ex.Message, null)); }
     }
 
-    // PUT /api/rooms/answers/draft
+    // PUT /api/rooms/answers/draft or PUT /api/answers/draft
     /// <summary>Auto-save draft answer every 30s to Redis cache.</summary>
     [HttpPut("answers/draft")]
+    [HttpPut("/api/answers/draft")]
     public async Task<IActionResult> SaveDraftAnswer([FromBody] SaveDraftRequest request)
     {
         await _roomService.SaveDraftAnswerAsync(request.RoomPlayerId, request.SlideId, request.AnswerData);
         return Ok(new ApiResponse<string>(true, "Đã lưu bản nháp vào Redis Cache.", null));
     }
 
-    // GET /api/rooms/answers/draft
+    // GET /api/rooms/answers/draft or GET /api/answers/draft
     /// <summary>Lấy bản nháp câu trả lời từ Redis cache khi thí sinh tải lại trang.</summary>
     [HttpGet("answers/draft")]
+    [HttpGet("/api/answers/draft")]
     public async Task<IActionResult> GetDraftAnswer([FromQuery] Guid roomPlayerId, [FromQuery] Guid slideId)
     {
         var draft = await _roomService.GetDraftAnswerAsync(roomPlayerId, slideId);
