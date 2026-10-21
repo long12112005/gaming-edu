@@ -45,6 +45,8 @@ public interface IRoomService
     Task RecordBombDefusalResultAsync(Guid roomId, Guid slideId, Guid roomPlayerId, string nickname, bool isDefused, int defusedWires, int totalWires, List<bool> wireCuts);
     Task<WordHunterStateDto> GetWordHunterStateAsync(Guid roomId, Guid slideId);
     Task RecordWordHunterGuessAsync(Guid roomId, Guid slideId, Guid roomPlayerId, string nickname, string? avatarUrl, string guess, bool isCorrect, int responseTimeMs, int scoreAwarded);
+    Task<BridgeBuilderStateDto> GetBridgeBuilderStateAsync(Guid roomId, Guid slideId);
+    Task RecordBridgeBuilderCrossingAsync(Guid roomId, Guid slideId, Guid roomPlayerId, string nickname, string? avatarUrl, bool isFullyCrossed, int builtSpans, int totalSpans, List<bool> spanBridges, int responseTimeMs, int scoreAwarded);
 }
 
 public class RoomService : IRoomService
@@ -217,6 +219,12 @@ public class RoomService : IRoomService
         int defusedWires = 0;
         List<WireDefuseResultDto>? wireResults = null;
 
+        // Mini-Game 06: Bridge Builder fields
+        bool isBridgeCrossed = false;
+        int totalSpans = 0;
+        int builtSpans = 0;
+        List<BridgeSpanResultDto>? spanResults = null;
+
         if (slide.Type == "QUIZ")
         {
             var selectedIds = ParseOptionIds(request.AnswerData);
@@ -314,8 +322,19 @@ public class RoomService : IRoomService
             totalWires = totalBlanks;
             defusedWires = correctCount;
 
+            isBridgeCrossed = isFullyCorrect;
+            totalSpans = totalBlanks;
+            builtSpans = correctCount;
+            spanResults = details.Select(d => new BridgeSpanResultDto(
+                SpanIndex: d.Index + 1,
+                IsBuilt: d.IsCorrect,
+                UserInput: d.UserAnswer,
+                ExpectedKeyword: d.PrimaryKeyword,
+                NormalizedKeyword: d.NormalizedKeyword
+            )).ToList();
+
             _logger.LogDebug(
-                "FILL_IN_BLANK / DEFUSE_BOMB: {Correct}/{Total} blanks correct, ratio={Ratio:P0}",
+                "FILL_IN_BLANK / DEFUSE_BOMB / BRIDGE_BUILDER: {Correct}/{Total} blanks correct, ratio={Ratio:P0}",
                 correctCount, totalBlanks, scoreRatio);
         }
         else
@@ -451,6 +470,12 @@ public class RoomService : IRoomService
             await RecordWordHunterGuessAsync(player.RoomId, slide.Id, player.Id, player.Nickname, player.AvatarUrl, userGuessText, isCorrect, request.ResponseTimeMs, scoreAwarded);
         }
 
+        if (theme == "BRIDGE_BUILDER")
+        {
+            var spanBuiltList = spanResults?.Select(s => s.IsBuilt).ToList() ?? [isCorrect];
+            await RecordBridgeBuilderCrossingAsync(player.RoomId, slide.Id, player.Id, player.Nickname, player.AvatarUrl, isBridgeCrossed, builtSpans, totalSpans, spanBuiltList, request.ResponseTimeMs, scoreAwarded);
+        }
+
         // Save response to player_responses table
         var response = new PlayerResponse
         {
@@ -503,7 +528,11 @@ public class RoomService : IRoomService
             defusedWires,
             wireResults,
             isCorrect,
-            correctAnswer
+            correctAnswer,
+            isBridgeCrossed,
+            totalSpans,
+            builtSpans,
+            spanResults
         );
     }
 
@@ -1275,6 +1304,115 @@ public class RoomService : IRoomService
             SubmittedCount: submittedCount,
             RecentGuesses: recentGuesses,
             Solutions: solutions
+        );
+    }
+
+    // ── BRIDGE BUILDER (XÂY CẦU QUA SÔNG) LOGIC ────────────────────────
+    public record PlayerBridgeRecord(
+        Guid PlayerId,
+        string Nickname,
+        string? AvatarUrl,
+        bool IsFullyCrossed,
+        int BuiltSpans,
+        int TotalSpans,
+        List<bool> SpanBridges,
+        int ResponseTimeMs,
+        int ScoreAwarded,
+        DateTime SubmittedAt
+    );
+
+    public async Task RecordBridgeBuilderCrossingAsync(
+        Guid roomId, Guid slideId, Guid roomPlayerId, string nickname, string? avatarUrl,
+        bool isFullyCrossed, int builtSpans, int totalSpans, List<bool> spanBridges, int responseTimeMs, int scoreAwarded)
+    {
+        var key = $"bridge_builder:{roomId}:{slideId}";
+        var raw = await _cacheStore.GetStringAsync(key);
+        var records = string.IsNullOrEmpty(raw)
+            ? new List<PlayerBridgeRecord>()
+            : JsonSerializer.Deserialize<List<PlayerBridgeRecord>>(raw) ?? new List<PlayerBridgeRecord>();
+
+        records.RemoveAll(r => r.PlayerId == roomPlayerId);
+        records.Add(new PlayerBridgeRecord(
+            roomPlayerId, nickname, avatarUrl, isFullyCrossed, builtSpans, totalSpans, spanBridges, responseTimeMs, scoreAwarded, DateTime.UtcNow
+        ));
+
+        await _cacheStore.SetStringAsync(key, JsonSerializer.Serialize(records), TimeSpan.FromHours(4));
+    }
+
+    public async Task<BridgeBuilderStateDto> GetBridgeBuilderStateAsync(Guid roomId, Guid slideId)
+    {
+        var totalPlayers = await _db.RoomPlayers.CountAsync(rp => rp.RoomId == roomId);
+        if (totalPlayers == 0) totalPlayers = 1;
+
+        var slide = await _db.Slides
+            .Include(s => s.Options)
+            .FirstOrDefaultAsync(s => s.Id == slideId);
+
+        var correctOptions = slide?.Options
+            .Where(o => o.IsCorrect)
+            .OrderBy(o => o.OrderIndex)
+            .ToList() ?? [];
+
+        if (correctOptions.Count == 0 && slide?.Options != null && slide.Options.Count > 0)
+        {
+            correctOptions = slide.Options.OrderBy(o => o.OrderIndex).ToList();
+        }
+
+        int totalSpanCount = Math.Max(1, correctOptions.Count);
+
+        var key = $"bridge_builder:{roomId}:{slideId}";
+        var raw = await _cacheStore.GetStringAsync(key);
+        var records = string.IsNullOrEmpty(raw)
+            ? new List<PlayerBridgeRecord>()
+            : JsonSerializer.Deserialize<List<PlayerBridgeRecord>>(raw) ?? new List<PlayerBridgeRecord>();
+
+        int fullCrossings = records.Count(r => r.IsFullyCrossed);
+        int partialCrossings = records.Count(r => !r.IsFullyCrossed && r.BuiltSpans > 0);
+        int fallenCount = records.Count(r => r.BuiltSpans == 0);
+        int submittedCount = records.Count;
+
+        var spanStats = new List<BridgeSpanDistributionDto>();
+        for (int i = 0; i < totalSpanCount; i++)
+        {
+            int builtCount = records.Count(r => r.SpanBridges != null && r.SpanBridges.Count > i && r.SpanBridges[i]);
+            double builtPercent = records.Count > 0 ? Math.Round((double)builtCount / records.Count * 100, 1) : 0.0;
+            var opt = i < correctOptions.Count ? correctOptions[i] : null;
+            var expected = opt != null
+                ? (FuzzyMatchingService.ParseKeywords(opt.BlankKeywords).FirstOrDefault() ?? opt.Content)
+                : "";
+
+            spanStats.Add(new BridgeSpanDistributionDto(
+                SpanIndex: i + 1,
+                BuiltCount: builtCount,
+                TotalCount: records.Count,
+                BuiltPercent: builtPercent,
+                ExpectedKeyword: expected
+            ));
+        }
+
+        var recentCrossings = records
+            .OrderByDescending(r => r.SubmittedAt)
+            .Select(r => new BridgeBuilderPlayerCrossingDto(
+                r.PlayerId,
+                r.Nickname,
+                r.AvatarUrl,
+                r.BuiltSpans,
+                r.TotalSpans,
+                r.IsFullyCrossed,
+                r.ResponseTimeMs,
+                r.ScoreAwarded
+            ))
+            .ToList();
+
+        return new BridgeBuilderStateDto(
+            SlideId: slideId,
+            TotalPlayers: totalPlayers,
+            FullCrossings: fullCrossings,
+            PartialCrossings: partialCrossings,
+            FallenCount: fallenCount,
+            SubmittedCount: submittedCount,
+            SpanStats: spanStats,
+            RecentCrossings: recentCrossings
         );
     }
 }

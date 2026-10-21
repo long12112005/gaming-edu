@@ -317,6 +317,11 @@ public class GameHub : Hub
                 var wordHunterState = await _roomService.GetWordHunterStateAsync(roomId, slideDto.SlideId);
                 await Clients.Group(groupName).SendAsync("WordHunterUpdated", wordHunterState);
             }
+            if (roomTheme == "BRIDGE_BUILDER")
+            {
+                var bridgeState = await _roomService.GetBridgeBuilderStateAsync(roomId, slideDto.SlideId);
+                await Clients.Group(groupName).SendAsync("BridgeBuilderUpdated", bridgeState);
+            }
         }
         catch (Exception ex)
         {
@@ -415,6 +420,11 @@ public class GameHub : Hub
             {
                 var wordHunterState = await _roomService.GetWordHunterStateAsync(roomId, slideDto.SlideId);
                 await Clients.Group(groupName).SendAsync("WordHunterUpdated", wordHunterState);
+            }
+            if (roomTheme == "BRIDGE_BUILDER")
+            {
+                var bridgeState = await _roomService.GetBridgeBuilderStateAsync(roomId, slideDto.SlideId);
+                await Clients.Group(groupName).SendAsync("BridgeBuilderUpdated", bridgeState);
             }
         }
         catch (Exception ex)
@@ -636,6 +646,19 @@ public class GameHub : Hub
         {
             var state = await _roomService.GetWordHunterStateAsync(roomId, slideId);
             await Clients.Caller.SendAsync("WordHunterUpdated", state);
+        }
+        catch (Exception ex)
+        {
+            await SendErrorAsync(ex.Message);
+        }
+    }
+
+    public async Task GetBridgeBuilderState(Guid roomId, Guid slideId)
+    {
+        try
+        {
+            var state = await _roomService.GetBridgeBuilderStateAsync(roomId, slideId);
+            await Clients.Caller.SendAsync("BridgeBuilderUpdated", state);
         }
         catch (Exception ex)
         {

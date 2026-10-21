@@ -26,6 +26,7 @@ import BattleRoyalePlayerArena from "@/components/games/battle-royale/BattleRoya
 import QuizWagerPlayerView from "@/components/games/quiz-wager/QuizWagerPlayerView";
 import DefuseBombPlayerView from "@/components/games/defuse-bomb/DefuseBombPlayerView";
 import WordHunterPlayerView from "@/components/games/word-hunter/WordHunterPlayerView";
+import BridgeBuilderPlayerView from "@/components/games/bridge-builder/BridgeBuilderPlayerView";
 
 type ActionButtonProps = {
   icon?: React.ComponentType<{ size?: number; className?: string }>;
@@ -115,6 +116,7 @@ export default function PlayerGameRoom() {
   const isQuizWager = activeTheme === "QUIZ_WAGER";
   const isDefuseBomb = activeTheme === "DEFUSE_BOMB";
   const isWordHunter = activeTheme === "WORD_HUNTER";
+  const isBridgeBuilder = activeTheme === "BRIDGE_BUILDER";
 
   // States riêng cho từng dạng câu hỏi
   const [blankAnswer, setBlankAnswer] = useState("");
@@ -498,7 +500,26 @@ export default function PlayerGameRoom() {
               });
             }}
           />
-        ) : !isSpeedRacer && !isBattleRoyale && !isQuizWager && !isDefuseBomb && !isWordHunter && gameState === "PLAYING" && currentSlide ? (
+        ) : isBridgeBuilder && (gameState === "PLAYING" || ((gameState === "LEADERBOARD" || answerResult) && answerResult)) && currentSlide ? (
+          <BridgeBuilderPlayerView
+            currentSlide={currentSlide as any}
+            slideTimeLeft={slideTimeLeft}
+            hasAnswered={hasAnswered}
+            answerResult={answerResult}
+            roomMode={roomInfo?.mode || "HOST_PACED"}
+            roomPlayerId={roomInfo?.playerId || ""}
+            currentRank={answerResult?.rank ?? roomInfo?.rank ?? 1}
+            onSubmitBridge={(userAnswers) => {
+              if (hasAnswered || !slideTimeLeft || slideTimeLeft === 0 || !currentSlide) return;
+              setHasAnswered(true);
+              const elapsedMs = Math.max(0, (currentSlide.timeLimit - slideTimeLeft) * 1000);
+              hubSubmitAnswer(currentSlide.slideId, {
+                answerData: JSON.stringify(userAnswers),
+                responseTimeMs: elapsedMs,
+              });
+            }}
+          />
+        ) : !isSpeedRacer && !isBattleRoyale && !isQuizWager && !isDefuseBomb && !isWordHunter && !isBridgeBuilder && gameState === "PLAYING" && currentSlide ? (
           <div className="flex-1 flex flex-col animate-fade-in-up">
             {/* Thanh tiêu đề câu hỏi & đồng hồ đếm ngược */}
             <div className="flex items-center justify-between mb-6 bg-white/90 backdrop-blur-md p-4 rounded-[24px] border-2 border-teal-200/80 shadow-sm">
@@ -744,7 +765,7 @@ export default function PlayerGameRoom() {
         {/* ════════════════════════════════════════════════════════════
             ANSWER RESULT STATE (KẾT QUẢ ĐÚNG / SAI CỦA BẠN)
         ════════════════════════════════════════════════════════════ */}
-        {!isSpeedRacer && !isBattleRoyale && !isQuizWager && !isDefuseBomb && !isWordHunter && (gameState === "LEADERBOARD" || answerResult) && answerResult && (
+        {!isSpeedRacer && !isBattleRoyale && !isQuizWager && !isDefuseBomb && !isWordHunter && !isBridgeBuilder && (gameState === "LEADERBOARD" || answerResult) && answerResult && (
           <div className="flex-1 flex flex-col items-center justify-center text-center animate-fade-in-up">
             {answerResult.isCorrect ? (
               <div className="w-32 h-32 bg-emerald-500 text-white rounded-[36px] border-4 border-emerald-700 shadow-[0_10px_0_0_#047857] flex items-center justify-center mb-6 transform -rotate-3">

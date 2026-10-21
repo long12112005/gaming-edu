@@ -156,6 +156,12 @@ public class AnswerProcessingWorker : BackgroundService
                         wordHunter = await roomService.GetWordHunterStateAsync(payload.RoomId, payload.Request.SlideId);
                     }
 
+                    BridgeBuilderStateDto? bridgeBuilder = null;
+                    if (theme == "BRIDGE_BUILDER")
+                    {
+                        bridgeBuilder = await roomService.GetBridgeBuilderStateAsync(payload.RoomId, payload.Request.SlideId);
+                    }
+
                     await _hubContext.Clients.Group(payload.GroupName).SendAsync("AnswerCountUpdated", new
                     {
                         SlideId = payload.Request.SlideId,
@@ -165,7 +171,8 @@ public class AnswerProcessingWorker : BackgroundService
                         BattleRoyale = survival,
                         WagerPool = wagerPool,
                         BombDefusal = bombDefusal,
-                        WordHunter = wordHunter
+                        WordHunter = wordHunter,
+                        BridgeBuilder = bridgeBuilder
                     }, cancellationToken: stoppingToken);
 
                     if (survival != null)
@@ -186,6 +193,11 @@ public class AnswerProcessingWorker : BackgroundService
                     if (wordHunter != null)
                     {
                         await _hubContext.Clients.Group(payload.GroupName).SendAsync("WordHunterUpdated", wordHunter, cancellationToken: stoppingToken);
+                    }
+
+                    if (bridgeBuilder != null)
+                    {
+                        await _hubContext.Clients.Group(payload.GroupName).SendAsync("BridgeBuilderUpdated", bridgeBuilder, cancellationToken: stoppingToken);
                     }
                 }
             }

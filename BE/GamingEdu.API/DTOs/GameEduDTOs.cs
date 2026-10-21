@@ -268,7 +268,11 @@ public record AnswerResultDto(
     int DefusedWires = 0,
     List<WireDefuseResultDto>? WireResults = null,
     bool IsDecoded = false,
-    string? RevealedWord = null
+    string? RevealedWord = null,
+    bool IsBridgeCrossed = false,
+    int TotalSpans = 0,
+    int BuiltSpans = 0,
+    List<BridgeSpanResultDto>? SpanResults = null
 );
 
 public record OptionDistributionDto(
@@ -370,6 +374,44 @@ public record WordHunterStateDto(
     int SubmittedCount,
     List<WordHunterGuessSummaryDto> RecentGuesses,
     List<WordHunterSolutionDto> Solutions
+);
+
+public record BridgeSpanResultDto(
+    int SpanIndex,
+    bool IsBuilt,
+    string UserInput,
+    string ExpectedKeyword,
+    string NormalizedKeyword
+);
+
+public record BridgeSpanDistributionDto(
+    int SpanIndex,
+    int BuiltCount,
+    int TotalCount,
+    double BuiltPercent,
+    string ExpectedKeyword
+);
+
+public record BridgeBuilderPlayerCrossingDto(
+    Guid PlayerId,
+    string Nickname,
+    string? AvatarUrl,
+    int BuiltSpans,
+    int TotalSpans,
+    bool IsFullyCrossed,
+    int ResponseTimeMs,
+    int ScoreAwarded
+);
+
+public record BridgeBuilderStateDto(
+    Guid SlideId,
+    int TotalPlayers,
+    int FullCrossings,
+    int PartialCrossings,
+    int FallenCount,
+    int SubmittedCount,
+    List<BridgeSpanDistributionDto> SpanStats,
+    List<BridgeBuilderPlayerCrossingDto> RecentCrossings
 );
 
 public record PlayerRejoinDataDto(

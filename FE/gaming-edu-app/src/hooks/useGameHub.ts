@@ -124,6 +124,44 @@ export interface WordHunterState {
   solutions: WordHunterSolution[];
 }
 
+export interface BridgeSpanResult {
+  spanIndex: number;
+  isBuilt: boolean;
+  userInput: string;
+  expectedKeyword: string;
+  normalizedKeyword: string;
+}
+
+export interface BridgeSpanDistribution {
+  spanIndex: number;
+  builtCount: number;
+  totalCount: number;
+  builtPercent: number;
+  expectedKeyword: string;
+}
+
+export interface BridgeBuilderPlayerCrossing {
+  playerId: string;
+  nickname: string;
+  avatarUrl?: string;
+  builtSpans: number;
+  totalSpans: number;
+  isFullyCrossed: boolean;
+  responseTimeMs: number;
+  scoreAwarded: number;
+}
+
+export interface BridgeBuilderState {
+  slideId: string;
+  totalPlayers: number;
+  fullCrossings: number;
+  partialCrossings: number;
+  fallenCount: number;
+  submittedCount: number;
+  spanStats: BridgeSpanDistribution[];
+  recentCrossings: BridgeBuilderPlayerCrossing[];
+}
+
 export function useGameHub() {
   const [connection, setConnection] = useState<signalR.HubConnection | null>(null);
   const [isConnected, setIsConnected] = useState(false);
@@ -147,12 +185,14 @@ export function useGameHub() {
     wagerPool?: WagerPoolState;
     bombDefusal?: BombDefusalState;
     wordHunter?: WordHunterState;
+    bridgeBuilder?: BridgeBuilderState;
   } | null>(null);
   const [distribution, setDistribution] = useState<any | null>(null);
   const [battleRoyaleState, setBattleRoyaleState] = useState<BattleRoyaleState | null>(null);
   const [wagerPool, setWagerPool] = useState<WagerPoolState | null>(null);
   const [bombDefusalState, setBombDefusalState] = useState<BombDefusalState | null>(null);
   const [wordHunterState, setWordHunterState] = useState<WordHunterState | null>(null);
+  const [bridgeBuilderState, setBridgeBuilderState] = useState<BridgeBuilderState | null>(null);
 
   // Keep a ref to the connection to avoid closure issues
   const connectionRef = useRef<signalR.HubConnection | null>(null);
@@ -239,6 +279,7 @@ export function useGameHub() {
       setWagerPool(null);
       setBombDefusalState(null);
       setWordHunterState(null);
+      setBridgeBuilderState(null);
     });
 
     newConnection.on("CountdownStarted", (seconds: number) => {
@@ -283,6 +324,9 @@ export function useGameHub() {
       if (data.wordHunter) {
         setWordHunterState(data.wordHunter);
       }
+      if (data.bridgeBuilder) {
+        setBridgeBuilderState(data.bridgeBuilder);
+      }
     });
 
     newConnection.on("SurvivalStatusUpdated", (data: BattleRoyaleState) => {
@@ -299,6 +343,10 @@ export function useGameHub() {
 
     newConnection.on("WordHunterUpdated", (state: WordHunterState) => {
       setWordHunterState(state);
+    });
+
+    newConnection.on("BridgeBuilderUpdated", (state: BridgeBuilderState) => {
+      setBridgeBuilderState(state);
     });
 
     newConnection.on("DistributionUpdated", (data: any) => {
@@ -434,6 +482,12 @@ export function useGameHub() {
     }
   }, []);
 
+  const getBridgeBuilderState = useCallback(async (roomId: string, slideId: string) => {
+    if (connectionRef.current?.state === signalR.HubConnectionState.Connected) {
+      await connectionRef.current.invoke("GetBridgeBuilderState", roomId, slideId);
+    }
+  }, []);
+
   return {
     connection,
     isConnected,
@@ -452,6 +506,7 @@ export function useGameHub() {
     wagerPool,
     bombDefusalState,
     wordHunterState,
+    bridgeBuilderState,
     joinRoom,
     hostJoinRoom,
     rejoinRoom,
@@ -461,6 +516,7 @@ export function useGameHub() {
     getWagerPoolState,
     getBombDefusalState,
     getWordHunterState,
+    getBridgeBuilderState,
     startGame,
     nextSlide,
     startCountdown,

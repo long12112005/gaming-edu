@@ -33,6 +33,7 @@ import BattleRoyaleHostArena from "@/components/games/battle-royale/BattleRoyale
 import QuizWagerHostView from "@/components/games/quiz-wager/QuizWagerHostView";
 import DefuseBombHostView from "@/components/games/defuse-bomb/DefuseBombHostView";
 import WordHunterHostView from "@/components/games/word-hunter/WordHunterHostView";
+import BridgeBuilderHostView from "@/components/games/bridge-builder/BridgeBuilderHostView";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
@@ -182,6 +183,7 @@ export default function HostLobbyPage() {
     wagerPool,
     bombDefusalState,
     wordHunterState,
+    bridgeBuilderState,
     joinRoom,
     hostJoinRoom,
     roomInfo,
@@ -602,6 +604,15 @@ export default function HostLobbyPage() {
               answerProgress={answerProgress}
               leaderboard={leaderboard}
               wordHunterState={wordHunterState}
+              onNextSlide={nextSlide}
+            />
+          ) : selectedThemeId === "BRIDGE_BUILDER" ? (
+            <BridgeBuilderHostView
+              currentSlide={currentSlide as any}
+              slideTimeLeft={slideTimeLeft}
+              answerProgress={answerProgress}
+              leaderboard={leaderboard}
+              bridgeBuilderState={bridgeBuilderState}
               onNextSlide={nextSlide}
             />
           ) : (
