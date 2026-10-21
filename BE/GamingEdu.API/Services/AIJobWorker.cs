@@ -118,20 +118,77 @@ public class AIJobWorker : BackgroundService
 
         try
         {
-            // ── Step 2: Generate AI content via Gemini API ─────────
+            // ── Step 2: Đọc và trích xuất nội dung văn bản từ tài liệu (PDF, DOCX, TXT) ─────────
             var prompt = $"Vui lòng phân tích tài liệu/từ khóa sau và tạo ra 3-5 câu hỏi trắc nghiệm, điền khuyết và ghép cặp chất lượng: {job.FileUrl}";
-            var localFilePath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", job.FileUrl.TrimStart('/'));
+            
+            string localFilePath = string.Empty;
+            try
+            {
+                string relativePath = job.FileUrl;
+                if (Uri.TryCreate(job.FileUrl, UriKind.Absolute, out var parsedUri))
+                {
+                    relativePath = parsedUri.AbsolutePath;
+                }
+                else if (job.FileUrl.Contains("/uploads/", StringComparison.OrdinalIgnoreCase))
+                {
+                    var idx = job.FileUrl.IndexOf("/uploads/", StringComparison.OrdinalIgnoreCase);
+                    relativePath = job.FileUrl[idx..];
+                }
+
+                localFilePath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", relativePath.TrimStart('/', '\\'));
+            }
+            catch
+            {
+                localFilePath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", job.FileUrl.TrimStart('/'));
+            }
+
             if (File.Exists(localFilePath))
             {
                 var ext = Path.GetExtension(localFilePath).ToLowerInvariant();
-                if (ext == ".txt")
+                string? textContent = null;
+
+                try
                 {
-                    var textContent = await File.ReadAllTextAsync(localFilePath, ct);
-                    if (!string.IsNullOrWhiteSpace(textContent))
+                    if (ext == ".txt")
                     {
-                        if (textContent.Length > 20000) textContent = textContent[..20000];
-                        prompt = $"Vui lòng phân tích nội dung tài liệu sau và tạo ra 3-5 câu hỏi đa dạng (Trắc nghiệm QUIZ, Điền khuyết FILL_IN_BLANK, Ghép cặp MATCHING):\n\n{textContent}";
+                        textContent = await File.ReadAllTextAsync(localFilePath, ct);
                     }
+                    else if (ext == ".pdf")
+                    {
+                        using var pdf = UglyToad.PdfPig.PdfDocument.Open(localFilePath);
+                        var sb = new System.Text.StringBuilder();
+                        foreach (var page in pdf.GetPages())
+                        {
+                            sb.AppendLine(page.Text);
+                            if (sb.Length > 25000) break;
+                        }
+                        textContent = sb.ToString();
+                    }
+                    else if (ext == ".docx")
+                    {
+                        using var archive = System.IO.Compression.ZipFile.OpenRead(localFilePath);
+                        var entry = archive.GetEntry("word/document.xml");
+                        if (entry != null)
+                        {
+                            using var stream = entry.Open();
+                            using var reader = new StreamReader(stream);
+                            var xml = await reader.ReadToEndAsync(ct);
+                            var doc = System.Xml.Linq.XDocument.Parse(xml);
+                            var words = doc.Descendants().Where(e => e.Name.LocalName == "t").Select(e => e.Value);
+                            textContent = string.Join(" ", words);
+                        }
+                    }
+                }
+                catch (Exception extractEx)
+                {
+                    _logger.LogWarning(extractEx, "Không thể trích xuất văn bản từ file {Path}", localFilePath);
+                }
+
+                if (!string.IsNullOrWhiteSpace(textContent))
+                {
+                    if (textContent.Length > 20000) textContent = textContent[..20000];
+                    prompt = $"Vui lòng phân tích nội dung tài liệu sau và tạo ra 3-5 câu hỏi đa dạng (Trắc nghiệm QUIZ, Điền khuyết FILL_IN_BLANK, Ghép cặp MATCHING):\n\n{textContent}";
+                    _logger.LogInformation("AI Job {JobId}: Đã trích xuất thành công {Length} ký tự từ file {Ext}", job.Id, textContent.Length, ext);
                 }
             }
 

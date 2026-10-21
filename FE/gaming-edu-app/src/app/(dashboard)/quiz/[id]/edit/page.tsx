@@ -719,7 +719,8 @@ export default function QuizEditorPage() {
         headers: { "Content-Type": "multipart/form-data" },
       });
       if (res.data?.success) {
-        setAiFileUrl("http://localhost:5000" + res.data.data);
+        const uploadedPath = res.data.data?.fileUrl || (typeof res.data.data === "string" ? res.data.data : "");
+        setAiFileUrl(uploadedPath);
       }
     } catch (err: unknown) {
       const errorObj = err as { response?: { data?: { message?: string } } };
@@ -748,7 +749,8 @@ export default function QuizEditorPage() {
           headers: { "Content-Type": "multipart/form-data" },
         });
         if (resUpload.data?.success) {
-          targetUrl = "http://localhost:5000" + resUpload.data.data;
+          const uploadedPath = resUpload.data.data?.fileUrl || (typeof resUpload.data.data === "string" ? resUpload.data.data : "");
+          targetUrl = uploadedPath;
         } else {
           throw new Error("Không thể lưu văn bản bài giảng.");
         }
