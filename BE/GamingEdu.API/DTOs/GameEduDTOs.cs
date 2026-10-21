@@ -266,7 +266,9 @@ public record AnswerResultDto(
     bool IsBombDefused = false,
     int TotalWires = 0,
     int DefusedWires = 0,
-    List<WireDefuseResultDto>? WireResults = null
+    List<WireDefuseResultDto>? WireResults = null,
+    bool IsDecoded = false,
+    string? RevealedWord = null
 );
 
 public record OptionDistributionDto(
@@ -344,6 +346,32 @@ public record BombDefusalStateDto(
     List<NormalizedKeywordDto> StandardKeywords
 );
 
+public record WordHunterGuessSummaryDto(
+    Guid PlayerId,
+    string Nickname,
+    string? AvatarUrl,
+    string Guess,
+    bool IsCorrect,
+    int ResponseTimeMs,
+    int ScoreAwarded
+);
+
+public record WordHunterSolutionDto(
+    int WordIndex,
+    string SolutionText,
+    int TotalLength,
+    List<string> AcceptedKeywords
+);
+
+public record WordHunterStateDto(
+    Guid SlideId,
+    int TotalPlayers,
+    int DecodedCount,
+    int SubmittedCount,
+    List<WordHunterGuessSummaryDto> RecentGuesses,
+    List<WordHunterSolutionDto> Solutions
+);
+
 public record PlayerRejoinDataDto(
     Guid RoomId,
     Guid PlayerId,
@@ -376,12 +404,14 @@ public record SlideStartedDto(
     IEnumerable<SlideOptionPublicDto> Options
 );
 
-/// <summary>Public options sent to players (IsCorrect hidden)</summary>
+/// <summary>Public options sent to players (IsCorrect hidden, only lengths shown for Word Hunter)</summary>
 public record SlideOptionPublicDto(
     Guid Id,
     string Content,
     string? MatchingPair,
-    int OrderIndex
+    int OrderIndex,
+    int? BlankLength = null,
+    List<int>? WordLengths = null
 );
 
 // ─── AI Job DTOs ───────────────────────────────────────────────────────────

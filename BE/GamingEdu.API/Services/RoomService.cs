@@ -43,6 +43,8 @@ public interface IRoomService
     Task<(int percent, int amount)> GetPlayerWagerAsync(Guid roomPlayerId, Guid slideId);
     Task<BombDefusalStateDto> GetBombDefusalStateAsync(Guid roomId, Guid slideId);
     Task RecordBombDefusalResultAsync(Guid roomId, Guid slideId, Guid roomPlayerId, string nickname, bool isDefused, int defusedWires, int totalWires, List<bool> wireCuts);
+    Task<WordHunterStateDto> GetWordHunterStateAsync(Guid roomId, Guid slideId);
+    Task RecordWordHunterGuessAsync(Guid roomId, Guid slideId, Guid roomPlayerId, string nickname, string? avatarUrl, string guess, bool isCorrect, int responseTimeMs, int scoreAwarded);
 }
 
 public class RoomService : IRoomService
@@ -433,6 +435,22 @@ public class RoomService : IRoomService
             await RecordBombDefusalResultAsync(player.RoomId, slide.Id, player.Id, player.Nickname, isBombDefused, defusedWires, totalWires, wireCutList);
         }
 
+        if (theme == "WORD_HUNTER")
+        {
+            string userGuessText = request.AnswerData;
+            try
+            {
+                var arr = JsonSerializer.Deserialize<List<string>>(request.AnswerData);
+                if (arr != null && arr.Count > 0)
+                {
+                    userGuessText = string.Join(" ", arr);
+                }
+            }
+            catch { }
+
+            await RecordWordHunterGuessAsync(player.RoomId, slide.Id, player.Id, player.Nickname, player.AvatarUrl, userGuessText, isCorrect, request.ResponseTimeMs, scoreAwarded);
+        }
+
         // Save response to player_responses table
         var response = new PlayerResponse
         {
@@ -483,7 +501,9 @@ public class RoomService : IRoomService
             isBombDefused,
             totalWires,
             defusedWires,
-            wireResults
+            wireResults,
+            isCorrect,
+            correctAnswer
         );
     }
 
@@ -1165,4 +1185,97 @@ public class RoomService : IRoomService
             StandardKeywords: standardKeywords
         );
     }
+
+    // ── WORD HUNTER (GIẢI MÃ Ô CHỮ BÍ ẨN) LOGIC ────────────────────────
+    public record PlayerWordHunterRecord(
+        Guid PlayerId,
+        string Nickname,
+        string? AvatarUrl,
+        string Guess,
+        bool IsCorrect,
+        int ResponseTimeMs,
+        int ScoreAwarded,
+        DateTime SubmittedAt
+    );
+
+    public async Task RecordWordHunterGuessAsync(
+        Guid roomId, Guid slideId, Guid roomPlayerId, string nickname, string? avatarUrl, string guess, bool isCorrect, int responseTimeMs, int scoreAwarded)
+    {
+        var key = $"word_hunter:{roomId}:{slideId}";
+        var raw = await _cacheStore.GetStringAsync(key);
+        var records = string.IsNullOrEmpty(raw)
+            ? new List<PlayerWordHunterRecord>()
+            : JsonSerializer.Deserialize<List<PlayerWordHunterRecord>>(raw) ?? new List<PlayerWordHunterRecord>();
+
+        records.RemoveAll(r => r.PlayerId == roomPlayerId);
+        records.Add(new PlayerWordHunterRecord(roomPlayerId, nickname, avatarUrl, guess, isCorrect, responseTimeMs, scoreAwarded, DateTime.UtcNow));
+
+        await _cacheStore.SetStringAsync(key, JsonSerializer.Serialize(records), TimeSpan.FromHours(4));
+    }
+
+    public async Task<WordHunterStateDto> GetWordHunterStateAsync(Guid roomId, Guid slideId)
+    {
+        var totalPlayers = await _db.RoomPlayers.CountAsync(rp => rp.RoomId == roomId);
+        if (totalPlayers == 0) totalPlayers = 1;
+
+        var slide = await _db.Slides
+            .Include(s => s.Options)
+            .FirstOrDefaultAsync(s => s.Id == slideId);
+
+        var correctOptions = slide?.Options
+            .Where(o => o.IsCorrect)
+            .OrderBy(o => o.OrderIndex)
+            .ToList() ?? [];
+
+        if (correctOptions.Count == 0 && slide?.Options != null && slide.Options.Count > 0)
+        {
+            correctOptions = slide.Options.OrderBy(o => o.OrderIndex).ToList();
+        }
+
+        var solutions = new List<WordHunterSolutionDto>();
+        for (int i = 0; i < correctOptions.Count; i++)
+        {
+            var opt = correctOptions[i];
+            var keywords = FuzzyMatchingService.ParseKeywords(opt.BlankKeywords);
+            var primary = keywords.FirstOrDefault() ?? opt.Content;
+            solutions.Add(new WordHunterSolutionDto(
+                WordIndex: i + 1,
+                SolutionText: primary.Trim(),
+                TotalLength: primary.Trim().Length,
+                AcceptedKeywords: keywords.Count > 0 ? keywords : [opt.Content]
+            ));
+        }
+
+        var key = $"word_hunter:{roomId}:{slideId}";
+        var raw = await _cacheStore.GetStringAsync(key);
+        var records = string.IsNullOrEmpty(raw)
+            ? new List<PlayerWordHunterRecord>()
+            : JsonSerializer.Deserialize<List<PlayerWordHunterRecord>>(raw) ?? new List<PlayerWordHunterRecord>();
+
+        int decodedCount = records.Count(r => r.IsCorrect);
+        int submittedCount = records.Count;
+
+        var recentGuesses = records
+            .OrderByDescending(r => r.SubmittedAt)
+            .Select(r => new WordHunterGuessSummaryDto(
+                r.PlayerId,
+                r.Nickname,
+                r.AvatarUrl,
+                r.Guess,
+                r.IsCorrect,
+                r.ResponseTimeMs,
+                r.ScoreAwarded
+            ))
+            .ToList();
+
+        return new WordHunterStateDto(
+            SlideId: slideId,
+            TotalPlayers: totalPlayers,
+            DecodedCount: decodedCount,
+            SubmittedCount: submittedCount,
+            RecentGuesses: recentGuesses,
+            Solutions: solutions
+        );
+    }
 }
+

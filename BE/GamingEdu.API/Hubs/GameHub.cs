@@ -312,6 +312,11 @@ public class GameHub : Hub
                 var bombState = await _roomService.GetBombDefusalStateAsync(roomId, slideDto.SlideId);
                 await Clients.Group(groupName).SendAsync("BombDefusalUpdated", bombState);
             }
+            if (roomTheme == "WORD_HUNTER")
+            {
+                var wordHunterState = await _roomService.GetWordHunterStateAsync(roomId, slideDto.SlideId);
+                await Clients.Group(groupName).SendAsync("WordHunterUpdated", wordHunterState);
+            }
         }
         catch (Exception ex)
         {
@@ -405,6 +410,11 @@ public class GameHub : Hub
             {
                 var bombState = await _roomService.GetBombDefusalStateAsync(roomId, slideDto.SlideId);
                 await Clients.Group(groupName).SendAsync("BombDefusalUpdated", bombState);
+            }
+            if (roomTheme == "WORD_HUNTER")
+            {
+                var wordHunterState = await _roomService.GetWordHunterStateAsync(roomId, slideDto.SlideId);
+                await Clients.Group(groupName).SendAsync("WordHunterUpdated", wordHunterState);
             }
         }
         catch (Exception ex)
@@ -620,6 +630,19 @@ public class GameHub : Hub
         }
     }
 
+    public async Task GetWordHunterState(Guid roomId, Guid slideId)
+    {
+        try
+        {
+            var state = await _roomService.GetWordHunterStateAsync(roomId, slideId);
+            await Clients.Caller.SendAsync("WordHunterUpdated", state);
+        }
+        catch (Exception ex)
+        {
+            await SendErrorAsync(ex.Message);
+        }
+    }
+
     // ── HELPERS ────────────────────────────────────────────────────────
     private async Task<SlideStartedDto?> GetCurrentSlideAsync(Guid roomId, string pinCode)
     {
@@ -640,9 +663,21 @@ public class GameHub : Hub
 
         var slide = slides[idx];
 
-        // Only send public options (hide IsCorrect from players)
-        var publicOptions = slide.Options.Select(o => new SlideOptionPublicDto(
-            o.Id, o.Content, o.MatchingPair, o.OrderIndex));
+        // Only send public options (hide IsCorrect from players, but compute length for Word Hunter without revealing letters)
+        var publicOptions = slide.Options.Select(o => {
+            int? blankLength = null;
+            List<int>? wordLengths = null;
+            var keywords = FuzzyMatchingService.ParseKeywords(o.BlankKeywords);
+            var primary = keywords.FirstOrDefault() ?? (o.IsCorrect ? o.Content : null);
+            if (!string.IsNullOrWhiteSpace(primary))
+            {
+                var trimmed = primary.Trim();
+                blankLength = trimmed.Length;
+                wordLengths = trimmed.Split(' ', StringSplitOptions.RemoveEmptyEntries).Select(w => w.Length).ToList();
+            }
+            return new SlideOptionPublicDto(
+                o.Id, o.Content, o.MatchingPair, o.OrderIndex, blankLength, wordLengths);
+        });
 
         return new SlideStartedDto(
             idx, slide.Id, slide.Type, slide.QuestionText,

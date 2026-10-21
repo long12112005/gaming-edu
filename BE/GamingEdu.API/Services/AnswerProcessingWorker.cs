@@ -150,6 +150,12 @@ public class AnswerProcessingWorker : BackgroundService
                         bombDefusal = await roomService.GetBombDefusalStateAsync(payload.RoomId, payload.Request.SlideId);
                     }
 
+                    WordHunterStateDto? wordHunter = null;
+                    if (theme == "WORD_HUNTER")
+                    {
+                        wordHunter = await roomService.GetWordHunterStateAsync(payload.RoomId, payload.Request.SlideId);
+                    }
+
                     await _hubContext.Clients.Group(payload.GroupName).SendAsync("AnswerCountUpdated", new
                     {
                         SlideId = payload.Request.SlideId,
@@ -158,7 +164,8 @@ public class AnswerProcessingWorker : BackgroundService
                         Distribution = distribution,
                         BattleRoyale = survival,
                         WagerPool = wagerPool,
-                        BombDefusal = bombDefusal
+                        BombDefusal = bombDefusal,
+                        WordHunter = wordHunter
                     }, cancellationToken: stoppingToken);
 
                     if (survival != null)
@@ -174,6 +181,11 @@ public class AnswerProcessingWorker : BackgroundService
                     if (bombDefusal != null)
                     {
                         await _hubContext.Clients.Group(payload.GroupName).SendAsync("BombDefusalUpdated", bombDefusal, cancellationToken: stoppingToken);
+                    }
+
+                    if (wordHunter != null)
+                    {
+                        await _hubContext.Clients.Group(payload.GroupName).SendAsync("WordHunterUpdated", wordHunter, cancellationToken: stoppingToken);
                     }
                 }
             }

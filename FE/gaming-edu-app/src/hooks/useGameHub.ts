@@ -16,6 +16,8 @@ export interface SlideOptionPublic {
   content: string;
   matchingPair?: string;
   orderIndex: number;
+  blankLength?: number;
+  wordLengths?: number[];
 }
 
 export interface SlideStartedPayload {
@@ -96,6 +98,32 @@ export interface BombDefusalState {
   standardKeywords: NormalizedKeyword[];
 }
 
+export interface WordHunterGuessSummary {
+  playerId: string;
+  nickname: string;
+  avatarUrl?: string;
+  guess: string;
+  isCorrect: boolean;
+  responseTimeMs: number;
+  scoreAwarded: number;
+}
+
+export interface WordHunterSolution {
+  wordIndex: number;
+  solutionText: string;
+  totalLength: number;
+  acceptedKeywords: string[];
+}
+
+export interface WordHunterState {
+  slideId: string;
+  totalPlayers: number;
+  decodedCount: number;
+  submittedCount: number;
+  recentGuesses: WordHunterGuessSummary[];
+  solutions: WordHunterSolution[];
+}
+
 export function useGameHub() {
   const [connection, setConnection] = useState<signalR.HubConnection | null>(null);
   const [isConnected, setIsConnected] = useState(false);
@@ -118,11 +146,13 @@ export function useGameHub() {
     battleRoyale?: BattleRoyaleState;
     wagerPool?: WagerPoolState;
     bombDefusal?: BombDefusalState;
+    wordHunter?: WordHunterState;
   } | null>(null);
   const [distribution, setDistribution] = useState<any | null>(null);
   const [battleRoyaleState, setBattleRoyaleState] = useState<BattleRoyaleState | null>(null);
   const [wagerPool, setWagerPool] = useState<WagerPoolState | null>(null);
   const [bombDefusalState, setBombDefusalState] = useState<BombDefusalState | null>(null);
+  const [wordHunterState, setWordHunterState] = useState<WordHunterState | null>(null);
 
   // Keep a ref to the connection to avoid closure issues
   const connectionRef = useRef<signalR.HubConnection | null>(null);
@@ -208,6 +238,7 @@ export function useGameHub() {
       setDistribution(null);
       setWagerPool(null);
       setBombDefusalState(null);
+      setWordHunterState(null);
     });
 
     newConnection.on("CountdownStarted", (seconds: number) => {
@@ -249,6 +280,9 @@ export function useGameHub() {
       if (data.bombDefusal) {
         setBombDefusalState(data.bombDefusal);
       }
+      if (data.wordHunter) {
+        setWordHunterState(data.wordHunter);
+      }
     });
 
     newConnection.on("SurvivalStatusUpdated", (data: BattleRoyaleState) => {
@@ -261,6 +295,10 @@ export function useGameHub() {
 
     newConnection.on("BombDefusalUpdated", (state: BombDefusalState) => {
       setBombDefusalState(state);
+    });
+
+    newConnection.on("WordHunterUpdated", (state: WordHunterState) => {
+      setWordHunterState(state);
     });
 
     newConnection.on("DistributionUpdated", (data: any) => {
@@ -390,6 +428,12 @@ export function useGameHub() {
     }
   }, []);
 
+  const getWordHunterState = useCallback(async (roomId: string, slideId: string) => {
+    if (connectionRef.current?.state === signalR.HubConnectionState.Connected) {
+      await connectionRef.current.invoke("GetWordHunterState", roomId, slideId);
+    }
+  }, []);
+
   return {
     connection,
     isConnected,
@@ -407,6 +451,7 @@ export function useGameHub() {
     battleRoyaleState,
     wagerPool,
     bombDefusalState,
+    wordHunterState,
     joinRoom,
     hostJoinRoom,
     rejoinRoom,
@@ -415,6 +460,7 @@ export function useGameHub() {
     placeWager,
     getWagerPoolState,
     getBombDefusalState,
+    getWordHunterState,
     startGame,
     nextSlide,
     startCountdown,
@@ -426,3 +472,4 @@ export function useGameHub() {
     endGame,
   };
 }
+

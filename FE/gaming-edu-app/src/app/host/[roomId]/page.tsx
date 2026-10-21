@@ -32,6 +32,7 @@ import SpeedRacerHostTrack from "@/components/games/speed-racer/SpeedRacerHostTr
 import BattleRoyaleHostArena from "@/components/games/battle-royale/BattleRoyaleHostArena";
 import QuizWagerHostView from "@/components/games/quiz-wager/QuizWagerHostView";
 import DefuseBombHostView from "@/components/games/defuse-bomb/DefuseBombHostView";
+import WordHunterHostView from "@/components/games/word-hunter/WordHunterHostView";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
@@ -180,6 +181,7 @@ export default function HostLobbyPage() {
     battleRoyaleState,
     wagerPool,
     bombDefusalState,
+    wordHunterState,
     joinRoom,
     hostJoinRoom,
     roomInfo,
@@ -591,6 +593,15 @@ export default function HostLobbyPage() {
               answerProgress={answerProgress}
               leaderboard={leaderboard}
               bombDefusalState={bombDefusalState}
+              onNextSlide={nextSlide}
+            />
+          ) : selectedThemeId === "WORD_HUNTER" ? (
+            <WordHunterHostView
+              currentSlide={currentSlide as any}
+              slideTimeLeft={slideTimeLeft}
+              answerProgress={answerProgress}
+              leaderboard={leaderboard}
+              wordHunterState={wordHunterState}
               onNextSlide={nextSlide}
             />
           ) : (
