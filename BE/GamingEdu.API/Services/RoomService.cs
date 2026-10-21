@@ -26,6 +26,7 @@ public interface IRoomService
     Task<string?> GetDraftAnswerAsync(Guid roomPlayerId, Guid slideId);
     Task<IEnumerable<LeaderboardEntryDto>> FinishRoomAsync(Guid roomId, Guid hostId);
     Task<byte[]> ExportRoomReportAsync(Guid roomId, Guid hostId);
+    Task<RoomDetailReportDto> GetRoomReportDetailAsync(Guid roomId, Guid hostId);
     Task<IEnumerable<HostedRoomHistoryDto>> GetHostedRoomsHistoryAsync(Guid hostId);
     Task<IEnumerable<PlayedRoomHistoryDto>> GetPlayedRoomsHistoryAsync(Guid userId);
     string GenerateQrCodeBase64(string pin);
@@ -341,48 +342,220 @@ public class RoomService : IRoomService
         return fullLeaderboard.Take(3);
     }
 
-    // ── EXPORT REPORT ──────────────────────────────────────────────────
-    public async Task<byte[]> ExportRoomReportAsync(Guid roomId, Guid hostId)
+    // ── DETAIL REPORT & EXPORT ─────────────────────────────────────────
+    public async Task<RoomDetailReportDto> GetRoomReportDetailAsync(Guid roomId, Guid hostId)
     {
         var room = await _db.Rooms
+            .AsNoTracking()
             .Include(r => r.Quiz)
             .Include(r => r.Players)
-            .FirstOrDefaultAsync(r => r.Id == roomId) ?? throw new KeyNotFoundException("Không tìm thấy phòng.");
-            
-        if (room.HostId != hostId) throw new UnauthorizedAccessException("Bạn không phải chủ phòng.");
+                .ThenInclude(p => p.Responses)
+            .FirstOrDefaultAsync(r => r.Id == roomId) 
+            ?? throw new KeyNotFoundException("Không tìm thấy phòng.");
 
-        var players = room.Players.OrderByDescending(p => p.TotalScore).ToList();
+        if (room.HostId != hostId) 
+            throw new UnauthorizedAccessException("Bạn không phải chủ phòng.");
+
+        var slides = await _db.Slides
+            .AsNoTracking()
+            .Where(s => s.QuizId == room.QuizId && !s.IsDeleted)
+            .OrderBy(s => s.OrderIndex)
+            .ToListAsync();
+
+        var responses = await _db.PlayerResponses
+            .AsNoTracking()
+            .Where(pr => pr.RoomPlayer.RoomId == roomId)
+            .ToListAsync();
+
+        // 1. Phân tích từng Thí sinh
+        var sortedPlayers = room.Players.OrderByDescending(p => p.TotalScore).ToList();
+        var playerDtos = new List<PlayerReportItemDto>();
+        for (int i = 0; i < sortedPlayers.Count; i++)
+        {
+            var p = sortedPlayers[i];
+            var pResponses = responses.Where(r => r.RoomPlayerId == p.Id).ToList();
+            int correctCount = pResponses.Count(r => r.IsCorrect);
+            int wrongCount = pResponses.Count(r => !r.IsCorrect);
+            double accuracy = pResponses.Count > 0 ? (double)correctCount / pResponses.Count * 100 : 0;
+            double avgTime = pResponses.Count > 0 
+                ? (pResponses.Average(r => r.ResponseTimeMs ?? 0) / 1000.0) 
+                : 0;
+
+            playerDtos.Add(new PlayerReportItemDto(
+                i + 1,
+                p.Nickname,
+                p.TotalScore,
+                correctCount,
+                wrongCount,
+                Math.Round(accuracy, 1),
+                Math.Round(avgTime, 2)
+            ));
+        }
+
+        // 2. Phân tích từng Câu hỏi
+        var questionDtos = new List<QuestionReportItemDto>();
+        foreach (var slide in slides)
+        {
+            var sResponses = responses.Where(r => r.SlideId == slide.Id).ToList();
+            int totalAns = sResponses.Count;
+            int correctAns = sResponses.Count(r => r.IsCorrect);
+            double qAccuracy = totalAns > 0 ? (double)correctAns / totalAns * 100 : 0;
+            
+            string difficulty = qAccuracy >= 70 ? "Dễ" : (qAccuracy >= 40 ? "Trung bình" : "Khó");
+            if (totalAns == 0) difficulty = "Chưa có lượt trả lời";
+
+            questionDtos.Add(new QuestionReportItemDto(
+                slide.OrderIndex + 1,
+                slide.QuestionText,
+                slide.Type,
+                totalAns,
+                correctAns,
+                Math.Round(qAccuracy, 1),
+                difficulty
+            ));
+        }
+
+        double overallAccuracy = responses.Count > 0 
+            ? (double)responses.Count(r => r.IsCorrect) / responses.Count * 100 
+            : 0;
+
+        var questionsWithAnswers = questionDtos.Where(q => q.TotalAnswers > 0).ToList();
+        string? hardest = questionsWithAnswers.OrderBy(q => q.Accuracy).FirstOrDefault()?.QuestionText;
+        string? easiest = questionsWithAnswers.OrderByDescending(q => q.Accuracy).FirstOrDefault()?.QuestionText;
+
+        return new RoomDetailReportDto(
+            room.Id,
+            room.PinCode,
+            room.Quiz.Title,
+            room.Mode,
+            room.Status,
+            room.CreatedAt,
+            sortedPlayers.Count,
+            Math.Round(overallAccuracy, 1),
+            hardest,
+            easiest,
+            playerDtos,
+            questionDtos
+        );
+    }
+
+    public async Task<byte[]> ExportRoomReportAsync(Guid roomId, Guid hostId)
+    {
+        var detail = await GetRoomReportDetailAsync(roomId, hostId);
 
         using var workbook = new XLWorkbook();
-        var ws = workbook.Worksheets.Add("Kết quả phòng chơi");
 
-        // Header
-        ws.Cell(1, 1).Value = "Room PIN";
-        ws.Cell(1, 2).Value = room.PinCode;
-        ws.Cell(2, 1).Value = "Bộ đề";
-        ws.Cell(2, 2).Value = room.Quiz.Title;
-        ws.Cell(3, 1).Value = "Thời gian tạo";
-        ws.Cell(3, 2).Value = room.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss");
+        // ═══════════════ SHEET 1: BẢNG ĐIỂM THÍ SINH ═══════════════
+        var wsPlayers = workbook.Worksheets.Add("Bảng điểm thí sinh");
 
-        ws.Cell(5, 1).Value = "Hạng";
-        ws.Cell(5, 2).Value = "Người chơi";
-        ws.Cell(5, 3).Value = "Tổng điểm";
+        // Header thông tin chung
+        wsPlayers.Cell(1, 1).Value = "BÁO CÁO TỔNG KẾT KẾT QUẢ THI ĐẤU";
+        wsPlayers.Range("A1:G1").Merge().Style
+            .Font.SetBold().Font.SetFontSize(16).Font.SetFontColor(XLColor.FromHtml("#005C53"));
 
-        var headerRange = ws.Range("A5:C5");
-        headerRange.Style.Font.Bold = true;
-        headerRange.Style.Fill.BackgroundColor = XLColor.LightBlue;
+        wsPlayers.Cell(3, 1).Value = "Bộ Đề:";
+        wsPlayers.Cell(3, 2).Value = detail.QuizTitle;
+        wsPlayers.Cell(3, 1).Style.Font.Bold = true;
 
-        // Data
-        int row = 6;
-        for (int i = 0; i < players.Count; i++)
+        wsPlayers.Cell(4, 1).Value = "Mã PIN:";
+        wsPlayers.Cell(4, 2).Value = detail.PinCode;
+        wsPlayers.Cell(4, 1).Style.Font.Bold = true;
+
+        wsPlayers.Cell(3, 4).Value = "Thời Gian:";
+        wsPlayers.Cell(3, 5).Value = detail.CreatedAt.ToString("dd/MM/yyyy HH:mm");
+        wsPlayers.Cell(3, 4).Style.Font.Bold = true;
+
+        wsPlayers.Cell(4, 4).Value = "Tổng Thí Sinh:";
+        wsPlayers.Cell(4, 5).Value = detail.TotalPlayers;
+        wsPlayers.Cell(4, 4).Style.Font.Bold = true;
+
+        wsPlayers.Cell(3, 6).Value = "Tỷ Lệ Đúng Chung:";
+        wsPlayers.Cell(3, 7).Value = $"{detail.OverallAccuracy}%";
+        wsPlayers.Cell(3, 6).Style.Font.Bold = true;
+
+        // Bảng danh sách thí sinh
+        int pHeaderRow = 6;
+        wsPlayers.Cell(pHeaderRow, 1).Value = "Hạng";
+        wsPlayers.Cell(pHeaderRow, 2).Value = "Tên Thí Sinh";
+        wsPlayers.Cell(pHeaderRow, 3).Value = "Tổng Điểm";
+        wsPlayers.Cell(pHeaderRow, 4).Value = "Số Câu Đúng";
+        wsPlayers.Cell(pHeaderRow, 5).Value = "Số Câu Sai";
+        wsPlayers.Cell(pHeaderRow, 6).Value = "Độ Chính Xác (%)";
+        wsPlayers.Cell(pHeaderRow, 7).Value = "Thời Gian TB (giây)";
+
+        var pHeader = wsPlayers.Range(pHeaderRow, 1, pHeaderRow, 7);
+        pHeader.Style.Font.Bold = true;
+        pHeader.Style.Font.FontColor = XLColor.White;
+        pHeader.Style.Fill.BackgroundColor = XLColor.FromHtml("#005C53");
+        pHeader.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+        int row = pHeaderRow + 1;
+        foreach (var p in detail.Players)
         {
-            ws.Cell(row, 1).Value = i + 1;
-            ws.Cell(row, 2).Value = players[i].Nickname;
-            ws.Cell(row, 3).Value = players[i].TotalScore;
+            wsPlayers.Cell(row, 1).Value = p.Rank;
+            wsPlayers.Cell(row, 2).Value = p.Nickname;
+            wsPlayers.Cell(row, 3).Value = p.TotalScore;
+            wsPlayers.Cell(row, 4).Value = p.CorrectCount;
+            wsPlayers.Cell(row, 5).Value = p.WrongCount;
+            wsPlayers.Cell(row, 6).Value = $"{p.Accuracy}%";
+            wsPlayers.Cell(row, 7).Value = p.AvgResponseTimeSec;
+
+            // Tô màu top 3
+            if (p.Rank == 1) wsPlayers.Row(row).Style.Fill.BackgroundColor = XLColor.FromHtml("#FFF9C4");
+            else if (p.Rank == 2) wsPlayers.Row(row).Style.Fill.BackgroundColor = XLColor.FromHtml("#F5F5F5");
+            else if (p.Rank == 3) wsPlayers.Row(row).Style.Fill.BackgroundColor = XLColor.FromHtml("#FFE0B2");
+
             row++;
         }
 
-        ws.Columns().AdjustToContents();
+        wsPlayers.Range(pHeaderRow, 1, Math.Max(row - 1, pHeaderRow), 7).Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+        wsPlayers.Range(pHeaderRow, 1, Math.Max(row - 1, pHeaderRow), 7).Style.Border.InsideBorder = XLBorderStyleValues.Thin;
+        wsPlayers.Columns().AdjustToContents();
+
+        // ═══════════════ SHEET 2: PHÂN TÍCH TỪNG CÂU HỎI ═══════════════
+        var wsQuestions = workbook.Worksheets.Add("Phân tích câu hỏi");
+
+        wsQuestions.Cell(1, 1).Value = "PHÂN TÍCH ĐỘ KHÓ VÀ TỶ LỆ TRẢ LỜI TỪNG CÂU HỎI";
+        wsQuestions.Range("A1:G1").Merge().Style
+            .Font.SetBold().Font.SetFontSize(15).Font.SetFontColor(XLColor.FromHtml("#005C53"));
+
+        int qHeaderRow = 3;
+        wsQuestions.Cell(qHeaderRow, 1).Value = "STT";
+        wsQuestions.Cell(qHeaderRow, 2).Value = "Nội Dung Câu Hỏi";
+        wsQuestions.Cell(qHeaderRow, 3).Value = "Loại Câu";
+        wsQuestions.Cell(qHeaderRow, 4).Value = "Số Lượt Trả Lời";
+        wsQuestions.Cell(qHeaderRow, 5).Value = "Số Lượt Đúng";
+        wsQuestions.Cell(qHeaderRow, 6).Value = "Tỷ Lệ Đúng (%)";
+        wsQuestions.Cell(qHeaderRow, 7).Value = "Đánh Giá Sư Phạm";
+
+        var qHeader = wsQuestions.Range(qHeaderRow, 1, qHeaderRow, 7);
+        qHeader.Style.Font.Bold = true;
+        qHeader.Style.Font.FontColor = XLColor.White;
+        qHeader.Style.Fill.BackgroundColor = XLColor.FromHtml("#042940");
+        qHeader.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+        int qRow = qHeaderRow + 1;
+        foreach (var q in detail.Questions)
+        {
+            wsQuestions.Cell(qRow, 1).Value = q.OrderIndex;
+            wsQuestions.Cell(qRow, 2).Value = q.QuestionText;
+            wsQuestions.Cell(qRow, 3).Value = q.Type;
+            wsQuestions.Cell(qRow, 4).Value = q.TotalAnswers;
+            wsQuestions.Cell(qRow, 5).Value = q.CorrectAnswers;
+            wsQuestions.Cell(qRow, 6).Value = $"{q.Accuracy}%";
+            wsQuestions.Cell(qRow, 7).Value = q.Difficulty;
+
+            if (q.Difficulty == "Khó")
+                wsQuestions.Cell(qRow, 7).Style.Font.FontColor = XLColor.Red;
+            else if (q.Difficulty == "Dễ")
+                wsQuestions.Cell(qRow, 7).Style.Font.FontColor = XLColor.Green;
+
+            qRow++;
+        }
+
+        wsQuestions.Range(qHeaderRow, 1, Math.Max(qRow - 1, qHeaderRow), 7).Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+        wsQuestions.Range(qHeaderRow, 1, Math.Max(qRow - 1, qHeaderRow), 7).Style.Border.InsideBorder = XLBorderStyleValues.Thin;
+        wsQuestions.Columns().AdjustToContents();
 
         using var stream = new MemoryStream();
         workbook.SaveAs(stream);

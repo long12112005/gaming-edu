@@ -168,6 +168,26 @@ public class RoomsController : ControllerBase
         return Ok(new ApiResponse<IEnumerable<PlayedRoomHistoryDto>>(true, "Lấy lịch sử phòng đã chơi thành công.", history));
     }
 
+    // GET /api/rooms/{id}/report
+    /// <summary>Lấy dữ liệu báo cáo phân tích chi tiết của phòng chơi (JSON).</summary>
+    [HttpGet("{id:guid}/report")]
+    [ProducesResponseType(typeof(ApiResponse<RoomDetailReportDto>), 200)]
+    [ProducesResponseType(403)]
+    [ProducesResponseType(404)]
+    public async Task<IActionResult> GetRoomDetailReport(Guid id)
+    {
+        var userId = GetCurrentUserId();
+        if (userId is null) return Unauthorized();
+
+        try
+        {
+            var report = await _roomService.GetRoomReportDetailAsync(id, userId.Value);
+            return Ok(new ApiResponse<RoomDetailReportDto>(true, "Lấy báo cáo chi tiết thành công.", report));
+        }
+        catch (UnauthorizedAccessException ex) { return StatusCode(403, new ApiResponse<string>(false, ex.Message, null)); }
+        catch (KeyNotFoundException ex) { return NotFound(new ApiResponse<string>(false, ex.Message, null)); }
+    }
+
     // GET /api/rooms/{id}/export
     /// <summary>Export room results to Excel.</summary>
     [HttpGet("{id:guid}/export")]

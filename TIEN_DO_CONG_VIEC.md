@@ -33,10 +33,19 @@ Toàn bộ các công việc được thực hiện nghiêm ngặt bám sát the
   - Backend `RoomService.cs` tạo mã QR Base64 từ PIN và API trả về `qrCodeBase64`.
   - Frontend `host/[roomId]/page.tsx` hiển thị khung QR Code rõ nét bên cạnh mã PIN tại sảnh chờ để học sinh quét camera vào chơi ngay.
 
-### ✅ Phân hệ 6: Q&A Realtime trong trận đấu (Mục 6)
-- **Ghim câu hỏi (Pinned Question Banner):** 
-  - Tích hợp `useQAHub` trên màn hình Host và Player.
-  - Khi Host ghim câu hỏi, xuất hiện Banner màu vàng hổ phách nổi bật trên đỉnh màn hình của cả Host và Player, cập nhật realtime tức thời.
+### ✅ Phân hệ 5: Báo cáo & Thống kê sau trận đấu (Mục 5.1 & 5.2)
+- **API Phân Tích Báo Cáo (`RoomsAndAIController.cs` & `RoomService.cs`):**
+  - Bổ sung endpoint `GET /api/rooms/{id}/report` trả về đầy đủ các chỉ số thống kê: Tổng thí sinh, Độ chính xác chung (%), Câu hỏi dễ nhất, Câu hỏi khó nhất, Danh sách kết quả từng người chơi và Phân tích độ khó từng câu hỏi.
+- **Xuất Báo Cáo Excel Nâng Cao 2 Sheet (`ExportRoomReportAsync`):**
+  - **Sheet 1 (Bảng điểm thí sinh):** Thứ hạng, Tên người chơi, Tổng điểm, Số câu đúng, Số câu sai, Độ chính xác (%), Thời gian phản hồi trung bình (s), Tô màu vinh danh Top 3 (Vàng / Bạc / Đồng).
+  - **Sheet 2 (Phân tích câu hỏi sư phạm):** STT, Nội dung câu hỏi, Dạng câu, Lượt làm, Lượt đúng, Tỷ lệ đúng %, Đánh giá độ khó (Dễ / Trung bình / Khó).
+- **Giao diện Web Trực Quan (`reports/page.tsx`):**
+  - Bổ sung nút **"Xem Thống Kê"** mở Modal popup hiển thị toàn bộ chỉ số trực tiếp trên web trước khi bấm tải file Excel.
+
+### ✅ Hoàn thiện Thẩm định & Phê duyệt Slide (`SlidesController.cs`)
+- Đồng bộ hóa xử lý `Content` và `BlankKeywords` cho câu hỏi `FILL_IN_BLANK`.
+- Kiểm tra tính hợp lệ của cả 2 vế ghép nối cho câu hỏi `MATCHING`.
+- Hỗ trợ cả hai phương thức HTTP `POST` và `PUT` trên các endpoint duyệt (`/approve`), từ chối (`/reject`), và duyệt tất cả (`/approve-all`), tương thích tuyệt đối với Frontend.
 
 ---
 
@@ -46,15 +55,12 @@ Toàn bộ các công việc được thực hiện nghiêm ngặt bám sát the
 
 ---
 
-## 3. DANH SÁCH CÔNG VIỆC TIẾP THEO (CHO BUỔI LÀM VIỆC TỚI)
+## 3. DANH SÁCH CÔNG VIỆC TIẾP THEO
 
-Theo bảng phân tích chức năng đề tài, các mục tiếp theo cần rà soát và triển khai:
-1. **Phân hệ 5: Báo cáo & Thống kê (Mục 5.1 & 5.2):**
-   - Kiểm tra tính năng xuất file Excel / PDF bảng điểm kết quả trận đấu cho giáo viên.
-   - Thống kê tỷ lệ câu trả lời đúng/sai, phân tích câu hỏi khó nhất để giáo viên nắm bắt lỗ hổng kiến thức của học sinh.
-2. **Phân hệ 2: Nhóm & Bài tập về nhà (Mục 2.2):**
+Theo bảng phân tích chức năng đề tài, các mục tiếp theo:
+1. **Phân hệ 2: Nhóm & Bài tập về nhà (Mục 2.2):**
    - Rà soát giao diện và luồng giao bài tập dạng Async có hạn nộp (Deadline) cho các nhóm học tập.
-3. **Kiểm thử liên thông toàn diện:**
-   - Thực hiện test luồng từ Host tạo phòng -> Player quét QR/nhập PIN -> Làm bài trắc nghiệm/điền khuyết/ghép nối -> Q&A ghim câu hỏi -> Xem bảng xếp hạng & báo cáo.
-4. **Push Git lên remote:**
-   - Khi hoàn tất kiểm tra tổng thể và người dùng phê duyệt, sẽ thực hiện `git push` nhánh `N_Long` lên remote repository.
+2. **Kiểm thử liên thông toàn diện (End-to-End Test):**
+   - Host tạo phòng -> Player quét QR/nhập PIN -> Làm bài (QUIZ, FILL_IN_BLANK, MATCHING) -> Ghim câu hỏi Q&A -> Xem Bảng xếp hạng & Báo cáo thống kê.
+3. **Commit & Push:**
+   - Commit các cập nhật mới vào local nhánh `N_Long` và đẩy lên GitHub khi sẵn sàng.
