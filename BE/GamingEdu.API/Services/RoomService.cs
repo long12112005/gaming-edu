@@ -47,6 +47,8 @@ public interface IRoomService
     Task RecordWordHunterGuessAsync(Guid roomId, Guid slideId, Guid roomPlayerId, string nickname, string? avatarUrl, string guess, bool isCorrect, int responseTimeMs, int scoreAwarded);
     Task<BridgeBuilderStateDto> GetBridgeBuilderStateAsync(Guid roomId, Guid slideId);
     Task RecordBridgeBuilderCrossingAsync(Guid roomId, Guid slideId, Guid roomPlayerId, string nickname, string? avatarUrl, bool isFullyCrossed, int builtSpans, int totalSpans, List<bool> spanBridges, int responseTimeMs, int scoreAwarded);
+    Task<CircuitConnectStateDto> GetCircuitConnectStateAsync(Guid roomId, Guid slideId);
+    Task RecordCircuitConnectResultAsync(Guid roomId, Guid slideId, Guid roomPlayerId, string nickname, string? avatarUrl, bool isFullCircuit, int correctWires, int totalWires, List<bool> wireResults, int responseTimeMs, int scoreAwarded);
 }
 
 public class RoomService : IRoomService
@@ -225,6 +227,12 @@ public class RoomService : IRoomService
         int builtSpans = 0;
         List<BridgeSpanResultDto>? spanResults = null;
 
+        // Mini-Game 08: Circuit Connect fields
+        bool isFullCircuit = false;
+        int totalCircuitWires = 0;
+        int connectedCorrectWires = 0;
+        List<CircuitWireResultDto>? circuitWireResults = null;
+
         if (slide.Type == "QUIZ")
         {
             var selectedIds = ParseOptionIds(request.AnswerData);
@@ -336,6 +344,79 @@ public class RoomService : IRoomService
             _logger.LogDebug(
                 "FILL_IN_BLANK / DEFUSE_BOMB / BRIDGE_BUILDER: {Correct}/{Total} blanks correct, ratio={Ratio:P0}",
                 correctCount, totalBlanks, scoreRatio);
+        }
+        else if (slide.Type == "MATCHING")
+        {
+            List<MatchingPairAnswer> userPairs;
+            try
+            {
+                userPairs = JsonSerializer.Deserialize<List<MatchingPairAnswer>>(
+                    request.AnswerData,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
+                ) ?? [];
+            }
+            catch
+            {
+                userPairs = [];
+            }
+
+            var matchingOptions = slide.Options
+                .Where(o => !string.IsNullOrWhiteSpace(o.MatchingPair))
+                .OrderBy(o => o.OrderIndex)
+                .ToList();
+
+            if (matchingOptions.Count == 0 && slide.Options.Count > 0)
+            {
+                matchingOptions = slide.Options.OrderBy(o => o.OrderIndex).ToList();
+            }
+
+            totalCircuitWires = matchingOptions.Count;
+            int correctCount = 0;
+            string[] circuitColorPalette = ["#ef4444", "#3b82f6", "#eab308", "#10b981", "#a855f7", "#f97316", "#06b6d4", "#ec4899"];
+            circuitWireResults = new List<CircuitWireResultDto>();
+
+            for (int i = 0; i < matchingOptions.Count; i++)
+            {
+                var opt = matchingOptions[i];
+                var userPair = userPairs.FirstOrDefault(p =>
+                    Guid.TryParse(p.LeftId, out var parsedGuid)
+                        ? parsedGuid == opt.Id
+                        : p.LeftId.Equals(opt.Id.ToString(), StringComparison.OrdinalIgnoreCase));
+
+                bool isConnected = userPair != null && !string.IsNullOrWhiteSpace(userPair.RightContent);
+                string userRight = userPair?.RightContent ?? "";
+                string expectedRight = opt.MatchingPair ?? "";
+
+                bool isPairCorrect = isConnected &&
+                    FuzzyMatchingService.Normalize(expectedRight) == FuzzyMatchingService.Normalize(userRight);
+
+                if (isPairCorrect)
+                {
+                    correctCount++;
+                }
+
+                circuitWireResults.Add(new CircuitWireResultDto(
+                    WireIndex: i + 1,
+                    LeftId: opt.Id,
+                    LeftContent: opt.Content,
+                    UserRightContent: userRight,
+                    ExpectedRightContent: expectedRight,
+                    IsConnected: isConnected,
+                    IsCorrect: isPairCorrect,
+                    WireColor: circuitColorPalette[i % circuitColorPalette.Length]
+                ));
+            }
+
+            connectedCorrectWires = correctCount;
+            partialRatio = totalCircuitWires > 0 ? (double)correctCount / totalCircuitWires : 0.0;
+            isFullCircuit = (totalCircuitWires > 0 && correctCount == totalCircuitWires);
+            isCorrect = isFullCircuit;
+            scoreAwarded = (int)Math.Round(slide.Points * partialRatio * speedFactor);
+            correctAnswer = string.Join(" | ", matchingOptions.Select(o => $"{o.Content} → {o.MatchingPair}"));
+
+            _logger.LogDebug(
+                "MATCHING / CIRCUIT_CONNECT: {Correct}/{Total} wires correct, ratio={Ratio:P0}",
+                correctCount, totalCircuitWires, partialRatio);
         }
         else
         {
@@ -476,6 +557,12 @@ public class RoomService : IRoomService
             await RecordBridgeBuilderCrossingAsync(player.RoomId, slide.Id, player.Id, player.Nickname, player.AvatarUrl, isBridgeCrossed, builtSpans, totalSpans, spanBuiltList, request.ResponseTimeMs, scoreAwarded);
         }
 
+        if (theme == "CIRCUIT_CONNECT")
+        {
+            var wireResultBools = circuitWireResults?.Select(w => w.IsCorrect).ToList() ?? [isCorrect];
+            await RecordCircuitConnectResultAsync(player.RoomId, slide.Id, player.Id, player.Nickname, player.AvatarUrl, isFullCircuit, connectedCorrectWires, totalCircuitWires, wireResultBools, request.ResponseTimeMs, scoreAwarded);
+        }
+
         // Save response to player_responses table
         var response = new PlayerResponse
         {
@@ -532,7 +619,11 @@ public class RoomService : IRoomService
             isBridgeCrossed,
             totalSpans,
             builtSpans,
-            spanResults
+            spanResults,
+            isFullCircuit,
+            totalCircuitWires,
+            connectedCorrectWires,
+            circuitWireResults
         );
     }
 
@@ -1413,6 +1504,116 @@ public class RoomService : IRoomService
             SubmittedCount: submittedCount,
             SpanStats: spanStats,
             RecentCrossings: recentCrossings
+        );
+    }
+
+    // ── CIRCUIT CONNECT (NỐI MẠCH ĐIỆN CAO THẾ) LOGIC ───────────────────
+    public record PlayerCircuitRecord(
+        Guid PlayerId,
+        string Nickname,
+        string? AvatarUrl,
+        bool IsFullCircuit,
+        int CorrectWires,
+        int TotalWires,
+        List<bool> WireResults,
+        int ResponseTimeMs,
+        int ScoreAwarded,
+        DateTime SubmittedAt
+    );
+
+    public async Task RecordCircuitConnectResultAsync(
+        Guid roomId, Guid slideId, Guid roomPlayerId, string nickname, string? avatarUrl,
+        bool isFullCircuit, int correctWires, int totalWires, List<bool> wireResults, int responseTimeMs, int scoreAwarded)
+    {
+        var key = $"circuit_connect:{roomId}:{slideId}";
+        var raw = await _cacheStore.GetStringAsync(key);
+        var records = string.IsNullOrEmpty(raw)
+            ? new List<PlayerCircuitRecord>()
+            : JsonSerializer.Deserialize<List<PlayerCircuitRecord>>(raw) ?? new List<PlayerCircuitRecord>();
+
+        records.RemoveAll(r => r.PlayerId == roomPlayerId);
+        records.Add(new PlayerCircuitRecord(
+            roomPlayerId, nickname, avatarUrl, isFullCircuit, correctWires, totalWires, wireResults, responseTimeMs, scoreAwarded, DateTime.UtcNow
+        ));
+
+        await _cacheStore.SetStringAsync(key, JsonSerializer.Serialize(records), TimeSpan.FromHours(4));
+    }
+
+    public async Task<CircuitConnectStateDto> GetCircuitConnectStateAsync(Guid roomId, Guid slideId)
+    {
+        var totalPlayers = await _db.RoomPlayers.CountAsync(rp => rp.RoomId == roomId);
+        if (totalPlayers == 0) totalPlayers = 1;
+
+        var slide = await _db.Slides
+            .Include(s => s.Options)
+            .FirstOrDefaultAsync(s => s.Id == slideId);
+
+        var matchingOptions = slide?.Options
+            .Where(o => !string.IsNullOrWhiteSpace(o.MatchingPair))
+            .OrderBy(o => o.OrderIndex)
+            .ToList() ?? [];
+
+        if (matchingOptions.Count == 0 && slide?.Options != null && slide.Options.Count > 0)
+        {
+            matchingOptions = slide.Options.OrderBy(o => o.OrderIndex).ToList();
+        }
+
+        int totalWireCount = Math.Max(1, matchingOptions.Count);
+
+        var key = $"circuit_connect:{roomId}:{slideId}";
+        var raw = await _cacheStore.GetStringAsync(key);
+        var records = string.IsNullOrEmpty(raw)
+            ? new List<PlayerCircuitRecord>()
+            : JsonSerializer.Deserialize<List<PlayerCircuitRecord>>(raw) ?? new List<PlayerCircuitRecord>();
+
+        int fullCircuits = records.Count(r => r.IsFullCircuit);
+        int partialCircuits = records.Count(r => !r.IsFullCircuit && r.CorrectWires > 0);
+        int shortCircuits = records.Count(r => r.CorrectWires == 0);
+        int submittedCount = records.Count;
+
+        string[] circuitColorPalette = ["#ef4444", "#3b82f6", "#eab308", "#10b981", "#a855f7", "#f97316", "#06b6d4", "#ec4899"];
+        var wireStats = new List<CircuitWireDistributionDto>();
+        for (int i = 0; i < totalWireCount; i++)
+        {
+            int correctCount = records.Count(r => r.WireResults != null && r.WireResults.Count > i && r.WireResults[i]);
+            double correctPercent = records.Count > 0 ? Math.Round((double)correctCount / records.Count * 100, 1) : 0.0;
+            var opt = i < matchingOptions.Count ? matchingOptions[i] : null;
+
+            wireStats.Add(new CircuitWireDistributionDto(
+                WireIndex: i + 1,
+                LeftId: opt?.Id ?? Guid.Empty,
+                LeftContent: opt?.Content ?? $"Cực {i + 1}",
+                ExpectedRightContent: opt?.MatchingPair ?? "",
+                CorrectCount: correctCount,
+                TotalCount: records.Count,
+                CorrectPercent: correctPercent,
+                WireColor: circuitColorPalette[i % circuitColorPalette.Length]
+            ));
+        }
+
+        var recentSubmissions = records
+            .OrderByDescending(r => r.SubmittedAt)
+            .Select(r => new CircuitConnectPlayerResultDto(
+                r.PlayerId,
+                r.Nickname,
+                r.AvatarUrl,
+                r.CorrectWires,
+                r.TotalWires,
+                r.IsFullCircuit,
+                r.ResponseTimeMs,
+                r.ScoreAwarded
+            ))
+            .ToList();
+
+        return new CircuitConnectStateDto(
+            SlideId: slideId,
+            TotalPlayers: totalPlayers,
+            FullCircuits: fullCircuits,
+            PartialCircuits: partialCircuits,
+            ShortCircuits: shortCircuits,
+            SubmittedCount: submittedCount,
+            WireStats: wireStats,
+            RecentSubmissions: recentSubmissions
         );
     }
 }

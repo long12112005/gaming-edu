@@ -162,6 +162,12 @@ public class AnswerProcessingWorker : BackgroundService
                         bridgeBuilder = await roomService.GetBridgeBuilderStateAsync(payload.RoomId, payload.Request.SlideId);
                     }
 
+                    CircuitConnectStateDto? circuitConnect = null;
+                    if (theme == "CIRCUIT_CONNECT")
+                    {
+                        circuitConnect = await roomService.GetCircuitConnectStateAsync(payload.RoomId, payload.Request.SlideId);
+                    }
+
                     await _hubContext.Clients.Group(payload.GroupName).SendAsync("AnswerCountUpdated", new
                     {
                         SlideId = payload.Request.SlideId,
@@ -172,7 +178,8 @@ public class AnswerProcessingWorker : BackgroundService
                         WagerPool = wagerPool,
                         BombDefusal = bombDefusal,
                         WordHunter = wordHunter,
-                        BridgeBuilder = bridgeBuilder
+                        BridgeBuilder = bridgeBuilder,
+                        CircuitConnect = circuitConnect
                     }, cancellationToken: stoppingToken);
 
                     if (survival != null)
@@ -198,6 +205,11 @@ public class AnswerProcessingWorker : BackgroundService
                     if (bridgeBuilder != null)
                     {
                         await _hubContext.Clients.Group(payload.GroupName).SendAsync("BridgeBuilderUpdated", bridgeBuilder, cancellationToken: stoppingToken);
+                    }
+
+                    if (circuitConnect != null)
+                    {
+                        await _hubContext.Clients.Group(payload.GroupName).SendAsync("CircuitConnectUpdated", circuitConnect, cancellationToken: stoppingToken);
                     }
                 }
             }

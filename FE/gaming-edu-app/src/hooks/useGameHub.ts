@@ -162,6 +162,50 @@ export interface BridgeBuilderState {
   recentCrossings: BridgeBuilderPlayerCrossing[];
 }
 
+export interface CircuitWireResult {
+  wireIndex: number;
+  leftId: string;
+  leftContent: string;
+  userRightContent: string;
+  expectedRightContent: string;
+  isConnected: boolean;
+  isCorrect: boolean;
+  wireColor: string;
+}
+
+export interface CircuitWireDistribution {
+  wireIndex: number;
+  leftId: string;
+  leftContent: string;
+  expectedRightContent: string;
+  correctCount: number;
+  totalCount: number;
+  correctPercent: number;
+  wireColor: string;
+}
+
+export interface CircuitConnectPlayerResult {
+  playerId: string;
+  nickname: string;
+  avatarUrl?: string;
+  correctWires: number;
+  totalWires: number;
+  isFullCircuit: boolean;
+  responseTimeMs: number;
+  scoreAwarded: number;
+}
+
+export interface CircuitConnectState {
+  slideId: string;
+  totalPlayers: number;
+  fullCircuits: number;
+  partialCircuits: number;
+  shortCircuits: number;
+  submittedCount: number;
+  wireStats: CircuitWireDistribution[];
+  recentSubmissions: CircuitConnectPlayerResult[];
+}
+
 export function useGameHub() {
   const [connection, setConnection] = useState<signalR.HubConnection | null>(null);
   const [isConnected, setIsConnected] = useState(false);
@@ -186,6 +230,7 @@ export function useGameHub() {
     bombDefusal?: BombDefusalState;
     wordHunter?: WordHunterState;
     bridgeBuilder?: BridgeBuilderState;
+    circuitConnect?: CircuitConnectState;
   } | null>(null);
   const [distribution, setDistribution] = useState<any | null>(null);
   const [battleRoyaleState, setBattleRoyaleState] = useState<BattleRoyaleState | null>(null);
@@ -193,6 +238,7 @@ export function useGameHub() {
   const [bombDefusalState, setBombDefusalState] = useState<BombDefusalState | null>(null);
   const [wordHunterState, setWordHunterState] = useState<WordHunterState | null>(null);
   const [bridgeBuilderState, setBridgeBuilderState] = useState<BridgeBuilderState | null>(null);
+  const [circuitConnectState, setCircuitConnectState] = useState<CircuitConnectState | null>(null);
 
   // Keep a ref to the connection to avoid closure issues
   const connectionRef = useRef<signalR.HubConnection | null>(null);
@@ -280,6 +326,7 @@ export function useGameHub() {
       setBombDefusalState(null);
       setWordHunterState(null);
       setBridgeBuilderState(null);
+      setCircuitConnectState(null);
     });
 
     newConnection.on("CountdownStarted", (seconds: number) => {
@@ -327,6 +374,9 @@ export function useGameHub() {
       if (data.bridgeBuilder) {
         setBridgeBuilderState(data.bridgeBuilder);
       }
+      if (data.circuitConnect) {
+        setCircuitConnectState(data.circuitConnect);
+      }
     });
 
     newConnection.on("SurvivalStatusUpdated", (data: BattleRoyaleState) => {
@@ -347,6 +397,10 @@ export function useGameHub() {
 
     newConnection.on("BridgeBuilderUpdated", (state: BridgeBuilderState) => {
       setBridgeBuilderState(state);
+    });
+
+    newConnection.on("CircuitConnectUpdated", (state: CircuitConnectState) => {
+      setCircuitConnectState(state);
     });
 
     newConnection.on("DistributionUpdated", (data: any) => {
@@ -488,6 +542,12 @@ export function useGameHub() {
     }
   }, []);
 
+  const getCircuitConnectState = useCallback(async (roomId: string, slideId: string) => {
+    if (connectionRef.current?.state === signalR.HubConnectionState.Connected) {
+      await connectionRef.current.invoke("GetCircuitConnectState", roomId, slideId);
+    }
+  }, []);
+
   return {
     connection,
     isConnected,
@@ -507,6 +567,7 @@ export function useGameHub() {
     bombDefusalState,
     wordHunterState,
     bridgeBuilderState,
+    circuitConnectState,
     joinRoom,
     hostJoinRoom,
     rejoinRoom,
@@ -517,6 +578,7 @@ export function useGameHub() {
     getBombDefusalState,
     getWordHunterState,
     getBridgeBuilderState,
+    getCircuitConnectState,
     startGame,
     nextSlide,
     startCountdown,

@@ -322,6 +322,11 @@ public class GameHub : Hub
                 var bridgeState = await _roomService.GetBridgeBuilderStateAsync(roomId, slideDto.SlideId);
                 await Clients.Group(groupName).SendAsync("BridgeBuilderUpdated", bridgeState);
             }
+            if (roomTheme == "CIRCUIT_CONNECT")
+            {
+                var circuitState = await _roomService.GetCircuitConnectStateAsync(roomId, slideDto.SlideId);
+                await Clients.Group(groupName).SendAsync("CircuitConnectUpdated", circuitState);
+            }
         }
         catch (Exception ex)
         {
@@ -425,6 +430,11 @@ public class GameHub : Hub
             {
                 var bridgeState = await _roomService.GetBridgeBuilderStateAsync(roomId, slideDto.SlideId);
                 await Clients.Group(groupName).SendAsync("BridgeBuilderUpdated", bridgeState);
+            }
+            if (roomTheme == "CIRCUIT_CONNECT")
+            {
+                var circuitState = await _roomService.GetCircuitConnectStateAsync(roomId, slideDto.SlideId);
+                await Clients.Group(groupName).SendAsync("CircuitConnectUpdated", circuitState);
             }
         }
         catch (Exception ex)
@@ -659,6 +669,19 @@ public class GameHub : Hub
         {
             var state = await _roomService.GetBridgeBuilderStateAsync(roomId, slideId);
             await Clients.Caller.SendAsync("BridgeBuilderUpdated", state);
+        }
+        catch (Exception ex)
+        {
+            await SendErrorAsync(ex.Message);
+        }
+    }
+
+    public async Task GetCircuitConnectState(Guid roomId, Guid slideId)
+    {
+        try
+        {
+            var state = await _roomService.GetCircuitConnectStateAsync(roomId, slideId);
+            await Clients.Caller.SendAsync("CircuitConnectUpdated", state);
         }
         catch (Exception ex)
         {

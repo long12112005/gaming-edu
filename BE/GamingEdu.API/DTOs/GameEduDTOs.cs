@@ -272,7 +272,11 @@ public record AnswerResultDto(
     bool IsBridgeCrossed = false,
     int TotalSpans = 0,
     int BuiltSpans = 0,
-    List<BridgeSpanResultDto>? SpanResults = null
+    List<BridgeSpanResultDto>? SpanResults = null,
+    bool IsFullCircuit = false,
+    int TotalCircuitWires = 0,
+    int ConnectedCorrectWires = 0,
+    List<CircuitWireResultDto>? CircuitWireResults = null
 );
 
 public record OptionDistributionDto(
@@ -412,6 +416,50 @@ public record BridgeBuilderStateDto(
     int SubmittedCount,
     List<BridgeSpanDistributionDto> SpanStats,
     List<BridgeBuilderPlayerCrossingDto> RecentCrossings
+);
+
+public record CircuitWireResultDto(
+    int WireIndex,
+    Guid LeftId,
+    string LeftContent,
+    string UserRightContent,
+    string ExpectedRightContent,
+    bool IsConnected,
+    bool IsCorrect,
+    string WireColor
+);
+
+public record CircuitWireDistributionDto(
+    int WireIndex,
+    Guid LeftId,
+    string LeftContent,
+    string ExpectedRightContent,
+    int CorrectCount,
+    int TotalCount,
+    double CorrectPercent,
+    string WireColor
+);
+
+public record CircuitConnectPlayerResultDto(
+    Guid PlayerId,
+    string Nickname,
+    string? AvatarUrl,
+    int CorrectWires,
+    int TotalWires,
+    bool IsFullCircuit,
+    int ResponseTimeMs,
+    int ScoreAwarded
+);
+
+public record CircuitConnectStateDto(
+    Guid SlideId,
+    int TotalPlayers,
+    int FullCircuits,
+    int PartialCircuits,
+    int ShortCircuits,
+    int SubmittedCount,
+    List<CircuitWireDistributionDto> WireStats,
+    List<CircuitConnectPlayerResultDto> RecentSubmissions
 );
 
 public record PlayerRejoinDataDto(
