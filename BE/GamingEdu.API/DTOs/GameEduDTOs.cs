@@ -230,7 +230,9 @@ public record PlayedRoomHistoryDto(
 public record SubmitAnswerRequest(
     Guid SlideId,
     string AnswerData,   // JSON string (flexible for all slide types)
-    int ResponseTimeMs
+    int ResponseTimeMs,
+    int WagerPercent = 0,
+    int WagerAmount = 0
 );
 
 public record AnswerResultDto(
@@ -248,7 +250,10 @@ public record AnswerResultDto(
     int MaxHp = 100,
     int HpDeducted = 0,
     bool IsEliminated = false,
-    double PartialRatio = 1.0
+    double PartialRatio = 1.0,
+    int WagerPercent = 0,
+    int WagerAmount = 0,
+    int WagerNetGain = 0
 );
 
 public record OptionDistributionDto(
@@ -283,6 +288,22 @@ public record BattleRoyaleStateDto(
     int SurvivorsCount,
     int EliminatedCount,
     List<PlayerSurvivalStatusDto> Players
+);
+
+public record PlayerWagerDto(
+    Guid PlayerId,
+    string Nickname,
+    int WagerPercent,
+    int WagerAmount,
+    bool IsAllIn
+);
+
+public record WagerPoolStateDto(
+    Guid SlideId,
+    int TotalWagerAmount,
+    int TotalWagersPlaced,
+    int AllInCount,
+    List<PlayerWagerDto> Wagers
 );
 
 public record PlayerRejoinDataDto(

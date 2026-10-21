@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import SpeedRacerPlayerCockpit from "@/components/games/speed-racer/SpeedRacerPlayerCockpit";
 import BattleRoyalePlayerArena from "@/components/games/battle-royale/BattleRoyalePlayerArena";
+import QuizWagerPlayerView from "@/components/games/quiz-wager/QuizWagerPlayerView";
 
 type ActionButtonProps = {
   icon?: React.ComponentType<{ size?: number; className?: string }>;
@@ -83,6 +84,7 @@ export default function PlayerGameRoom() {
     leaderboard,
     joinRoom,
     rejoinRoom,
+    placeWager,
     submitAnswer: hubSubmitAnswer,
   } = useGameHub();
 
@@ -108,6 +110,7 @@ export default function PlayerGameRoom() {
 
   const isSpeedRacer = activeTheme === "SPEED_RACER";
   const isBattleRoyale = activeTheme === "BATTLE_ROYALE";
+  const isQuizWager = activeTheme === "QUIZ_WAGER";
 
   // States riêng cho từng dạng câu hỏi
   const [blankAnswer, setBlankAnswer] = useState("");
@@ -427,7 +430,33 @@ export default function PlayerGameRoom() {
               });
             }}
           />
-        ) : !isSpeedRacer && !isBattleRoyale && gameState === "PLAYING" && currentSlide ? (
+        ) : isQuizWager && (gameState === "PLAYING" || ((gameState === "LEADERBOARD" || answerResult) && answerResult)) && currentSlide ? (
+          <QuizWagerPlayerView
+            currentSlide={currentSlide as any}
+            slideTimeLeft={slideTimeLeft}
+            hasAnswered={hasAnswered}
+            answerResult={answerResult}
+            totalScore={answerResult?.totalScore ?? roomInfo?.totalScore ?? 0}
+            currentRank={answerResult?.rank ?? roomInfo?.rank ?? 1}
+            onPlaceWager={(wagerPercent, wagerAmount) => {
+              if (currentSlide) {
+                placeWager(currentSlide.slideId, wagerPercent, wagerAmount);
+              }
+            }}
+            onSubmitAnswer={(optionId, wagerPercent, wagerAmount) => {
+              if (hasAnswered || !slideTimeLeft || slideTimeLeft === 0 || !currentSlide) return;
+              setHasAnswered(true);
+              setSelectedQuizOptionId(optionId);
+              const elapsedMs = Math.max(0, (currentSlide.timeLimit - slideTimeLeft) * 1000);
+              hubSubmitAnswer(currentSlide.slideId, {
+                answerData: optionId,
+                responseTimeMs: elapsedMs,
+                wagerPercent,
+                wagerAmount,
+              });
+            }}
+          />
+        ) : !isSpeedRacer && !isBattleRoyale && !isQuizWager && gameState === "PLAYING" && currentSlide ? (
           <div className="flex-1 flex flex-col animate-fade-in-up">
             {/* Thanh tiêu đề câu hỏi & đồng hồ đếm ngược */}
             <div className="flex items-center justify-between mb-6 bg-white/90 backdrop-blur-md p-4 rounded-[24px] border-2 border-teal-200/80 shadow-sm">
@@ -673,7 +702,7 @@ export default function PlayerGameRoom() {
         {/* ════════════════════════════════════════════════════════════
             ANSWER RESULT STATE (KẾT QUẢ ĐÚNG / SAI CỦA BẠN)
         ════════════════════════════════════════════════════════════ */}
-        {!isSpeedRacer && !isBattleRoyale && (gameState === "LEADERBOARD" || answerResult) && answerResult && (
+        {!isSpeedRacer && !isBattleRoyale && !isQuizWager && (gameState === "LEADERBOARD" || answerResult) && answerResult && (
           <div className="flex-1 flex flex-col items-center justify-center text-center animate-fade-in-up">
             {answerResult.isCorrect ? (
               <div className="w-32 h-32 bg-emerald-500 text-white rounded-[36px] border-4 border-emerald-700 shadow-[0_10px_0_0_#047857] flex items-center justify-center mb-6 transform -rotate-3">

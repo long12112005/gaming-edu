@@ -30,6 +30,7 @@ import Link from "next/link";
 import { getThemeById } from "@/lib/gameThemes";
 import SpeedRacerHostTrack from "@/components/games/speed-racer/SpeedRacerHostTrack";
 import BattleRoyaleHostArena from "@/components/games/battle-royale/BattleRoyaleHostArena";
+import QuizWagerHostView from "@/components/games/quiz-wager/QuizWagerHostView";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
@@ -176,6 +177,7 @@ export default function HostLobbyPage() {
     answerProgress,
     distribution,
     battleRoyaleState,
+    wagerPool,
     joinRoom,
     hostJoinRoom,
     roomInfo,
@@ -564,6 +566,18 @@ export default function HostLobbyPage() {
               distribution={distribution}
               leaderboard={leaderboard}
               battleRoyaleState={battleRoyaleState}
+              players={players}
+              onNextSlide={nextSlide}
+              onEndGame={endGame}
+            />
+          ) : selectedThemeId === "QUIZ_WAGER" ? (
+            <QuizWagerHostView
+              currentSlide={currentSlide as any}
+              slideTimeLeft={slideTimeLeft}
+              answerProgress={answerProgress}
+              distribution={distribution}
+              wagerPool={wagerPool}
+              leaderboard={leaderboard}
               players={players}
               onNextSlide={nextSlide}
               onEndGame={endGame}

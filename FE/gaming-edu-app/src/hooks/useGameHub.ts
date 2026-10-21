@@ -46,6 +46,22 @@ export interface BattleRoyaleState {
   players: PlayerSurvivalStatus[];
 }
 
+export interface PlayerWager {
+  playerId: string;
+  nickname: string;
+  wagerPercent: number;
+  wagerAmount: number;
+  isAllIn: boolean;
+}
+
+export interface WagerPoolState {
+  slideId: string;
+  totalWagerAmount: number;
+  totalWagersPlaced: number;
+  allInCount: number;
+  wagers: PlayerWager[];
+}
+
 export function useGameHub() {
   const [connection, setConnection] = useState<signalR.HubConnection | null>(null);
   const [isConnected, setIsConnected] = useState(false);
@@ -66,9 +82,11 @@ export function useGameHub() {
     totalPlayers: number;
     distribution?: any;
     battleRoyale?: BattleRoyaleState;
+    wagerPool?: WagerPoolState;
   } | null>(null);
   const [distribution, setDistribution] = useState<any | null>(null);
   const [battleRoyaleState, setBattleRoyaleState] = useState<BattleRoyaleState | null>(null);
+  const [wagerPool, setWagerPool] = useState<WagerPoolState | null>(null);
 
   // Keep a ref to the connection to avoid closure issues
   const connectionRef = useRef<signalR.HubConnection | null>(null);
@@ -152,6 +170,7 @@ export function useGameHub() {
       setAnswerResult(null); // Reset previous answer
       setAnswerProgress(null);
       setDistribution(null);
+      setWagerPool(null);
     });
 
     newConnection.on("CountdownStarted", (seconds: number) => {
@@ -187,10 +206,17 @@ export function useGameHub() {
       if (data.battleRoyale) {
         setBattleRoyaleState(data.battleRoyale);
       }
+      if (data.wagerPool) {
+        setWagerPool(data.wagerPool);
+      }
     });
 
     newConnection.on("SurvivalStatusUpdated", (data: BattleRoyaleState) => {
       setBattleRoyaleState(data);
+    });
+
+    newConnection.on("WagerPoolUpdated", (pool: WagerPoolState) => {
+      setWagerPool(pool);
     });
 
     newConnection.on("DistributionUpdated", (data: any) => {
@@ -302,6 +328,18 @@ export function useGameHub() {
     }
   }, []);
 
+  const placeWager = useCallback(async (slideId: string, wagerPercent: number, wagerAmount: number) => {
+    if (connectionRef.current?.state === signalR.HubConnectionState.Connected) {
+      await connectionRef.current.invoke("PlaceWager", slideId, wagerPercent, wagerAmount);
+    }
+  }, []);
+
+  const getWagerPoolState = useCallback(async (roomId: string, slideId: string) => {
+    if (connectionRef.current?.state === signalR.HubConnectionState.Connected) {
+      await connectionRef.current.invoke("GetWagerPoolState", roomId, slideId);
+    }
+  }, []);
+
   return {
     connection,
     isConnected,
@@ -317,11 +355,14 @@ export function useGameHub() {
     answerProgress,
     distribution,
     battleRoyaleState,
+    wagerPool,
     joinRoom,
     hostJoinRoom,
     rejoinRoom,
     getSlideDistribution,
     getBattleRoyaleState,
+    placeWager,
+    getWagerPoolState,
     startGame,
     nextSlide,
     startCountdown,

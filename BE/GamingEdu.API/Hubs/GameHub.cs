@@ -557,6 +557,42 @@ public class GameHub : Hub
         }
     }
 
+    public async Task PlaceWager(Guid slideId, int wagerPercent, int wagerAmount)
+    {
+        try
+        {
+            var roomId = Context.Items["RoomId"] as Guid?;
+            var playerId = Context.Items["PlayerId"] as Guid?;
+            var groupName = Context.Items["GroupName"] as string;
+
+            if (roomId == null || playerId == null || string.IsNullOrEmpty(groupName))
+            {
+                await SendErrorAsync("Bạn chưa tham gia phòng nào.");
+                return;
+            }
+
+            var poolState = await _roomService.PlaceWagerAsync(roomId.Value, playerId.Value, slideId, wagerPercent, wagerAmount);
+            await Clients.Group(groupName).SendAsync("WagerPoolUpdated", poolState);
+        }
+        catch (Exception ex)
+        {
+            await SendErrorAsync(ex.Message);
+        }
+    }
+
+    public async Task GetWagerPoolState(Guid roomId, Guid slideId)
+    {
+        try
+        {
+            var poolState = await _roomService.GetWagerPoolStateAsync(roomId, slideId);
+            await Clients.Caller.SendAsync("WagerPoolUpdated", poolState);
+        }
+        catch (Exception ex)
+        {
+            await SendErrorAsync(ex.Message);
+        }
+    }
+
     // ── HELPERS ────────────────────────────────────────────────────────
     private async Task<SlideStartedDto?> GetCurrentSlideAsync(Guid roomId, string pinCode)
     {

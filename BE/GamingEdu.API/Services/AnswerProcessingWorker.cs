@@ -138,18 +138,30 @@ public class AnswerProcessingWorker : BackgroundService
                         survival = await roomService.GetBattleRoyaleStateAsync(payload.RoomId);
                     }
 
+                    WagerPoolStateDto? wagerPool = null;
+                    if (theme == "QUIZ_WAGER")
+                    {
+                        wagerPool = await roomService.GetWagerPoolStateAsync(payload.RoomId, payload.Request.SlideId);
+                    }
+
                     await _hubContext.Clients.Group(payload.GroupName).SendAsync("AnswerCountUpdated", new
                     {
                         SlideId = payload.Request.SlideId,
                         AnsweredCount = distribution.TotalAnswers,
                         TotalPlayers = distribution.TotalPlayers,
                         Distribution = distribution,
-                        BattleRoyale = survival
+                        BattleRoyale = survival,
+                        WagerPool = wagerPool
                     }, cancellationToken: stoppingToken);
 
                     if (survival != null)
                     {
                         await _hubContext.Clients.Group(payload.GroupName).SendAsync("SurvivalStatusUpdated", survival, cancellationToken: stoppingToken);
+                    }
+
+                    if (wagerPool != null)
+                    {
+                        await _hubContext.Clients.Group(payload.GroupName).SendAsync("WagerPoolUpdated", wagerPool, cancellationToken: stoppingToken);
                     }
                 }
             }

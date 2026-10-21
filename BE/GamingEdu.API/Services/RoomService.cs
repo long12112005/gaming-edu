@@ -38,6 +38,9 @@ public interface IRoomService
     Task SetPlayerHpAsync(Guid roomId, Guid roomPlayerId, int hp);
     Task<BattleRoyaleStateDto> GetBattleRoyaleStateAsync(Guid roomId);
     Task ApplyBattleRoyaleTimeoutPenaltyAsync(Guid roomId, Guid slideId);
+    Task<WagerPoolStateDto> PlaceWagerAsync(Guid roomId, Guid roomPlayerId, Guid slideId, int wagerPercent, int wagerAmount);
+    Task<WagerPoolStateDto> GetWagerPoolStateAsync(Guid roomId, Guid slideId);
+    Task<(int percent, int amount)> GetPlayerWagerAsync(Guid roomPlayerId, Guid slideId);
 }
 
 public class RoomService : IRoomService
@@ -355,6 +358,43 @@ public class RoomService : IRoomService
             }
         }
 
+        // ── Quiz Wager (Đặt Cược Trí Tuệ) Logic ───────────────────────
+        int wagerPercent = request.WagerPercent;
+        int wagerAmount  = request.WagerAmount;
+        int wagerNetGain = 0;
+
+        if (theme == "QUIZ_WAGER")
+        {
+            if (wagerPercent == 0 && wagerAmount == 0)
+            {
+                var savedWager = await GetPlayerWagerAsync(roomPlayerId, request.SlideId);
+                wagerPercent = savedWager.percent;
+                wagerAmount  = savedWager.amount;
+            }
+
+            if (wagerPercent > 0 && wagerAmount == 0)
+            {
+                int effectiveBankroll = Math.Max(player.TotalScore, slide.Points);
+                wagerAmount = (int)Math.Round(effectiveBankroll * (wagerPercent / 100.0));
+            }
+
+            if (wagerAmount > 0)
+            {
+                if (isCorrect)
+                {
+                    // Trả lời đúng: cộng điểm chuẩn kèm phần thưởng nhân theo mức cược
+                    wagerNetGain = wagerAmount;
+                    scoreAwarded += wagerNetGain;
+                }
+                else
+                {
+                    // Trả lời sai: bị trừ số điểm đã cược (điểm tổng không âm)
+                    wagerNetGain = -wagerAmount;
+                    scoreAwarded = -wagerAmount;
+                }
+            }
+        }
+
         // Save response to player_responses table
         var response = new PlayerResponse
         {
@@ -372,8 +412,8 @@ public class RoomService : IRoomService
         await EnsureLeaderboardAsync(player.RoomId);
         int? rankBefore = await _leaderboard.GetRankAsync(player.RoomId, roomPlayerId);
 
-        // Update total_score in room_players table
-        player.TotalScore += scoreAwarded;
+        // Update total_score in room_players table (bảo đảm điểm không âm)
+        player.TotalScore = Math.Max(0, player.TotalScore + scoreAwarded);
 
         _db.PlayerResponses.Add(response);
         await _db.SaveChangesAsync();
@@ -398,7 +438,10 @@ public class RoomService : IRoomService
             maxHp,
             hpDeducted,
             isEliminated,
-            partialRatio
+            partialRatio,
+            wagerPercent,
+            wagerAmount,
+            wagerNetGain
         );
     }
 
@@ -920,5 +963,68 @@ public class RoomService : IRoomService
                 }
             }
         }
+    }
+
+    public async Task<WagerPoolStateDto> PlaceWagerAsync(Guid roomId, Guid roomPlayerId, Guid slideId, int wagerPercent, int wagerAmount)
+    {
+        var player = await _db.RoomPlayers.FindAsync(roomPlayerId);
+        string nickname = player?.Nickname ?? "Đấu thủ";
+
+        // Lưu mức cược cá nhân vào Redis
+        await _cacheStore.SetStringAsync($"room_wager:{slideId}:{roomPlayerId}", $"{wagerPercent}:{wagerAmount}", TimeSpan.FromHours(4));
+
+        // Đọc danh sách cược hiện tại của câu hỏi
+        string poolKey = $"room_wagers_json:{roomId}:{slideId}";
+        var rawPool = await _cacheStore.GetStringAsync(poolKey);
+        var wagers = new List<PlayerWagerDto>();
+        if (!string.IsNullOrWhiteSpace(rawPool))
+        {
+            try { wagers = JsonSerializer.Deserialize<List<PlayerWagerDto>>(rawPool) ?? new(); } catch { }
+        }
+
+        wagers.RemoveAll(w => w.PlayerId == roomPlayerId);
+        wagers.Add(new PlayerWagerDto(
+            roomPlayerId,
+            nickname,
+            wagerPercent,
+            wagerAmount,
+            wagerPercent >= 100
+        ));
+
+        await _cacheStore.SetStringAsync(poolKey, JsonSerializer.Serialize(wagers), TimeSpan.FromHours(4));
+
+        int totalAmount = wagers.Sum(w => w.WagerAmount);
+        int allInCount = wagers.Count(w => w.IsAllIn);
+
+        return new WagerPoolStateDto(slideId, totalAmount, wagers.Count, allInCount, wagers);
+    }
+
+    public async Task<WagerPoolStateDto> GetWagerPoolStateAsync(Guid roomId, Guid slideId)
+    {
+        string poolKey = $"room_wagers_json:{roomId}:{slideId}";
+        var rawPool = await _cacheStore.GetStringAsync(poolKey);
+        var wagers = new List<PlayerWagerDto>();
+        if (!string.IsNullOrWhiteSpace(rawPool))
+        {
+            try { wagers = JsonSerializer.Deserialize<List<PlayerWagerDto>>(rawPool) ?? new(); } catch { }
+        }
+
+        int totalAmount = wagers.Sum(w => w.WagerAmount);
+        int allInCount = wagers.Count(w => w.IsAllIn);
+
+        return new WagerPoolStateDto(slideId, totalAmount, wagers.Count, allInCount, wagers);
+    }
+
+    public async Task<(int percent, int amount)> GetPlayerWagerAsync(Guid roomPlayerId, Guid slideId)
+    {
+        var raw = await _cacheStore.GetStringAsync($"room_wager:{slideId}:{roomPlayerId}");
+        if (string.IsNullOrWhiteSpace(raw)) return (0, 0);
+
+        var parts = raw.Split(':');
+        if (parts.Length == 2 && int.TryParse(parts[0], out int p) && int.TryParse(parts[1], out int a))
+        {
+            return (p, a);
+        }
+        return (0, 0);
     }
 }
