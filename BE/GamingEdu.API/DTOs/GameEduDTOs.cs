@@ -185,7 +185,7 @@ public record ApproveAllResult(int ApprovedCount);
 public record CreateRoomRequest(
     [Required] Guid QuizId,
     [Required] string Mode,   // HOST_PACED | PLAYER_PACED | ASYNC_TOURNAMENT
-    string? GameModeTheme = "SPEED_RACER"
+    string? GameModeTheme = "CLASSIC"
 );
 
 public record RoomDto(
@@ -197,7 +197,7 @@ public record RoomDto(
     string QuizTitle,
     DateTime CreatedAt,
     string? QrCodeBase64 = null,
-    string? GameModeTheme = "SPEED_RACER"
+    string? GameModeTheme = "CLASSIC"
 );
 
 public record JoinRoomRequest(
@@ -491,7 +491,8 @@ public record SlideStartedDto(
     string QuestionText,
     int TimeLimit,
     int Points,
-    IEnumerable<SlideOptionPublicDto> Options
+    IEnumerable<SlideOptionPublicDto> Options,
+    int? TotalSlides = null
 );
 
 /// <summary>Public options sent to players (IsCorrect hidden, only lengths shown for Word Hunter)</summary>

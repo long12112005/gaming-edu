@@ -21,13 +21,6 @@ import {
   WifiOff,
   RefreshCw,
 } from "lucide-react";
-import SpeedRacerPlayerCockpit from "@/components/games/speed-racer/SpeedRacerPlayerCockpit";
-import BattleRoyalePlayerArena from "@/components/games/battle-royale/BattleRoyalePlayerArena";
-import QuizWagerPlayerView from "@/components/games/quiz-wager/QuizWagerPlayerView";
-import DefuseBombPlayerView from "@/components/games/defuse-bomb/DefuseBombPlayerView";
-import WordHunterPlayerView from "@/components/games/word-hunter/WordHunterPlayerView";
-import BridgeBuilderPlayerView from "@/components/games/bridge-builder/BridgeBuilderPlayerView";
-import CircuitConnectPlayerView from "@/components/games/circuit-connect/CircuitConnectPlayerView";
 
 type ActionButtonProps = {
   icon?: React.ComponentType<{ size?: number; className?: string }>;
@@ -88,7 +81,6 @@ export default function PlayerGameRoom() {
     leaderboard,
     joinRoom,
     rejoinRoom,
-    placeWager,
     submitAnswer: hubSubmitAnswer,
   } = useGameHub();
 
@@ -102,23 +94,6 @@ export default function PlayerGameRoom() {
   const [selectedQuizOptionId, setSelectedQuizOptionId] = useState<string | null>(null);
   const [showQA, setShowQA] = useState(false);
   const [qaText, setQaText] = useState("");
-
-  const activeTheme = useMemo(() => {
-    if (typeof window !== "undefined") {
-      const urlParams = new URLSearchParams(window.location.search);
-      const t = urlParams.get("theme");
-      if (t) return t.toUpperCase();
-    }
-    return (roomInfo?.theme || roomInfo?.Theme || "SPEED_RACER").toUpperCase();
-  }, [roomInfo?.theme, roomInfo?.Theme]);
-
-  const isSpeedRacer = activeTheme === "SPEED_RACER";
-  const isBattleRoyale = activeTheme === "BATTLE_ROYALE";
-  const isQuizWager = activeTheme === "QUIZ_WAGER";
-  const isDefuseBomb = activeTheme === "DEFUSE_BOMB";
-  const isWordHunter = activeTheme === "WORD_HUNTER";
-  const isBridgeBuilder = activeTheme === "BRIDGE_BUILDER";
-  const isCircuitConnect = activeTheme === "CIRCUIT_CONNECT";
 
   // States riêng cho từng dạng câu hỏi
   const [blankAnswer, setBlankAnswer] = useState("");
@@ -405,142 +380,9 @@ export default function PlayerGameRoom() {
         )}
 
         {/* ════════════════════════════════════════════════════════════
-            PLAYING STATE / SPEED RACER COCKPIT / BATTLE ROYALE ARENA
+            PLAYING STATE (CÂU HỎI & TRẢ LỜI CHUẨN)
         ════════════════════════════════════════════════════════════ */}
-        {isSpeedRacer && (gameState === "PLAYING" || ((gameState === "LEADERBOARD" || answerResult) && answerResult)) && currentSlide ? (
-          <SpeedRacerPlayerCockpit
-            currentSlide={currentSlide as any}
-            slideTimeLeft={slideTimeLeft}
-            hasAnswered={hasAnswered}
-            answerResult={answerResult}
-            totalScore={answerResult?.totalScore ?? roomInfo?.totalScore ?? 0}
-            currentRank={answerResult?.rank ?? roomInfo?.rank ?? 1}
-            onSelectOption={submitQuizChoice}
-            selectedOptionId={selectedQuizOptionId}
-          />
-        ) : isBattleRoyale && (gameState === "PLAYING" || ((gameState === "LEADERBOARD" || answerResult) && answerResult)) && currentSlide ? (
-          <BattleRoyalePlayerArena
-            currentSlide={currentSlide as any}
-            slideTimeLeft={slideTimeLeft}
-            hasAnswered={hasAnswered}
-            answerResult={answerResult}
-            totalScore={answerResult?.totalScore ?? roomInfo?.totalScore ?? 0}
-            currentRank={answerResult?.rank ?? roomInfo?.rank ?? 1}
-            playerHp={answerResult?.currentHp ?? roomInfo?.currentHp ?? 100}
-            isEliminated={answerResult?.isEliminated ?? roomInfo?.isEliminated ?? false}
-            onSubmitAnswer={(answerData) => {
-              if (hasAnswered || !slideTimeLeft || slideTimeLeft === 0 || !currentSlide) return;
-              setHasAnswered(true);
-              const elapsedMs = Math.max(0, (currentSlide.timeLimit - slideTimeLeft) * 1000);
-              hubSubmitAnswer(currentSlide.slideId, {
-                answerData,
-                responseTimeMs: elapsedMs,
-              });
-            }}
-          />
-        ) : isQuizWager && (gameState === "PLAYING" || ((gameState === "LEADERBOARD" || answerResult) && answerResult)) && currentSlide ? (
-          <QuizWagerPlayerView
-            currentSlide={currentSlide as any}
-            slideTimeLeft={slideTimeLeft}
-            hasAnswered={hasAnswered}
-            answerResult={answerResult}
-            totalScore={answerResult?.totalScore ?? roomInfo?.totalScore ?? 0}
-            currentRank={answerResult?.rank ?? roomInfo?.rank ?? 1}
-            onPlaceWager={(wagerPercent, wagerAmount) => {
-              if (currentSlide) {
-                placeWager(currentSlide.slideId, wagerPercent, wagerAmount);
-              }
-            }}
-            onSubmitAnswer={(optionId, wagerPercent, wagerAmount) => {
-              if (hasAnswered || !slideTimeLeft || slideTimeLeft === 0 || !currentSlide) return;
-              setHasAnswered(true);
-              setSelectedQuizOptionId(optionId);
-              const elapsedMs = Math.max(0, (currentSlide.timeLimit - slideTimeLeft) * 1000);
-              hubSubmitAnswer(currentSlide.slideId, {
-                answerData: optionId,
-                responseTimeMs: elapsedMs,
-                wagerPercent,
-                wagerAmount,
-              });
-            }}
-          />
-        ) : isDefuseBomb && (gameState === "PLAYING" || ((gameState === "LEADERBOARD" || answerResult) && answerResult)) && currentSlide ? (
-          <DefuseBombPlayerView
-            currentSlide={currentSlide as any}
-            slideTimeLeft={slideTimeLeft}
-            hasAnswered={hasAnswered}
-            answerResult={answerResult}
-            roomMode={roomInfo?.mode || "HOST_PACED"}
-            roomPlayerId={roomInfo?.playerId || ""}
-            currentRank={answerResult?.rank ?? roomInfo?.rank ?? 1}
-            onSubmitDefusal={(userAnswers) => {
-              if (hasAnswered || !slideTimeLeft || slideTimeLeft === 0 || !currentSlide) return;
-              setHasAnswered(true);
-              const elapsedMs = Math.max(0, (currentSlide.timeLimit - slideTimeLeft) * 1000);
-              hubSubmitAnswer(currentSlide.slideId, {
-                answerData: JSON.stringify(userAnswers),
-                responseTimeMs: elapsedMs,
-              });
-            }}
-          />
-        ) : isWordHunter && (gameState === "PLAYING" || ((gameState === "LEADERBOARD" || answerResult) && answerResult)) && currentSlide ? (
-          <WordHunterPlayerView
-            currentSlide={currentSlide as any}
-            slideTimeLeft={slideTimeLeft}
-            hasAnswered={hasAnswered}
-            answerResult={answerResult}
-            roomMode={roomInfo?.mode || "HOST_PACED"}
-            roomPlayerId={roomInfo?.playerId || ""}
-            currentRank={answerResult?.rank ?? roomInfo?.rank ?? 1}
-            onSubmitWord={(word) => {
-              if (hasAnswered || !slideTimeLeft || slideTimeLeft === 0 || !currentSlide) return;
-              setHasAnswered(true);
-              const elapsedMs = Math.max(0, (currentSlide.timeLimit - slideTimeLeft) * 1000);
-              hubSubmitAnswer(currentSlide.slideId, {
-                answerData: JSON.stringify([word]),
-                responseTimeMs: elapsedMs,
-              });
-            }}
-          />
-        ) : isBridgeBuilder && (gameState === "PLAYING" || ((gameState === "LEADERBOARD" || answerResult) && answerResult)) && currentSlide ? (
-          <BridgeBuilderPlayerView
-            currentSlide={currentSlide as any}
-            slideTimeLeft={slideTimeLeft}
-            hasAnswered={hasAnswered}
-            answerResult={answerResult}
-            roomMode={roomInfo?.mode || "HOST_PACED"}
-            roomPlayerId={roomInfo?.playerId || ""}
-            currentRank={answerResult?.rank ?? roomInfo?.rank ?? 1}
-            onSubmitBridge={(userAnswers) => {
-              if (hasAnswered || !slideTimeLeft || slideTimeLeft === 0 || !currentSlide) return;
-              setHasAnswered(true);
-              const elapsedMs = Math.max(0, (currentSlide.timeLimit - slideTimeLeft) * 1000);
-              hubSubmitAnswer(currentSlide.slideId, {
-                answerData: JSON.stringify(userAnswers),
-                responseTimeMs: elapsedMs,
-              });
-            }}
-          />
-        ) : isCircuitConnect && (gameState === "PLAYING" || ((gameState === "LEADERBOARD" || answerResult) && answerResult)) && currentSlide ? (
-          <CircuitConnectPlayerView
-            currentSlide={currentSlide as any}
-            slideTimeLeft={slideTimeLeft}
-            hasAnswered={hasAnswered}
-            answerResult={answerResult}
-            roomMode={roomInfo?.mode || "HOST_PACED"}
-            roomPlayerId={roomInfo?.playerId || ""}
-            currentRank={answerResult?.rank ?? roomInfo?.rank ?? 1}
-            onSubmitCircuit={(pairs) => {
-              if (hasAnswered || !slideTimeLeft || slideTimeLeft === 0 || !currentSlide) return;
-              setHasAnswered(true);
-              const elapsedMs = Math.max(0, (currentSlide.timeLimit - slideTimeLeft) * 1000);
-              hubSubmitAnswer(currentSlide.slideId, {
-                answerData: JSON.stringify(pairs),
-                responseTimeMs: elapsedMs,
-              });
-            }}
-          />
-        ) : !isSpeedRacer && !isBattleRoyale && !isQuizWager && !isDefuseBomb && !isWordHunter && !isBridgeBuilder && !isCircuitConnect && gameState === "PLAYING" && currentSlide ? (
+        {gameState === "PLAYING" && currentSlide ? (
           <div className="flex-1 flex flex-col animate-fade-in-up">
             {/* Thanh tiêu đề câu hỏi & đồng hồ đếm ngược */}
             <div className="flex items-center justify-between mb-6 bg-white/90 backdrop-blur-md p-4 rounded-[24px] border-2 border-teal-200/80 shadow-sm">
@@ -786,7 +628,7 @@ export default function PlayerGameRoom() {
         {/* ════════════════════════════════════════════════════════════
             ANSWER RESULT STATE (KẾT QUẢ ĐÚNG / SAI CỦA BẠN)
         ════════════════════════════════════════════════════════════ */}
-        {!isSpeedRacer && !isBattleRoyale && !isQuizWager && !isDefuseBomb && !isWordHunter && !isBridgeBuilder && !isCircuitConnect && (gameState === "LEADERBOARD" || answerResult) && answerResult && (
+        {(gameState === "LEADERBOARD" || answerResult) && answerResult && (
           <div className="flex-1 flex flex-col items-center justify-center text-center animate-fade-in-up">
             {answerResult.isCorrect ? (
               <div className="w-32 h-32 bg-emerald-500 text-white rounded-[36px] border-4 border-emerald-700 shadow-[0_10px_0_0_#047857] flex items-center justify-center mb-6 transform -rotate-3">

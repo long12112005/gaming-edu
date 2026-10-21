@@ -28,6 +28,7 @@ export interface SlideStartedPayload {
   timeLimit: number;
   points: number;
   options: SlideOptionPublic[];
+  totalSlides?: number;
 }
 
 export interface PlayerSurvivalStatus {
@@ -315,10 +316,20 @@ export function useGameHub() {
       setGameState("STARTING");
     });
 
-    newConnection.on("SlideStarted", (slide: SlideStartedPayload) => {
-      setCurrentSlide(slide);
+    newConnection.on("SlideStarted", (slide: any) => {
+      const normalizedSlide: SlideStartedPayload = {
+        index: slide.slideIndex ?? slide.index ?? 0,
+        slideId: slide.slideId ?? slide.id,
+        type: slide.type,
+        questionText: slide.questionText,
+        timeLimit: slide.timeLimit || 30,
+        points: slide.points || 1000,
+        options: slide.options || [],
+        totalSlides: slide.totalSlides,
+      };
+      setCurrentSlide(normalizedSlide);
       setGameState("PLAYING");
-      setSlideTimeLeft(slide.timeLimit);
+      setSlideTimeLeft(normalizedSlide.timeLimit);
       setAnswerResult(null); // Reset previous answer
       setAnswerProgress(null);
       setDistribution(null);
@@ -356,6 +367,9 @@ export function useGameHub() {
 
     newConnection.on("AnswerCountUpdated", (data: any) => {
       setAnswerProgress(data);
+      if (data.totalPlayers > 0 && data.answeredCount >= data.totalPlayers) {
+        setSlideTimeLeft(0);
+      }
       if (data.distribution) {
         setDistribution(data.distribution);
       }
@@ -426,6 +440,25 @@ export function useGameHub() {
       newConnection.stop();
     };
   }, []);
+
+  // Tự động đếm ngược thời gian cho câu hỏi hiện tại
+  useEffect(() => {
+    if (gameState !== "PLAYING" || slideTimeLeft === null || slideTimeLeft <= 0) {
+      return;
+    }
+
+    const timer = setInterval(() => {
+      setSlideTimeLeft((prev) => {
+        if (prev === null || prev <= 1) {
+          clearInterval(timer);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [gameState, currentSlide?.slideId, slideTimeLeft]);
 
   // ── Actions ──
   const joinRoom = useCallback(async (pinCode: string, nickname?: string) => {

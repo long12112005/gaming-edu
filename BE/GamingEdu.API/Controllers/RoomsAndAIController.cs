@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.IdentityModel.Tokens.Jwt;
 using GamingEdu.API.Data;
 using GamingEdu.API.DTOs;
 using GamingEdu.API.Models;
@@ -190,7 +191,9 @@ public class RoomsController : ControllerBase
 
     private Guid? GetCurrentUserId()
     {
-        var claim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var claim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+            ?? User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value
+            ?? User.FindFirst("sub")?.Value;
         return Guid.TryParse(claim, out var id) ? id : null;
     }
 }
@@ -298,7 +301,9 @@ public class AIJobsController : ControllerBase
 
     private Guid? GetCurrentUserId()
     {
-        var claim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var claim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+            ?? User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value
+            ?? User.FindFirst("sub")?.Value;
         return Guid.TryParse(claim, out var id) ? id : null;
     }
 }

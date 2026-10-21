@@ -235,41 +235,30 @@ export default function AdminUsersPage() {
   });
 
   return (
-    <div className="min-h-screen text-[#1B2A2E] font-serif flex flex-col relative">
-      {/* Background tiên môn huyền ảo */}
-      <div
-        className="fixed inset-0 z-0"
-        style={{
-          backgroundImage: "url('/bg-misty-white.jpg')",
-          backgroundSize: "cover",
-          backgroundPosition: "center top",
-        }}
-      />
-      <div className="fixed inset-0 z-0 bg-[#f4f9f7]/75 backdrop-blur-[2px]" />
-
+    <div className="min-h-screen bg-[#F8FAFC] text-[#0F172A] flex flex-col font-sans">
       <SiteHeader />
 
-      <main className="flex-1 pt-24 pb-16 px-4 md:px-8 max-w-6xl mx-auto w-full relative z-10 space-y-8 font-sans">
+      <main className="flex-1 pt-24 pb-16 px-4 md:px-8 max-w-7xl mx-auto w-full space-y-8">
         {/* Header Admin */}
-        <div className="bg-white/70 backdrop-blur-xl border border-white/90 rounded-[32px] p-6 md:p-8 shadow-[0_16px_40px_rgba(8,38,42,0.1)] flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+        <div className="bg-white border border-[#E2E8F0] rounded-[24px] p-6 md:p-8 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
           <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/15 border border-amber-400/40 text-xs font-bold text-amber-900 uppercase tracking-wider mb-2">
-              <ShieldAlert size={14} className="text-amber-600" /> Khu Vực Quản Trị Hệ Thống
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-50 border border-rose-200 text-xs font-bold text-rose-600 uppercase tracking-wider mb-2 font-heading">
+              <ShieldAlert size={14} className="text-rose-600" /> Khu Vực Quản Trị Hệ Thống
             </div>
-            <h1 className="text-3xl md:text-4xl font-bold font-serif text-[#08282e] tracking-tight">
+            <h1 className="text-3xl md:text-4xl font-extrabold text-[#0F172A] tracking-tight font-heading">
               Quản Trị Người Dùng & Phân Quyền
             </h1>
-            <p className="text-teal-800/80 text-sm md:text-base mt-1 max-w-xl">
-              Giám sát tài khoản toàn hệ thống, xử lý vi phạm bằng cơ chế khóa phiên làm việc (30 phút, 1 ngày, vĩnh viễn) hoặc vô hiệu hóa tài khoản.
+            <p className="text-slate-500 text-sm md:text-base mt-1 max-w-xl">
+              Giám sát tài khoản toàn hệ thống, xử lý vi phạm bằng cơ chế mở/khóa phiên làm việc (Brute-force, 30 phút, 1 ngày, vĩnh viễn) hoặc vô hiệu hóa tài khoản.
             </p>
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="p-3 bg-white/80 rounded-2xl border border-teal-200/60 shadow-sm flex items-center gap-3">
-              <Users size={20} className="text-teal-700" />
+            <div className="p-4 bg-slate-50 rounded-[16px] border border-[#E2E8F0] shadow-sm flex items-center gap-3">
+              <Users size={22} className="text-indigo-600" />
               <div>
-                <p className="text-[10px] uppercase font-bold text-teal-800/70">Tổng người dùng</p>
-                <p className="text-lg font-black text-teal-950">{users.length}</p>
+                <p className="text-[10px] uppercase font-bold text-slate-400 font-heading">Tổng người dùng</p>
+                <p className="text-xl font-extrabold text-[#0F172A] font-heading">{users.length}</p>
               </div>
             </div>
           </div>
@@ -317,7 +306,7 @@ export default function AdminUsersPage() {
               value={filterRole}
               onChange={(e) => setFilterRole(e.target.value as "all" | "admin" | "user")}
               aria-label="Chọn vai trò"
-              className="px-3 py-2 bg-white/80 border border-teal-200/60 rounded-xl text-xs font-bold text-teal-900 outline-none cursor-pointer"
+              className="px-3 py-2 bg-slate-50 border border-[#E2E8F0] rounded-[10px] text-xs font-bold text-slate-700 outline-none cursor-pointer"
             >
               <option value="all">Vai trò: Tất cả</option>
               <option value="admin">Quản trị viên (Admin)</option>
@@ -329,7 +318,7 @@ export default function AdminUsersPage() {
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value as "all" | "active" | "locked" | "deleted")}
               aria-label="Chọn trạng thái"
-              className="px-3 py-2 bg-white/80 border border-teal-200/60 rounded-xl text-xs font-bold text-teal-900 outline-none cursor-pointer"
+              className="px-3 py-2 bg-slate-50 border border-[#E2E8F0] rounded-[10px] text-xs font-bold text-slate-700 outline-none cursor-pointer"
             >
               <option value="all">Trạng thái: Tất cả</option>
               <option value="active">Hoạt động (ACTIVE)</option>
@@ -339,7 +328,7 @@ export default function AdminUsersPage() {
 
             <button
               onClick={fetchUsers}
-              className="p-2.5 rounded-xl bg-white hover:bg-teal-50 border border-teal-200/60 text-teal-800 transition-colors shrink-0"
+              className="p-2.5 rounded-[10px] bg-slate-50 hover:bg-slate-100 border border-[#E2E8F0] text-slate-600 transition-colors shrink-0"
               title="Tải lại danh sách"
             >
               <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
@@ -348,22 +337,22 @@ export default function AdminUsersPage() {
         </div>
 
         {/* Bảng Danh Sách Người Dùng */}
-        <div className="bg-white/70 backdrop-blur-xl border border-white/90 rounded-[28px] overflow-hidden shadow-[0_10px_30px_rgba(8,38,42,0.06)]">
+        <div className="bg-white border border-[#E2E8F0] rounded-[24px] overflow-hidden shadow-sm">
           {loading ? (
-            <div className="p-12 text-center text-teal-800 flex flex-col items-center justify-center">
-              <RefreshCw size={30} className="animate-spin mb-3 text-teal-600" />
+            <div className="p-12 text-center text-slate-500 flex flex-col items-center justify-center">
+              <RefreshCw size={30} className="animate-spin mb-3 text-indigo-600" />
               <p className="font-bold text-sm">Đang tải danh sách người dùng...</p>
             </div>
           ) : filteredUsers.length === 0 ? (
-            <div className="p-12 text-center text-teal-800">
-              <UserX size={40} className="mx-auto mb-3 text-teal-600/50" />
+            <div className="p-12 text-center text-slate-500">
+              <UserX size={40} className="mx-auto mb-3 text-slate-300" />
               <p className="font-bold text-base">Không tìm thấy người dùng phù hợp.</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm border-collapse">
                 <thead>
-                  <tr className="bg-teal-950/5 border-b border-teal-200/50 text-[11px] uppercase tracking-wider text-teal-900/80 font-bold">
+                  <tr className="bg-slate-50 border-b border-[#E2E8F0] text-[11px] uppercase tracking-wider text-slate-400 font-heading font-bold">
                     <th className="py-4 px-6">Người Dùng</th>
                     <th className="py-4 px-6">Email</th>
                     <th className="py-4 px-6">Vai Trò</th>
@@ -371,24 +360,24 @@ export default function AdminUsersPage() {
                     <th className="py-4 px-6 text-right">Thao Tác</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-teal-200/40 font-medium">
+                <tbody className="divide-y divide-slate-100 font-medium">
                   {filteredUsers.map((u) => (
-                    <tr key={u.id} className="hover:bg-white/60 transition-colors">
+                    <tr key={u.id} className="hover:bg-slate-50/70 transition-colors">
                       {/* Nickname & Avatar */}
                       <td className="py-4 px-6">
                         <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-amber-400 to-teal-600 flex items-center justify-center text-white font-bold text-sm shadow-sm">
+                          <div className="w-9 h-9 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 flex items-center justify-center font-bold text-sm shadow-sm">
                             {u.nickname.charAt(0).toUpperCase()}
                           </div>
                           <div>
-                            <p className="font-bold text-teal-950">{u.nickname}</p>
-                            <p className="text-[11px] text-teal-800/60 font-mono">ID: {u.id.slice(0, 8)}...</p>
+                            <p className="font-bold text-[#0F172A] font-heading">{u.nickname}</p>
+                            <p className="text-[11px] text-slate-400 font-mono">ID: {u.id.slice(0, 8)}...</p>
                           </div>
                         </div>
                       </td>
 
                       {/* Email */}
-                      <td className="py-4 px-6 text-teal-900 font-mono text-xs">{u.email}</td>
+                      <td className="py-4 px-6 text-slate-700 font-mono text-xs">{u.email}</td>
 
                       {/* Vai Trò */}
                       <td className="py-4 px-6">

@@ -13,24 +13,24 @@ import {
   Sparkles,
   BookOpen,
   Users,
-  Shield
+  Shield,
+  Gamepad2,
+  BarChart3,
+  Compass,
+  PlusCircle,
+  Hash,
 } from "lucide-react";
 import { useAuthStore } from "@/store/useAuthStore";
+import CreateRoomModal from "@/components/modals/CreateRoomModal";
 
 const NAV_ITEMS = [
   { label: "Trang Chủ", href: "/" },
-  { label: "Khám Phá", href: "/explore" },
-  { label: "Tạo Đề", href: "/quiz/create" },
+  { label: "Thư Viện Đề", href: "/library" },
+  { label: "Không Gian Nhóm", href: "/groups" },
+  { label: "Tạo Đề Mới", href: "/quiz/create" },
   { label: "Báo Cáo", href: "/reports" },
 ];
 
-/**
- * Thanh menu chính Gaming Edu tinh gọn
- * 1. Menu giữa: Đúng 4 mục (Trang Chủ, Khám Phá, Tạo Đề, Báo Cáo)
- * 2. Bên phải:
- *    - Đã đăng nhập: Số lượt tạo đề AI + Avatar kèm Tên (bấm vào mở menu Hồ sơ / Dashboard / Đăng xuất)
- *    - Chưa đăng nhập: DUY NHẤT 1 nút "Đăng Nhập" (đã bỏ Tạo Phòng, Cúp, Menu 3 gạch)
- */
 export default function SiteHeader() {
   const router = useRouter();
   const pathname = usePathname();
@@ -38,6 +38,7 @@ export default function SiteHeader() {
   const [mounted, setMounted] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
+  const [isCreateRoomOpen, setIsCreateRoomOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -48,7 +49,6 @@ export default function SiteHeader() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  // Đóng dropdown khi click ra ngoài
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
@@ -59,190 +59,231 @@ export default function SiteHeader() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Kiểm tra đăng nhập
   const loggedIn = mounted && (isAuthenticated || !!Cookies.get("token"));
-
-  const go = (href: string) => {
-    setUserDropdownOpen(false);
-    router.push(href);
-  };
 
   const handleLogout = () => {
     setUserDropdownOpen(false);
     logout();
     Cookies.remove("token");
     Cookies.remove("user");
-    router.push("/login");
+    router.push("/auth");
   };
 
-  const displayName = user?.nickname || user?.email?.split("@")[0] || "Người Dùng";
-  const avatarUrl = user?.avatar_url;
-
-  // Tính số lượt tạo đề AI còn lại
-  const aiLimit = user?.ai_generation_limit ?? 10;
-  const aiUsed = user?.ai_used_today ?? 0;
-  const aiRemaining = Math.max(0, aiLimit - aiUsed);
-
   return (
-    <header className={`site-header ${scrolled ? "is-scrolled" : ""}`}>
-      <div className="max-w-7xl mx-auto h-full px-4 md:px-8 flex items-center justify-between gap-4">
-        {/* Logo Gaming Edu nguyên bản với ấn triện GE */}
-        <Link href="/" className="flex items-center gap-2.5 shrink-0 group" aria-label="Gaming Edu - Trang chủ">
-          <span className="seal-mark group-hover:rotate-0">GE</span>
-          <span className="text-brush text-2xl md:text-3xl leading-none drop-shadow-md">Gaming Edu</span>
-        </Link>
-
-        {/* Menu giữa: Đúng 4 mục Trang Chủ, Khám Phá, Tạo Đề, Báo Cáo */}
-        <nav className="flex items-center gap-1 sm:gap-2" aria-label="Menu chính">
-          {NAV_ITEMS.map((item) => {
-            const active = item.href === "/" ? pathname === "/" : pathname?.startsWith(item.href);
-            return (
-              <Link
-                key={item.label}
-                href={item.href}
-                className={`nav-link text-sm sm:text-base text-[#e0f2fe] hover:text-white px-2.5 sm:px-4 py-1.5 font-medium transition-colors ${
-                  active ? "is-active !text-white font-semibold" : ""
-                }`}
-              >
-                {item.label}
-              </Link>
-            );
-          })}
-        </nav>
-
-        {/* Cụm bên phải: Chỉ hiển thị đúng theo trạng thái đăng nhập */}
-        <div className="flex items-center gap-3 shrink-0">
-          {loggedIn ? (
-            /* ── ĐÃ ĐĂNG NHẬP: SỐ LƯỢT TẠO ĐỀ + AVATAR KÈM TÊN ── */
-            <div className="flex items-center gap-2.5">
-              {/* Huy hiệu số lượt tạo đề AI */}
-              <div
-                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 border border-emerald-300/30 text-xs font-semibold text-emerald-200 backdrop-blur-sm shadow-inner"
-                title={`Đã dùng ${aiUsed}/${aiLimit} lượt tạo đề AI hôm nay`}
-              >
-                <Sparkles size={13} className="text-amber-300 animate-pulse" />
-                <span>Lượt tạo:</span>
-                <span className="bg-emerald-400/20 text-white px-1.5 py-0.2 rounded-md font-bold">
-                  {aiRemaining}/{aiLimit}
+    <>
+      <header
+        className={`sticky top-0 z-40 w-full transition-all duration-200 border-b ${
+          scrolled
+            ? "bg-white/95 backdrop-blur-md border-slate-200 shadow-sm"
+            : "bg-white/80 backdrop-blur-sm border-slate-200/60"
+        }`}
+      >
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
+          {/* Logo & Brand */}
+          <div className="flex items-center gap-8">
+            <Link href="/" className="flex items-center gap-2.5 group">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-purple-600 flex items-center justify-center text-white shadow-md shadow-indigo-500/20 group-hover:scale-105 transition-transform">
+                <Gamepad2 size={22} className="stroke-[2.5]" />
+              </div>
+              <div className="flex flex-col">
+                <span className="font-heading font-black text-xl tracking-tight text-slate-900 flex items-center gap-1">
+                  Game<span className="text-indigo-600">Edu</span>
+                </span>
+                <span className="text-[10px] font-semibold text-slate-400 -mt-1 tracking-wider uppercase">
+                  Gamified SaaS
                 </span>
               </div>
+            </Link>
 
-              {/* Avatar kèm tên & menu dropdown */}
-              <div className="relative" ref={dropdownRef}>
-                <button
-                  id="nav-user-avatar"
-                  onClick={() => setUserDropdownOpen((v) => !v)}
-                  className="flex items-center gap-2 p-1 pl-1.5 pr-2.5 rounded-full bg-white/10 hover:bg-white/20 border border-white/25 transition-all text-white active:scale-95 shadow-sm"
-                  aria-expanded={userDropdownOpen}
-                  aria-label="Menu tài khoản"
-                >
-                  {avatarUrl ? (
-                    <img
-                      src={avatarUrl}
-                      alt={displayName}
-                      className="w-8 h-8 rounded-full object-cover border border-amber-300 shadow-sm"
-                    />
-                  ) : (
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-400 to-emerald-600 flex items-center justify-center text-white font-bold text-sm shadow-sm">
-                      {displayName.charAt(0).toUpperCase()}
-                    </div>
-                  )}
-                  <span className="inline-block max-w-[110px] truncate text-xs sm:text-sm font-semibold text-white/95">
-                    {displayName}
-                  </span>
-                  <ChevronDown
-                    size={14}
-                    className={`text-cyan-200 transition-transform duration-200 ${
-                      userDropdownOpen ? "rotate-180" : ""
+            {/* Desktop Navigation */}
+            <nav className="hidden lg:flex items-center gap-1">
+              {NAV_ITEMS.map((item) => {
+                const isActive =
+                  pathname === item.href ||
+                  (item.href === "/library" && pathname.startsWith("/quizzes")) ||
+                  (item.href === "/" && (pathname === "/" || pathname === "/home"));
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`px-3.5 py-1.5 rounded-xl text-sm font-semibold transition-all ${
+                      isActive
+                        ? "bg-indigo-50 text-indigo-700 font-bold"
+                        : "text-slate-600 hover:text-slate-900 hover:bg-slate-100/70"
                     }`}
-                  />
-                </button>
+                  >
+                    {item.label}
+                  </Link>
+                );
+              })}
+              {loggedIn && (user?.isAdmin || (user as any)?.is_admin) && (
+                <Link
+                  href="/admin/users"
+                  className={`px-3.5 py-1.5 rounded-xl text-sm font-semibold transition-all flex items-center gap-1.5 ${
+                    pathname.startsWith("/admin")
+                      ? "bg-purple-50 text-purple-700 font-bold"
+                      : "text-slate-600 hover:text-purple-700 hover:bg-purple-50/50"
+                  }`}
+                >
+                  <Shield size={14} />
+                  <span>Admin</span>
+                </Link>
+              )}
+            </nav>
+          </div>
 
-                {/* Dropdown Menu vào hồ sơ hoặc đăng xuất */}
-                {userDropdownOpen && (
-                  <div className="absolute right-0 mt-2.5 w-56 rounded-2xl bg-[#0e3b43]/95 backdrop-blur-xl border border-cyan-300/30 shadow-[0_12px_36px_rgba(0,0,0,0.45)] py-2 z-50 animate-in fade-in zoom-in-95">
-                    {/* Header thông tin người dùng */}
-                    <div className="px-4 py-2.5 border-b border-white/10">
-                      <p className="text-xs text-cyan-200">Tài khoản</p>
-                      <p className="text-sm font-bold text-white truncate mt-0.5">{displayName}</p>
-                      {/* Lượt tạo đề trên mobile */}
-                      <p className="text-[11px] text-emerald-300 sm:hidden mt-1 flex items-center gap-1">
-                        <Sparkles size={11} /> {aiRemaining}/{aiLimit} lượt tạo đề AI
-                      </p>
-                    </div>
+          {/* Right Action Hub */}
+          <div className="flex items-center gap-3">
+            {/* Quick PIN button */}
+            <button
+              onClick={() => {
+                const pinInput = document.getElementById("quick-pin-input");
+                if (pinInput) {
+                  pinInput.scrollIntoView({ behavior: "smooth", block: "center" });
+                  pinInput.focus();
+                } else {
+                  router.push("/#quick-join");
+                }
+              }}
+              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-xs font-bold text-slate-700 transition-colors"
+            >
+              <Hash size={13} className="text-indigo-600" />
+              <span>Nhập PIN</span>
+            </button>
 
-                    {/* Danh sách mục */}
-                    <div className="py-1">
-                      <button
-                        onClick={() => go("/profile")}
-                        className="w-full flex items-center gap-3 px-4 py-2 text-sm text-cyan-100 hover:text-white hover:bg-white/10 transition-colors text-left font-medium"
-                      >
-                        <User size={16} className="text-cyan-300" />
-                        <span>Hồ Sơ Cá Nhân</span>
-                      </button>
-                      <button
-                        onClick={() => go("/dashboard")}
-                        className="w-full flex items-center gap-3 px-4 py-2 text-sm text-cyan-100 hover:text-white hover:bg-white/10 transition-colors text-left font-medium"
-                      >
-                        <LayoutDashboard size={16} className="text-cyan-300" />
-                        <span>Bảng Điều Khiển</span>
-                      </button>
-                      <button
-                        onClick={() => go("/quizzes")}
-                        className="w-full flex items-center gap-3 px-4 py-2 text-sm text-cyan-100 hover:text-white hover:bg-white/10 transition-colors text-left font-medium"
-                      >
-                        <BookOpen size={16} className="text-cyan-300" />
-                        <span>Kho Bộ Đề</span>
-                      </button>
-                      <button
-                        onClick={() => go("/groups")}
-                        className="w-full flex items-center gap-3 px-4 py-2 text-sm text-cyan-100 hover:text-white hover:bg-white/10 transition-colors text-left font-medium"
-                      >
-                        <Users size={16} className="text-cyan-300" />
-                        <span>Nhóm & Lớp Học</span>
-                      </button>
-                      {user?.is_admin && (
-                        <button
-                          onClick={() => go("/admin/users")}
-                          className="w-full flex items-center gap-3 px-4 py-2 text-sm text-amber-200 hover:text-amber-100 hover:bg-amber-500/20 transition-colors text-left font-medium"
-                        >
-                          <Shield size={16} className="text-amber-400" />
-                          <span>Quản Trị Người Dùng</span>
-                        </button>
+            {/* Host Create Room CTA */}
+            {loggedIn && (
+              <button
+                onClick={() => setIsCreateRoomOpen(true)}
+                className="hidden md:inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-sm shadow-indigo-600/20 active:translate-y-0.5 transition-all"
+              >
+                <PlusCircle size={14} />
+                <span>Mở Phòng</span>
+              </button>
+            )}
+
+            {/* User status */}
+            {loggedIn ? (
+              <div className="flex items-center gap-2.5">
+                {/* AI Quota Widget Badge */}
+                <div 
+                  className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-100 text-[11px] font-bold text-indigo-700 shadow-xs"
+                  title="Hạn mức sinh đề bằng AI hôm nay"
+                >
+                  <Sparkles size={12} className="text-indigo-600 animate-pulse" />
+                  <span>AI Quota: 15/20</span>
+                </div>
+
+                {/* Profile Dropdown */}
+                <div className="relative" ref={dropdownRef}>
+                  <button
+                    onClick={() => setUserDropdownOpen(!userDropdownOpen)}
+                    className="flex items-center gap-2 p-1.5 pr-2.5 rounded-xl hover:bg-slate-100 border border-slate-200/60 transition-colors"
+                  >
+                    <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-white font-bold text-sm overflow-hidden shadow-xs">
+                      {user?.avatar_url || user?.avatarUrl ? (
+                        <img
+                          src={user?.avatar_url || user?.avatarUrl}
+                          alt="Avatar"
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <span>{user?.nickname ? user.nickname.charAt(0).toUpperCase() : "U"}</span>
                       )}
                     </div>
+                    <span className="text-xs font-bold text-slate-800 hidden md:block max-w-[100px] truncate">
+                      {user?.nickname || "Người dùng"}
+                    </span>
+                    <ChevronDown size={14} className="text-slate-400" />
+                  </button>
 
-                    {/* Đăng xuất */}
-                    <div className="pt-1 mt-1 border-t border-white/10">
-                      <button
-                        onClick={handleLogout}
-                        className="w-full flex items-center gap-3 px-4 py-2 text-sm text-rose-300 hover:text-rose-100 hover:bg-rose-500/20 transition-colors text-left font-semibold"
-                      >
-                        <LogOut size={16} />
-                        <span>Đăng Xuất</span>
-                      </button>
+                  {userDropdownOpen && (
+                    <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl border border-slate-200 shadow-xl py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+                      <div className="px-4 py-2.5 border-b border-slate-100">
+                        <p className="text-xs font-bold text-slate-900 truncate">
+                          {user?.nickname || "Người dùng"}
+                        </p>
+                        <p className="text-[11px] text-slate-500 truncate">{user?.email}</p>
+                      </div>
+
+                      <div className="p-1 space-y-0.5">
+                        <Link
+                          href="/profile"
+                          onClick={() => setUserDropdownOpen(false)}
+                          className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+                        >
+                          <User size={15} className="text-slate-400" />
+                          <span>Hồ sơ cá nhân</span>
+                        </Link>
+                        <Link
+                          href="/groups"
+                          onClick={() => setUserDropdownOpen(false)}
+                          className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+                        >
+                          <Users size={15} className="text-slate-400" />
+                          <span>Không gian nhóm</span>
+                        </Link>
+                        <Link
+                          href="/library"
+                          onClick={() => setUserDropdownOpen(false)}
+                          className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+                        >
+                          <BookOpen size={15} className="text-slate-400" />
+                          <span>Kho đề của tôi</span>
+                        </Link>
+                        <Link
+                          href="/reports"
+                          onClick={() => setUserDropdownOpen(false)}
+                          className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+                        >
+                          <BarChart3 size={15} className="text-slate-400" />
+                          <span>Lịch sử báo cáo</span>
+                        </Link>
+                        {(user?.isAdmin || (user as any)?.is_admin) && (
+                          <Link
+                            href="/admin/users"
+                            onClick={() => setUserDropdownOpen(false)}
+                            className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold text-purple-700 hover:bg-purple-50 transition-colors"
+                          >
+                            <Shield size={15} className="text-purple-500" />
+                            <span>Quản trị hệ thống</span>
+                          </Link>
+                        )}
+                      </div>
+
+                      <div className="p-1 border-t border-slate-100">
+                        <button
+                          onClick={handleLogout}
+                          className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold text-rose-600 hover:bg-rose-50 transition-colors"
+                        >
+                          <LogOut size={15} />
+                          <span>Đăng xuất</span>
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
-            </div>
-          ) : (
-            /* ── CHƯA ĐĂNG NHẬP: DUY NHẤT NÚT ĐĂNG NHẬP ── */
-            <button
-              id="nav-btn-login"
-              onClick={() => go("/login")}
-              className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-gradient-to-r from-emerald-500/30 to-cyan-500/30 hover:from-emerald-500/50 hover:to-cyan-500/50 border border-cyan-200/50 text-white font-bold text-sm transition-all hover:scale-105 active:scale-95 shadow-md backdrop-blur-sm"
-            >
-              <LogIn size={16} className="text-amber-300" />
-              <span>Đăng Nhập</span>
-            </button>
-          )}
+            ) : (
+              <div className="flex items-center gap-2">
+                <Link
+                  href="/auth"
+                  className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-sm shadow-indigo-600/20 active:translate-y-0.5 transition-all flex items-center gap-1.5"
+                >
+                  <LogIn size={14} />
+                  <span>Đăng Nhập</span>
+                </Link>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
-    </header>
+      </header>
+
+      {/* Modal Tạo Phòng */}
+      <CreateRoomModal
+        isOpen={isCreateRoomOpen}
+        onClose={() => setIsCreateRoomOpen(false)}
+      />
+    </>
   );
 }
-
-
-
-

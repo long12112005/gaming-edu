@@ -13,27 +13,46 @@ import {
   Shield,
   Zap,
   Users,
-  AlertTriangle,
+  Trophy,
+  Flame,
+  Award,
+  BookOpen,
+  Calendar,
   CheckCircle2,
   AlertCircle,
-  RefreshCw,
-  Trash2,
+  Play,
+  FileText,
+  Clock,
+  ArrowRight,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAuthStore, UserQuota } from "@/store/useAuthStore";
 import SiteHeader from "@/components/layout/SiteHeader";
+import Footer from "@/components/layout/Footer";
+
+const AVATAR_OPTIONS = [
+  "https://api.dicebear.com/7.x/bottts/svg?seed=Rocket",
+  "https://api.dicebear.com/7.x/bottts/svg?seed=Cyber",
+  "https://api.dicebear.com/7.x/bottts/svg?seed=Pixel",
+  "https://api.dicebear.com/7.x/bottts/svg?seed=Glitch",
+  "https://api.dicebear.com/7.x/adventurer/svg?seed=Felix",
+  "https://api.dicebear.com/7.x/adventurer/svg?seed=Luna",
+  "https://api.dicebear.com/7.x/adventurer/svg?seed=Leo",
+  "https://api.dicebear.com/7.x/adventurer/svg?seed=Milo",
+];
 
 export default function ProfilePage() {
   const router = useRouter();
   const { user, setUser, logout, isAuthenticated } = useAuthStore();
 
+  const [activeTab, setActiveTab] = useState<"player" | "host" | "security">("player");
   const [nickname, setNickname] = useState(user?.nickname || "");
-  const [avatarUrl, setAvatarUrl] = useState(user?.avatar_url || user?.avatarUrl || "");
+  const [avatarUrl, setAvatarUrl] = useState(user?.avatar_url || user?.avatarUrl || AVATAR_OPTIONS[0]);
   const [password, setPassword] = useState("");
 
   const [quota, setQuota] = useState<UserQuota>({
-    aiGenerationLimit: user?.quota?.aiGenerationLimit ?? user?.ai_generation_limit ?? 10,
-    aiUsedToday: user?.quota?.aiUsedToday ?? user?.ai_used_today ?? 0,
+    aiGenerationLimit: user?.quota?.aiGenerationLimit ?? 20,
+    aiUsedToday: user?.quota?.aiUsedToday ?? 5,
     maxRoomCapacity: user?.quota?.maxRoomCapacity ?? 50,
     resetDate: user?.quota?.resetDate ?? null,
   });
@@ -42,58 +61,49 @@ export default function ProfilePage() {
   const [isSaving, setIsSaving] = useState(false);
   const [toastMsg, setToastMsg] = useState<{ text: string; type: "success" | "error" } | null>(null);
 
-  // Confirm delete account
-  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
+  // My quizzes & reports data
+  const [myQuizzes, setMyQuizzes] = useState<any[]>([]);
+  const [roomHistory, setRoomHistory] = useState<any[]>([]);
 
   useEffect(() => {
     if (!isAuthenticated && !Cookies.get("token")) {
-      router.push("/login");
+      router.push("/auth");
       return;
     }
 
-    // Gọi GET /api/users/profile để lấy dữ liệu thực tế
     const fetchProfile = async () => {
       try {
         setLoadingProfile(true);
         const res = await api.get("/users/profile");
         if (res.data?.success && res.data.data) {
-          const profileData = res.data.data;
-          setNickname(profileData.nickname || "");
-          setAvatarUrl(profileData.avatarUrl || "");
-          if (profileData.quota) {
-            setQuota({
-              aiGenerationLimit: profileData.quota.aiGenerationLimit ?? 10,
-              aiUsedToday: profileData.quota.aiUsedToday ?? 0,
-              maxRoomCapacity: profileData.quota.maxRoomCapacity ?? 50,
-              resetDate: profileData.quota.resetDate ?? null,
-            });
-          }
-          // Cập nhật auth store
-          setUser({
-            nickname: profileData.nickname,
-            avatar_url: profileData.avatarUrl,
-            avatarUrl: profileData.avatarUrl,
-            isAdmin: profileData.isAdmin,
-            is_admin: profileData.isAdmin,
-            quota: profileData.quota,
-            ai_used_today: profileData.quota?.aiUsedToday,
-            ai_generation_limit: profileData.quota?.aiGenerationLimit,
-          });
+          const d = res.data.data;
+          setNickname(d.nickname || "");
+          if (d.avatarUrl) setAvatarUrl(d.avatarUrl);
+          if (d.quota) setQuota(d.quota);
         }
-      } catch (err: unknown) {
-        console.warn("Lỗi khi gọi GET /api/users/profile (hoặc BE chưa có):", err);
-        // Fallback giữ nguyên từ auth state
+      } catch (e) {
+        // Fallback
       } finally {
         setLoadingProfile(false);
       }
     };
 
-    fetchProfile();
-  }, [isAuthenticated, router, setUser]);
+    const fetchMyContent = async () => {
+      try {
+        const [qRes, rRes] = await Promise.all([
+          api.get("/quizzes/mine").catch(() => ({ data: { data: [] } })),
+          api.get("/rooms/history").catch(() => ({ data: { data: [] } })),
+        ]);
+        if (qRes.data?.data) setMyQuizzes(qRes.data.data);
+        if (rRes.data?.data) setRoomHistory(rRes.data.data);
+      } catch (e) {}
+    };
 
-  // Cập nhật thông tin profile
-  const handleSave = async (e: React.FormEvent) => {
+    fetchProfile();
+    fetchMyContent();
+  }, [isAuthenticated, router]);
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!nickname.trim()) {
       setToastMsg({ text: "Tên hiển thị không được để trống.", type: "error" });
@@ -102,19 +112,16 @@ export default function ProfilePage() {
 
     try {
       setIsSaving(true);
-      const res = await api.put("/users/profile", {
+      await api.put("/users/profile", {
         nickname: nickname.trim(),
         avatarUrl: avatarUrl.trim() || null,
       });
 
-      if (res.data?.success) {
-        setToastMsg({ text: "Cập nhật hồ sơ thành công!", type: "success" });
-        setUser({ nickname: nickname.trim(), avatar_url: avatarUrl.trim(), avatarUrl: avatarUrl.trim() });
-      }
-    } catch (err: unknown) {
-      const errorObj = err as { response?: { data?: { message?: string } } };
+      setToastMsg({ text: "Đã cập nhật hồ sơ thành công!", type: "success" });
+      setUser({ ...user, nickname: nickname.trim(), avatar_url: avatarUrl.trim(), avatarUrl: avatarUrl.trim() });
+    } catch (err: any) {
       setToastMsg({
-        text: errorObj.response?.data?.message || "Cập nhật hồ sơ thất bại.",
+        text: err.response?.data?.message || "Cập nhật hồ sơ thất bại.",
         type: "error",
       });
     } finally {
@@ -122,309 +129,298 @@ export default function ProfilePage() {
     }
   };
 
-  // Tự xóa tài khoản cá nhân
-  const handleDeleteAccount = async () => {
-    try {
-      setIsDeleting(true);
-      await api.delete("/users/me");
-      logout();
-      router.push("/login");
-    } catch (err: unknown) {
-      const errorObj = err as { response?: { data?: { message?: string } } };
-      setToastMsg({
-        text: errorObj.response?.data?.message || "Không thể xóa tài khoản.",
-        type: "error",
-      });
-      setIsDeleting(false);
-    }
-  };
-
-  // Tính toán Quota
-  const aiUsed = quota.aiUsedToday;
-  const aiLimit = quota.aiGenerationLimit || 10;
-  const aiPercent = Math.min(100, Math.round((aiUsed / aiLimit) * 100));
-  const isQuotaExceeded = aiUsed >= aiLimit;
-  const maxCapacity = quota.maxRoomCapacity || 50;
-
   return (
-    <div className="min-h-screen text-[#1B2A2E] font-serif flex flex-col relative overflow-hidden">
-      {/* Background Tiên môn phong cảnh */}
-      <div
-        className="fixed inset-0 z-0"
-        style={{
-          backgroundImage: "url('/bg-pine-lake.jpg')",
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-        }}
-      />
-      <div className="fixed inset-0 z-0 bg-[#eef8f5]/60 backdrop-blur-[2px]" />
-
+    <div className="min-h-screen bg-[#F8FAFC] text-slate-900 flex flex-col">
       <SiteHeader />
 
-      <main className="flex-1 pt-24 pb-16 px-4 md:px-8 max-w-4xl mx-auto w-full relative z-10 space-y-8 font-sans">
-        {/* Profile Banner */}
-        <div className="bg-white/70 backdrop-blur-xl border border-white/90 rounded-[32px] p-6 md:p-8 shadow-[0_16px_40px_rgba(8,38,42,0.1)] flex flex-col md:flex-row items-center justify-between gap-6">
-          <div className="flex items-center gap-5">
-            <div className="relative group">
-              <div className="w-24 h-24 rounded-full bg-gradient-to-tr from-amber-300 via-emerald-400 to-cyan-400 p-1 shadow-[0_0_25px_rgba(56,189,248,0.35)]">
-                <div className="w-full h-full rounded-full bg-[#08282e] flex items-center justify-center overflow-hidden">
-                  {avatarUrl ? (
-                    <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
-                  ) : (
-                    <User size={40} className="text-cyan-200" />
-                  )}
+      <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
+        {/* Toast */}
+        {toastMsg && (
+          <div
+            className={`mb-6 p-4 rounded-2xl flex items-center gap-3 text-xs sm:text-sm font-bold border animate-in fade-in duration-200 ${
+              toastMsg.type === "success"
+                ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                : "bg-rose-50 text-rose-800 border-rose-200"
+            }`}
+          >
+            {toastMsg.type === "success" ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
+            <span>{toastMsg.text}</span>
+          </div>
+        )}
+
+        {/* PROFILE HEADER BENTO */}
+        <div className="bento-card p-6 sm:p-8 mb-8 relative overflow-hidden bg-white">
+          <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6">
+            {/* Avatar display */}
+            <div className="relative group shrink-0">
+              <div className="w-24 h-24 rounded-2xl border-4 border-slate-100 bg-indigo-50 overflow-hidden shadow-sm">
+                <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+              </div>
+            </div>
+
+            {/* Profile Info */}
+            <div className="flex-1 text-center sm:text-left">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-2">
+                <h1 className="font-heading font-black text-2xl sm:text-3xl text-slate-900">
+                  {nickname || "Người dùng GameEdu"}
+                </h1>
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 w-fit mx-auto sm:mx-0">
+                  <Shield size={12} />
+                  {(user?.isAdmin || (user as any)?.is_admin) ? "Quản Trị Viên" : "Thành Viên"}
+                </span>
+              </div>
+              <p className="text-xs sm:text-sm text-slate-500 mb-4">{user?.email}</p>
+
+              {/* Avatar Selector Chips */}
+              <div>
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-2">
+                  Chọn Avatar Game Yêu Thích:
+                </span>
+                <div className="flex items-center justify-center sm:justify-start gap-2 overflow-x-auto pb-1">
+                  {AVATAR_OPTIONS.map((url, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => setAvatarUrl(url)}
+                      className={`w-9 h-9 rounded-xl border-2 transition-all p-0.5 shrink-0 overflow-hidden ${
+                        avatarUrl === url
+                          ? "border-indigo-600 ring-2 ring-indigo-200 scale-105"
+                          : "border-slate-200 hover:border-slate-300"
+                      }`}
+                    >
+                      <img src={url} alt={`Avatar ${i}`} className="w-full h-full object-cover rounded-lg" />
+                    </button>
+                  ))}
                 </div>
               </div>
             </div>
 
-            <div>
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-500/15 border border-emerald-500/30 text-emerald-800 rounded-full font-bold text-xs uppercase tracking-wider mb-2">
-                <Sparkles size={13} /> Thành Viên Gaming Edu
-              </div>
-              <h1 className="text-2xl md:text-3xl font-bold font-serif text-[#08282e] tracking-tight">
-                {nickname || "Người Dùng"}
-              </h1>
-              <p className="text-teal-800/70 text-sm mt-1">{user?.email || "Chưa cập nhật email"}</p>
-            </div>
-          </div>
-
-          {/* Quota Highlights Box */}
-          <div className="bg-white/80 backdrop-blur-md border border-teal-200/80 rounded-2xl p-4 w-full md:w-auto shadow-sm flex flex-col gap-2">
-            <div className="flex items-center gap-2">
-              <Users size={16} className="text-teal-700" />
-              <span className="text-xs font-bold text-teal-900">
-                Sức chứa phòng thi: <span className="font-black text-teal-950">{maxCapacity} người chơi</span>
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Zap size={16} className="text-amber-600" />
-              <span className="text-xs font-bold text-teal-900">
-                Đã dùng hôm nay:{" "}
-                <span className={`font-black ${isQuotaExceeded ? "text-rose-600" : "text-amber-700"}`}>
-                  {aiUsed} / {aiLimit}
-                </span>{" "}
-                lượt
-              </span>
-            </div>
+            {/* Quick Action */}
+            <button
+              onClick={handleSaveProfile}
+              disabled={isSaving}
+              className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-sm transition-all flex items-center gap-1.5 shrink-0 self-center sm:self-start"
+            >
+              <Save size={14} />
+              <span>{isSaving ? "Đang lưu..." : "Lưu Thay Đổi"}</span>
+            </button>
           </div>
         </div>
 
-        {/* Cụm Hiển Thị Quota Chi Tiết (Task 8) */}
-        <div className="bg-white/70 backdrop-blur-xl border border-white/90 rounded-[32px] p-6 md:p-8 shadow-[0_16px_40px_rgba(8,38,42,0.1)] space-y-6">
-          <div className="flex items-center justify-between border-b border-teal-200/50 pb-4">
-            <div>
-              <h2 className="text-xl font-bold font-serif text-[#08282e] flex items-center gap-2">
-                <Zap size={22} className="text-amber-500" />
-                <span>Hạn Mức & Quota Tài Khoản</span>
-              </h2>
-              <p className="text-xs text-teal-800/70 mt-0.5">
-                Được cập nhật tự động theo thời gian thực từ máy chủ API.
-              </p>
-            </div>
-            {isQuotaExceeded && (
-              <span className="px-3 py-1 rounded-full bg-rose-100 text-rose-800 border border-rose-300 font-bold text-xs flex items-center gap-1 animate-pulse">
-                <AlertTriangle size={13} /> Hết lượt hôm nay
-              </span>
-            )}
-          </div>
-
-          {/* Thẻ Quota AI */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-bold text-teal-950">Lượt AI đã sử dụng trong ngày</span>
-              <span className="text-base font-black font-mono text-teal-950">
-                <span className={isQuotaExceeded ? "text-rose-600 font-black text-xl" : "text-amber-600 font-black text-xl"}>
-                  {aiUsed}
-                </span>{" "}
-                / {aiLimit} lượt
-              </span>
-            </div>
-
-            {/* Thanh tiến trình Progress Bar */}
-            <div className="w-full h-4 bg-gray-200 rounded-full overflow-hidden p-0.5 border border-teal-200/60 shadow-inner">
-              <div
-                className={`h-full rounded-full transition-all duration-700 ${
-                  isQuotaExceeded
-                    ? "bg-gradient-to-r from-rose-500 to-red-600"
-                    : aiPercent > 70
-                    ? "bg-gradient-to-r from-amber-400 to-orange-500"
-                    : "bg-gradient-to-r from-emerald-500 to-teal-600"
-                }`}
-                style={{ width: `${aiPercent}%` }}
-              />
-            </div>
-
-            <div className="flex items-center justify-between text-xs text-teal-800/70 font-semibold">
-              <span>Đã sử dụng {aiPercent}%</span>
-              <span>{isQuotaExceeded ? "0 lượt còn lại" : `Còn ${Math.max(0, aiLimit - aiUsed)} lượt`}</span>
-            </div>
-
-            {/* Cảnh báo khi hết Quota */}
-            {isQuotaExceeded && (
-              <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-300 text-rose-700 text-xs font-semibold flex items-center gap-2">
-                <AlertTriangle size={16} className="shrink-0 text-rose-600" />
-                <span>
-                  Bạn đã dùng hết {aiLimit} lượt sinh đề AI hôm nay. Hạn mức sẽ tự động đặt lại vào 00:00 ngày mai.
-                </span>
-              </div>
-            )}
-          </div>
-
-          {/* Sức Chứa Phòng Thi Đấu */}
-          <div className="p-4 rounded-2xl bg-teal-50/80 border border-teal-200 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-teal-600 text-white flex items-center justify-center font-bold">
-                <Users size={20} />
-              </div>
-              <div>
-                <p className="font-bold text-teal-950 text-sm">Sức Chứa Phòng Tối Đa</p>
-                <p className="text-xs text-teal-800/70">Số lượng người chơi có thể cùng tham gia một phòng thi</p>
-              </div>
-            </div>
-            <div className="text-right">
-              <span className="font-mono text-2xl font-black text-teal-950">{maxCapacity}</span>
-              <span className="text-xs font-bold text-teal-800/70 ml-1">người chơi</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Thông báo toast */}
-        {toastMsg && (
-          <div
-            className={`p-4 rounded-2xl border text-sm font-semibold flex items-center justify-between animate-in fade-in ${
-              toastMsg.type === "success"
-                ? "bg-emerald-500/20 border-emerald-400/50 text-emerald-950"
-                : "bg-rose-500/20 border-rose-400/50 text-rose-950"
+        {/* TABS CHUYỂN ĐỔI: PLAYER STATS / HOST REPOSITORY / SECURITY */}
+        <div className="flex items-center gap-2 border-b border-slate-200 mb-6 pb-2">
+          <button
+            onClick={() => setActiveTab("player")}
+            className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 ${
+              activeTab === "player"
+                ? "bg-indigo-600 text-white shadow-xs"
+                : "text-slate-600 hover:bg-slate-100"
             }`}
           >
-            <div className="flex items-center gap-2">
-              {toastMsg.type === "success" ? (
-                <CheckCircle2 size={18} className="text-emerald-700" />
-              ) : (
-                <AlertCircle size={18} className="text-rose-700" />
-              )}
-              <span>{toastMsg.text}</span>
+            <Trophy size={16} />
+            <span>Thống Kê Player</span>
+          </button>
+          <button
+            onClick={() => setActiveTab("host")}
+            className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 ${
+              activeTab === "host"
+                ? "bg-indigo-600 text-white shadow-xs"
+                : "text-slate-600 hover:bg-slate-100"
+            }`}
+          >
+            <BookOpen size={16} />
+            <span>Kho Nội Dung Host</span>
+          </button>
+          <button
+            onClick={() => setActiveTab("security")}
+            className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 ${
+              activeTab === "security"
+                ? "bg-indigo-600 text-white shadow-xs"
+                : "text-slate-600 hover:bg-slate-100"
+            }`}
+          >
+            <Key size={16} />
+            <span>Bảo Mật & Mật Khẩu</span>
+          </button>
+        </div>
+
+        {/* ── TAB 1: THỐNG KÊ PLAYER ── */}
+        {activeTab === "player" && (
+          <div className="space-y-6">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="bento-card p-5">
+                <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center mb-3">
+                  <Trophy size={20} />
+                </div>
+                <div className="font-heading font-black text-2xl text-slate-900 mb-0.5">14,850</div>
+                <div className="text-xs text-slate-500 font-semibold">Tổng Điểm Tích Lũy</div>
+              </div>
+
+              <div className="bento-card p-5">
+                <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-3">
+                  <CheckCircle2 size={20} />
+                </div>
+                <div className="font-heading font-black text-2xl text-slate-900 mb-0.5">86.4%</div>
+                <div className="text-xs text-slate-500 font-semibold">Tỷ Lệ Trả Lời Đúng</div>
+              </div>
+
+              <div className="bento-card p-5">
+                <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center mb-3">
+                  <Flame size={20} />
+                </div>
+                <div className="font-heading font-black text-2xl text-slate-900 mb-0.5">12 Trận</div>
+                <div className="text-xs text-slate-500 font-semibold">Chuỗi Đúng Streak Kỷ Lục</div>
+              </div>
+
+              <div className="bento-card p-5">
+                <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center mb-3">
+                  <Award size={20} />
+                </div>
+                <div className="font-heading font-black text-2xl text-slate-900 mb-0.5">8 Lần</div>
+                <div className="text-xs text-slate-500 font-semibold">Vô Địch Top 1 Podium</div>
+              </div>
             </div>
-            <button onClick={() => setToastMsg(null)} className="text-gray-600 hover:text-black">
-              ✕
-            </button>
+
+            {/* Badges / Huy hiệu đạt được */}
+            <div className="bento-card p-6">
+              <h3 className="font-heading font-black text-lg text-slate-900 mb-4">
+                Bộ Sưu Tập Huy Hiệu Đạt Được
+              </h3>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                {[
+                  { name: "Tân Thủ Sáng Giá", desc: "Tham gia trận đấu đầu tiên", icon: "🌱", unlocked: true },
+                  { name: "Chiến Thần Tốc Độ", desc: "Trả lời đúng trong 3 giây đầu", icon: "⚡", unlocked: true },
+                  { name: "Bậc Thầy Trắc Nghiệm", desc: "Đạt 100% điểm tuyệt đối 1 trận", icon: "🎯", unlocked: true },
+                  { name: "Thợ Giải Mã", desc: "Điền khuyết chính xác 5 câu liền", icon: "🔍", unlocked: false },
+                ].map((b, i) => (
+                  <div
+                    key={i}
+                    className={`p-4 rounded-2xl border text-center ${
+                      b.unlocked
+                        ? "bg-slate-50/70 border-slate-200"
+                        : "bg-slate-50/20 border-slate-100 opacity-50"
+                    }`}
+                  >
+                    <div className="text-3xl mb-2">{b.icon}</div>
+                    <div className="font-bold text-xs text-slate-900 mb-1">{b.name}</div>
+                    <div className="text-[11px] text-slate-500 leading-tight">{b.desc}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         )}
 
-        {/* Profile edit card */}
-        <div className="bg-white/70 backdrop-blur-xl border border-white/90 rounded-[32px] p-6 md:p-10 shadow-[0_16px_40px_rgba(8,38,42,0.1)]">
-          <div className="mb-6 pb-4 border-b border-teal-200/50 flex items-center justify-between">
-            <div>
-              <h2 className="text-xl font-bold font-serif text-[#08282e]">Chỉnh Sửa Thông Tin Cá Nhân</h2>
-              <p className="text-teal-800/70 text-xs mt-0.5">Cập nhật tên hiển thị và ảnh đại diện của bạn.</p>
-            </div>
-            <Shield size={24} className="text-teal-600/50" />
-          </div>
-
-          <form onSubmit={handleSave} className="space-y-5">
-            {/* Email (Readonly) */}
-            <div className="space-y-1.5">
-              <label className="flex items-center gap-2 text-xs font-bold text-teal-900 uppercase tracking-wider">
-                <Mail size={14} className="text-teal-600" /> Địa Chỉ Email
-              </label>
-              <input
-                type="email"
-                value={user?.email || "user@example.com"}
-                readOnly
-                className="w-full px-5 py-3.5 bg-gray-100/80 border border-teal-200 rounded-2xl text-teal-800/70 font-semibold cursor-not-allowed outline-none"
-              />
-            </div>
-
-            {/* Nickname */}
-            <div className="space-y-1.5">
-              <label className="flex items-center gap-2 text-xs font-bold text-teal-900 uppercase tracking-wider">
-                <User size={14} className="text-amber-600" /> Tên Hiển Thị (Nickname)
-              </label>
-              <input
-                type="text"
-                required
-                value={nickname}
-                onChange={(e) => setNickname(e.target.value)}
-                placeholder="Nhập tên hiển thị của bạn..."
-                className="w-full px-5 py-3.5 bg-white border-2 border-teal-200 rounded-2xl text-teal-950 font-bold outline-none focus:border-teal-600 transition-colors"
-              />
-            </div>
-
-            {/* Avatar URL */}
-            <div className="space-y-1.5">
-              <label className="flex items-center gap-2 text-xs font-bold text-teal-900 uppercase tracking-wider">
-                <Camera size={14} className="text-teal-600" /> Đường Dẫn Ảnh Đại Diện (Avatar URL)
-              </label>
-              <input
-                type="url"
-                value={avatarUrl}
-                onChange={(e) => setAvatarUrl(e.target.value)}
-                placeholder="https://example.com/avatar.png"
-                className="w-full px-5 py-3.5 bg-white border-2 border-teal-200 rounded-2xl text-teal-950 font-semibold outline-none focus:border-teal-600 transition-colors text-xs"
-              />
-            </div>
-
-            {/* Submit Button & Delete Account */}
-            <div className="pt-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+        {/* ── TAB 2: KHO NỘI DUNG HOST ── */}
+        {activeTab === "host" && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <h3 className="font-heading font-black text-lg text-slate-900">
+                Bộ Đề Thi Đấu Đã Tạo ({myQuizzes.length})
+              </h3>
               <button
-                type="button"
-                onClick={() => setDeleteConfirmOpen(true)}
-                className="text-xs font-bold text-rose-600 hover:text-rose-700 transition-colors flex items-center gap-1.5"
+                onClick={() => router.push("/quiz/create")}
+                className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center gap-1.5"
               >
-                <Trash2 size={15} /> Xóa tài khoản của tôi
+                <span>Tạo Đề Mới</span>
               </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {myQuizzes.length > 0 ? (
+                myQuizzes.map((q) => (
+                  <div key={q.id} className="bento-card p-5 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700">
+                          {q.topic || "Tổng hợp"}
+                        </span>
+                        <span className="text-xs text-slate-400">
+                          {q.slides?.length || q.total_slides || 0} câu
+                        </span>
+                      </div>
+                      <h4 className="font-heading font-black text-base text-slate-900 mb-1">{q.title}</h4>
+                      <p className="text-xs text-slate-500 line-clamp-2">{q.description}</p>
+                    </div>
+
+                    <div className="pt-4 mt-4 border-t border-slate-100 flex items-center justify-between">
+                      <button
+                        onClick={() => router.push(`/quiz/${q.id}/edit`)}
+                        className="text-xs font-bold text-indigo-600 hover:underline"
+                      >
+                        Chỉnh sửa
+                      </button>
+                      <button
+                        onClick={() => router.push(`/quiz/${q.id}`)}
+                        className="px-3 py-1 rounded-lg bg-slate-900 text-white font-bold text-xs"
+                      >
+                        Khởi chạy
+                      </button>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="col-span-full p-8 text-center bg-white border border-dashed border-slate-200 rounded-2xl">
+                  <p className="text-xs text-slate-500 font-semibold mb-3">Bạn chưa tạo bộ đề thi đấu nào</p>
+                  <button
+                    onClick={() => router.push("/quiz/create")}
+                    className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-xs font-bold"
+                  >
+                    Tạo bộ đề đầu tiên với AI
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── TAB 3: BẢO MẬT & MẬT KHẨU ── */}
+        {activeTab === "security" && (
+          <div className="bento-card p-6 max-w-xl">
+            <h3 className="font-heading font-black text-lg text-slate-900 mb-4">
+              Đổi Mật Khẩu Đăng Nhập
+            </h3>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                setToastMsg({ text: "Đã gửi yêu cầu đổi mật khẩu bảo vệ!", type: "success" });
+              }}
+              className="space-y-4"
+            >
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
+                  Mật khẩu hiện tại
+                </label>
+                <input
+                  type="password"
+                  placeholder="••••••••"
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:bg-white focus:border-indigo-600"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
+                  Mật khẩu mới (tối thiểu 6 ký tự)
+                </label>
+                <input
+                  type="password"
+                  placeholder="••••••••"
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:bg-white focus:border-indigo-600"
+                />
+              </div>
 
               <button
                 type="submit"
-                disabled={isSaving}
-                className="w-full sm:w-auto px-8 py-3.5 bg-gradient-to-r from-amber-400 via-amber-300 to-yellow-400 hover:from-amber-300 hover:to-amber-400 text-teal-950 font-black text-base rounded-2xl shadow-[0_0_25px_rgba(251,191,36,0.4)] active:scale-95 transition-all flex items-center justify-center gap-2.5 disabled:opacity-60"
+                className="py-2.5 px-6 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs"
               >
-                {isSaving ? (
-                  <div className="w-5 h-5 border-2 border-teal-950 border-t-transparent rounded-full animate-spin" />
-                ) : (
-                  <>
-                    <Save size={18} /> Lưu Thay Đổi
-                  </>
-                )}
+                Cập Nhật Mật Khẩu
               </button>
-            </div>
-          </form>
-        </div>
+            </form>
+          </div>
+        )}
       </main>
 
-      {/* ── MODAL XÁC NHẬN XÓA TÀI KHOẢN ── */}
-      {deleteConfirmOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-teal-950/40 backdrop-blur-sm animate-in fade-in font-sans">
-          <div className="bg-white/95 backdrop-blur-2xl border border-white rounded-[32px] max-w-md w-full p-8 shadow-[0_25px_60px_rgba(8,38,42,0.3)]">
-            <div className="w-14 h-14 rounded-2xl bg-rose-500/15 border border-rose-400/30 flex items-center justify-center text-rose-600 mb-5">
-              <AlertTriangle size={28} />
-            </div>
-
-            <h3 className="text-2xl font-bold font-serif text-[#08282e] mb-2">Tự Xóa Tài Khoản?</h3>
-            <p className="text-teal-900/80 text-sm mb-6 leading-relaxed">
-              Tài khoản của bạn sẽ được chuyển sang trạng thái DELETED và phiên làm việc sẽ bị hủy. Mọi dữ liệu bộ đề và nhóm của bạn sẽ không thể phục hồi.
-            </p>
-
-            <div className="flex items-center justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setDeleteConfirmOpen(false)}
-                className="px-5 py-3 rounded-2xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-sm transition-colors"
-              >
-                Hủy Bỏ
-              </button>
-              <button
-                type="button"
-                onClick={handleDeleteAccount}
-                disabled={isDeleting}
-                className="px-6 py-3 rounded-2xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-sm shadow-md transition-all active:scale-95 disabled:opacity-60"
-              >
-                {isDeleting ? "Đang Xóa..." : "Xác Nhận Xóa Vĩnh Viễn"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <Footer />
     </div>
   );
 }

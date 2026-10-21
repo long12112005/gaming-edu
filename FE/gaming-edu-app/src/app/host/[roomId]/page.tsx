@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Cookies from "js-cookie";
 import confetti from "canvas-confetti";
@@ -24,17 +24,11 @@ import {
   EyeOff,
   Home,
   X,
+  Sparkles,
+  Clock,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import Link from "next/link";
-import { getThemeById } from "@/lib/gameThemes";
-import SpeedRacerHostTrack from "@/components/games/speed-racer/SpeedRacerHostTrack";
-import BattleRoyaleHostArena from "@/components/games/battle-royale/BattleRoyaleHostArena";
-import QuizWagerHostView from "@/components/games/quiz-wager/QuizWagerHostView";
-import DefuseBombHostView from "@/components/games/defuse-bomb/DefuseBombHostView";
-import WordHunterHostView from "@/components/games/word-hunter/WordHunterHostView";
-import BridgeBuilderHostView from "@/components/games/bridge-builder/BridgeBuilderHostView";
-import CircuitConnectHostView from "@/components/games/circuit-connect/CircuitConnectHostView";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
@@ -180,12 +174,6 @@ export default function HostLobbyPage() {
     slideTimeLeft,
     answerProgress,
     distribution,
-    battleRoyaleState,
-    wagerPool,
-    bombDefusalState,
-    wordHunterState,
-    bridgeBuilderState,
-    circuitConnectState,
     joinRoom,
     hostJoinRoom,
     roomInfo,
@@ -206,24 +194,6 @@ export default function HostLobbyPage() {
   const [starting, setStarting] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [showQA, setShowQA] = useState(false);
-  const [selectedThemeId, setSelectedThemeId] = useState<string>("SPEED_RACER");
-
-  // Read theme from URL or roomInfo
-  useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const themeParam = urlParams.get("theme");
-    if (themeParam) {
-      setSelectedThemeId(themeParam);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (roomInfo?.theme) {
-      setSelectedThemeId(roomInfo.theme);
-    }
-  }, [roomInfo?.theme]);
-
-  const currentTheme = getThemeById(selectedThemeId);
 
   // ── Init SignalR ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -280,6 +250,64 @@ export default function HostLobbyPage() {
     }
   }, [gameState]);
 
+  // ── Auto-Advance State & Logic ──────────────────────────────────────────
+  const [autoAdvanceCountdown, setAutoAdvanceCountdown] = useState<number | null>(null);
+  const isTriggeringNextRef = useRef(false);
+  const currentSlideIdRef = useRef<string | null>(null);
+
+  // Reset cờ và countdown khi sang slide mới
+  useEffect(() => {
+    if (currentSlide?.slideId && currentSlide.slideId !== currentSlideIdRef.current) {
+      currentSlideIdRef.current = currentSlide.slideId;
+      isTriggeringNextRef.current = false;
+      setAutoAdvanceCountdown(null);
+    }
+  }, [currentSlide?.slideId]);
+
+  // Kiểm tra câu hỏi hiện tại đã hoàn thành hay chưa
+  const isSlideFinished = useMemo(() => {
+    if (!currentSlide || (gameState !== "PLAYING" && gameState !== "LEADERBOARD")) {
+      return false;
+    }
+    // Hết thời gian câu hỏi
+    const timeUp = slideTimeLeft !== null && slideTimeLeft <= 0;
+    // Hoặc toàn bộ người chơi trong phòng đã nộp bài
+    const allAnswered = Boolean(
+      answerProgress &&
+      players.length > 0 &&
+      answerProgress.answeredCount >= players.length
+    );
+
+    return Boolean(timeUp || allAnswered);
+  }, [currentSlide, gameState, slideTimeLeft, answerProgress, players.length]);
+
+  // Quản lý đếm ngược và tự động chuyển câu hỏi
+  useEffect(() => {
+    if (!isSlideFinished || isTriggeringNextRef.current) {
+      return;
+    }
+
+    // Đếm ngược 3 giây để người chơi và host xem đáp án + hiệu ứng điểm số
+    setAutoAdvanceCountdown(3);
+
+    const interval = setInterval(() => {
+      setAutoAdvanceCountdown((prev) => {
+        if (prev === null) return null;
+        if (prev <= 1) {
+          clearInterval(interval);
+          if (!isTriggeringNextRef.current) {
+            isTriggeringNextRef.current = true;
+            hubNextSlide(roomId);
+          }
+          return null;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [isSlideFinished, roomId, hubNextSlide]);
+
   // ── Actions ──────────────────────────────────────────────────────────────
   const startGame = async () => {
     if (players.length === 0) return;
@@ -288,9 +316,12 @@ export default function HostLobbyPage() {
     setTimeout(() => setStarting(false), 2000);
   };
 
-  const nextSlide = () => {
+  const nextSlide = useCallback(() => {
+    if (isTriggeringNextRef.current) return;
+    isTriggeringNextRef.current = true;
+    setAutoAdvanceCountdown(null);
     hubNextSlide(roomId);
-  };
+  }, [hubNextSlide, roomId]);
 
   const endGame = () => {
     if (!confirm("Bạn chắc chắn muốn kết thúc trò chơi?")) return;
@@ -384,13 +415,13 @@ export default function HostLobbyPage() {
             <div>
               <div className="font-900 text-gray-900 text-xl tracking-tight flex items-center gap-2.5">
                 <span>Màn Hình Trình Chiếu (Host)</span>
-                <span className={`inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-900 border ${currentTheme.badgeClass}`}>
-                  <span>{currentTheme.icon}</span>
-                  <span>{currentTheme.name}</span>
+                <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-900 border bg-violet-100 text-violet-700 border-violet-200">
+                  <span>🎯</span>
+                  <span>Trực Tiếp</span>
                 </span>
               </div>
               <div className="text-sm font-700 text-gray-500">
-                {gameState === "WAITING" && `Đang chờ người chơi vào phòng • ${currentTheme.tagline}`}
+                {gameState === "WAITING" && "Đang chờ người chơi vào phòng"}
                 {gameState === "STARTING" && "Chuẩn bị bắt đầu..."}
                 {(gameState === "PLAYING" || gameState === "LEADERBOARD") &&
                   `Câu ${currentSlide?.index !== undefined ? currentSlide.index + 1 : "?"} đang diễn ra`}
@@ -399,15 +430,33 @@ export default function HostLobbyPage() {
             </div>
           </div>
 
-          <ActionButton
-            variant="outline"
-            onClick={() => router.push("/")}
-            icon={LogOut}
-            label="Thoát Màn Hình"
-            className="hidden sm:flex"
-          />
+          <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-2xl bg-emerald-50 text-emerald-700 border-2 border-emerald-300 text-xs font-black shadow-sm">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+              <Zap size={14} className="text-emerald-500 fill-emerald-500" />
+              <span>Tự Động Chuyển Câu</span>
+            </div>
+
+            <ActionButton
+              variant="outline"
+              onClick={() => router.push("/")}
+              icon={LogOut}
+              label="Thoát Màn Hình"
+              className="hidden sm:flex"
+            />
+          </div>
         </div>
       </header>
+
+      {/* ── AUTO ADVANCE FLOATING TOAST BANNER ─────────────────────────── */}
+      {autoAdvanceCountdown !== null && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-gradient-to-r from-amber-400 via-orange-400 to-amber-500 text-slate-950 font-black px-6 py-2.5 rounded-full shadow-[0_12px_36px_rgba(245,158,11,0.5)] border-2 border-white flex items-center gap-3 animate-bounce">
+          <Sparkles className="animate-spin text-teal-950" size={20} />
+          <span className="text-sm sm:text-base">
+            Đã hoàn thành câu hỏi! Tự động chuyển câu sau <span className="text-xl font-mono underline font-black">{autoAdvanceCountdown}s</span>
+          </span>
+        </div>
+      )}
 
       <main className="flex-1 max-w-6xl w-full mx-auto px-4 py-8 relative z-10">
         {/* ════════════════════════════════════════════════════════════
@@ -415,28 +464,24 @@ export default function HostLobbyPage() {
         ════════════════════════════════════════════════════════════ */}
         {gameState === "WAITING" && (
           <div className="space-y-8 animate-fade-in-up">
-            {/* Mini-Game Theme Showcase Banner */}
+            {/* Room Info Banner */}
             <div className="bg-white rounded-[32px] border-4 border-violet-100 shadow-[4px_4px_16px_rgba(0,0,0,0.05)] p-6 relative overflow-hidden">
               <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 relative z-10">
                 <div className="flex items-center gap-4">
-                  <div className={`w-16 h-16 rounded-[22px] bg-gradient-to-br ${currentTheme.gradient} flex items-center justify-center text-3xl shadow-lg shrink-0`}>
-                    {currentTheme.icon}
+                  <div className="w-16 h-16 rounded-[22px] bg-gradient-to-br from-violet-600 via-indigo-600 to-purple-500 flex items-center justify-center text-3xl shadow-lg shrink-0">
+                    🎮
                   </div>
                   <div>
                     <div className="flex items-center gap-2 mb-0.5">
                       <span className="text-[11px] font-900 tracking-wider uppercase px-2.5 py-0.5 rounded-full bg-violet-100 text-violet-700 border border-violet-200">
-                        Chủ Đề Mini-Game
-                      </span>
-                      <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${currentTheme.badgeClass}`}>
-                        {currentTheme.categoryLabel}
+                        Phòng Chơi Trực Tiếp
                       </span>
                     </div>
                     <h2 className="text-2xl font-900 text-gray-900">
-                      {currentTheme.name}{" "}
-                      <span className="text-sm font-700 text-gray-400 font-mono">({currentTheme.tagline})</span>
+                      {roomInfo?.quizTitle || "Trận Đấu Trắc Nghiệm"}
                     </h2>
                     <p className="text-sm font-semibold text-gray-600 mt-1 max-w-2xl">
-                      {currentTheme.description}
+                      Chia sẻ mã PIN hoặc quét mã QR bên dưới để người chơi tham gia vào phòng.
                     </p>
                   </div>
                 </div>
@@ -444,15 +489,13 @@ export default function HostLobbyPage() {
                 <div className="bg-slate-50 border-2 border-slate-200/80 rounded-2xl px-4 py-2.5 max-w-xs shrink-0 w-full md:w-auto">
                   <div className="text-[10px] font-800 text-gray-400 uppercase tracking-wider mb-0.5 flex items-center gap-1">
                     <Zap size={12} className="text-amber-500" />
-                    Điểm Nhấn Kỹ Thuật
+                    Trạng Thái Phòng
                   </div>
                   <div className="text-xs font-bold text-slate-700 leading-snug">
-                    {currentTheme.techHighlight}
+                    Đang chờ người chơi kết nối ({players.length} người)
                   </div>
                 </div>
               </div>
-
-              <div className={`absolute top-0 right-0 w-80 h-full bg-gradient-to-l ${currentTheme.gradient} opacity-5 pointer-events-none`} />
             </div>
 
             {/* PIN Display Card (Khối hiển thị mã PIN bự chà bá) */}
@@ -554,176 +597,147 @@ export default function HostLobbyPage() {
             PLAYING STATE (ĐANG CHƠI / TRẢ LỜI CÂU HỎI)
         ════════════════════════════════════════════════════════════ */}
         {(gameState === "PLAYING" || gameState === "LEADERBOARD" || gameState === "STARTING") && (
-          selectedThemeId === "SPEED_RACER" ? (
-            <SpeedRacerHostTrack
-              currentSlide={currentSlide as any}
-              players={players}
-              leaderboard={leaderboard}
-              answerProgress={answerProgress}
-              distribution={distribution}
-              gameState={gameState}
-              slideTimeLeft={slideTimeLeft}
-              onNextSlide={nextSlide}
-              onEndGame={endGame}
-            />
-          ) : selectedThemeId === "BATTLE_ROYALE" ? (
-            <BattleRoyaleHostArena
-              currentSlide={currentSlide as any}
-              slideTimeLeft={slideTimeLeft}
-              answerProgress={answerProgress}
-              distribution={distribution}
-              leaderboard={leaderboard}
-              battleRoyaleState={battleRoyaleState}
-              players={players}
-              onNextSlide={nextSlide}
-              onEndGame={endGame}
-            />
-          ) : selectedThemeId === "QUIZ_WAGER" ? (
-            <QuizWagerHostView
-              currentSlide={currentSlide as any}
-              slideTimeLeft={slideTimeLeft}
-              answerProgress={answerProgress}
-              distribution={distribution}
-              wagerPool={wagerPool}
-              leaderboard={leaderboard}
-              players={players}
-              onNextSlide={nextSlide}
-              onEndGame={endGame}
-            />
-          ) : selectedThemeId === "DEFUSE_BOMB" ? (
-            <DefuseBombHostView
-              currentSlide={currentSlide as any}
-              slideTimeLeft={slideTimeLeft}
-              answerProgress={answerProgress}
-              leaderboard={leaderboard}
-              bombDefusalState={bombDefusalState}
-              onNextSlide={nextSlide}
-            />
-          ) : selectedThemeId === "WORD_HUNTER" ? (
-            <WordHunterHostView
-              currentSlide={currentSlide as any}
-              slideTimeLeft={slideTimeLeft}
-              answerProgress={answerProgress}
-              leaderboard={leaderboard}
-              wordHunterState={wordHunterState}
-              onNextSlide={nextSlide}
-            />
-          ) : selectedThemeId === "BRIDGE_BUILDER" ? (
-            <BridgeBuilderHostView
-              currentSlide={currentSlide as any}
-              slideTimeLeft={slideTimeLeft}
-              answerProgress={answerProgress}
-              leaderboard={leaderboard}
-              bridgeBuilderState={bridgeBuilderState}
-              onNextSlide={nextSlide}
-            />
-          ) : selectedThemeId === "CIRCUIT_CONNECT" ? (
-            <CircuitConnectHostView
-              currentSlide={currentSlide as any}
-              slideTimeLeft={slideTimeLeft}
-              answerProgress={answerProgress}
-              leaderboard={leaderboard}
-              circuitConnectState={circuitConnectState}
-              onNextSlide={nextSlide}
-            />
-          ) : (
-            <div className="flex flex-col items-center gap-8 animate-fade-in-up">
-              {/* Hiển thị câu hỏi hiện tại trên màn chiếu */}
-              {currentSlide ? (
-                <div className="w-full bg-white rounded-[40px] shadow-[4px_4px_16px_rgba(0,0,0,0.05)] border-4 border-violet-100 p-8 md:p-14 text-center">
-                  <div className="flex items-center justify-center gap-3 mb-8">
-                    <div className="inline-block bg-violet-100 border-2 border-violet-200 text-violet-700 font-900 px-6 py-2 rounded-2xl uppercase tracking-widest text-sm shadow-sm">
+          <div className="flex flex-col items-center gap-8 animate-fade-in-up">
+            {/* Hiển thị câu hỏi hiện tại trên màn chiếu */}
+            {currentSlide ? (
+              <div className="w-full bg-white rounded-[40px] shadow-[4px_4px_16px_rgba(0,0,0,0.05)] border-4 border-violet-100 p-8 md:p-14 text-center">
+                {/* Header trạng thái câu hỏi */}
+                <div className="flex flex-wrap items-center justify-between gap-4 mb-8 pb-6 border-b-2 border-gray-100">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-violet-100 border-2 border-violet-200 text-violet-700 font-900 px-6 py-2 rounded-2xl uppercase tracking-widest text-sm shadow-sm">
                       Câu hỏi {currentSlide?.index !== undefined ? currentSlide.index + 1 : "?"}
                     </div>
-                    <div className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-2xl text-xs font-900 border ${currentTheme.badgeClass}`}>
-                      <span>{currentTheme.icon}</span>
-                      <span>{currentTheme.name}</span>
+                    <span className="bg-gray-100 text-gray-700 px-3 py-1.5 rounded-xl font-bold text-xs uppercase">
+                      {currentSlide.type === "QUIZ"
+                        ? "Trắc nghiệm"
+                        : currentSlide.type === "FILL_IN_BLANK"
+                        ? "Điền khuyết"
+                        : currentSlide.type === "MATCHING"
+                        ? "Ghép đôi"
+                        : currentSlide.type === "WORD_CLOUD"
+                        ? "Đám mây từ"
+                        : "Câu hỏi"}
+                    </span>
+                  </div>
+
+                  {/* Tiến độ và thời gian */}
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2 bg-emerald-50 border-2 border-emerald-200 text-emerald-800 px-4 py-2 rounded-2xl font-black text-sm">
+                      <Users size={18} />
+                      <span>{answerProgress?.answeredCount ?? 0} / {answerProgress?.totalPlayers ?? players.length} đã trả lời</span>
+                    </div>
+
+                    <div
+                      className={`flex items-center gap-2 font-black text-2xl px-5 py-1.5 rounded-[16px] border-2 ${
+                        slideTimeLeft !== null && slideTimeLeft <= 5
+                          ? "bg-rose-100 text-rose-600 border-rose-300 animate-pulse"
+                          : "bg-violet-50 text-violet-950 border-violet-200"
+                      }`}
+                    >
+                      <Clock size={22} />
+                      <span>{slideTimeLeft ?? 0}s</span>
                     </div>
                   </div>
-                  <h2 className="text-3xl md:text-5xl font-black text-gray-900 mb-12 leading-tight tracking-tight max-w-4xl mx-auto">
-                    {currentSlide.questionText}
-                  </h2>
-                  {currentSlide.options && currentSlide.options.length > 0 && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-5xl mx-auto">
-                      {currentSlide.options.map((opt: any, idx: number) => {
-                        const colors = [
-                          "bg-red-500 border-red-700 shadow-[0_6px_0_0_#b91c1c]",
-                          "bg-blue-500 border-blue-700 shadow-[0_6px_0_0_#1d4ed8]",
-                          "bg-amber-400 border-amber-600 shadow-[0_6px_0_0_#b45309]",
-                          "bg-emerald-500 border-emerald-700 shadow-[0_6px_0_0_#047857]",
-                        ];
-                        const letters = ["A", "B", "C", "D"];
-                        return (
-                          <div
-                            key={opt.id}
-                            className={`${
-                              colors[idx % 4]
-                            } text-white rounded-[24px] border-4 p-6 text-left flex items-center gap-6 transform transition-transform hover:-translate-y-1`}
-                          >
+                </div>
+
+                <h2 className="text-3xl md:text-5xl font-black text-gray-900 mb-12 leading-tight tracking-tight max-w-4xl mx-auto">
+                  {currentSlide.questionText}
+                </h2>
+                {currentSlide.options && currentSlide.options.length > 0 && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-5xl mx-auto">
+                    {currentSlide.options.map((opt: any, idx: number) => {
+                      const colors = [
+                        "bg-red-500 border-red-700 shadow-[0_6px_0_0_#b91c1c]",
+                        "bg-blue-500 border-blue-700 shadow-[0_6px_0_0_#1d4ed8]",
+                        "bg-amber-400 border-amber-600 shadow-[0_6px_0_0_#b45309]",
+                        "bg-emerald-500 border-emerald-700 shadow-[0_6px_0_0_#047857]",
+                      ];
+                      const letters = ["A", "B", "C", "D"];
+                      const dist = distribution?.answers?.find((a: any) => a.optionId === opt.id);
+
+                      return (
+                        <div
+                          key={opt.id}
+                          className={`${
+                            colors[idx % 4]
+                          } text-white rounded-[24px] border-4 p-6 text-left flex items-center justify-between gap-4 transform transition-transform hover:-translate-y-1 relative overflow-hidden`}
+                        >
+                          <div className="flex items-center gap-5">
                             <div className="w-14 h-14 bg-white/20 rounded-2xl border-2 border-white/30 flex items-center justify-center text-2xl font-black shrink-0 shadow-inner">
                               {letters[idx]}
                             </div>
                             <span className="font-800 text-2xl leading-snug">{opt.content}</span>
                           </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="bg-white rounded-[40px] shadow-xl border-4 border-gray-100 p-16 text-center w-full max-w-3xl">
-                  <div className="w-32 h-32 bg-gray-50 rounded-[32px] border-4 border-gray-200 flex items-center justify-center mx-auto mb-8 animate-bounce">
-                    <span className="text-6xl">🎮</span>
-                  </div>
-                  <h2 className="text-4xl font-black text-gray-900 tracking-tight">
-                    Trò chơi đang diễn ra!
-                  </h2>
-                  <p className="text-xl font-700 text-gray-500 mt-4">
-                    Người chơi hãy nhìn lên màn hình này.
-                  </p>
-                </div>
-              )}
 
-              {/* Bảng xếp hạng thu gọn trực tiếp */}
-              {leaderboard.length > 0 && (
-                <div className="w-full max-w-3xl bg-white rounded-[32px] border-4 border-gray-100 shadow-[4px_4px_16px_rgba(0,0,0,0.05)] p-8">
-                  <div className="flex items-center gap-3 mb-6">
-                     <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center">
-                        <Trophy size={20} className="text-amber-600" />
-                     </div>
-                     <h3 className="text-xl font-900 text-gray-900 tracking-tight">
-                       Top Người Chơi Hiện Tại
-                     </h3>
-                  </div>
-                  <div className="space-y-3">
-                    {leaderboard.slice(0, 5).map((p, idx) => (
-                      <div
-                        key={p.playerId ?? idx}
-                        className="flex items-center gap-4 bg-gray-50 border-2 border-gray-100 p-3 rounded-2xl"
-                      >
-                        <div className="w-10 h-10 bg-white border-2 border-gray-200 rounded-xl flex items-center justify-center font-900 text-gray-500">
-                           {idx + 1}
+                          {dist && (
+                            <div className="bg-white/25 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/40 font-black text-xl shrink-0">
+                              {dist.count} ({dist.percentage}%)
+                            </div>
+                          )}
                         </div>
-                        <span className="flex-1 font-900 text-lg text-gray-900 truncate">
-                          {p.nickname}
-                        </span>
-                        <span className="font-black text-xl text-violet-600 bg-violet-100 px-4 py-1.5 rounded-xl border-2 border-violet-200">
-                          {p.totalScore?.toLocaleString("vi-VN")} pts
-                        </span>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
+                )}
+              </div>
+            ) : (
+              <div className="bg-white rounded-[40px] shadow-xl border-4 border-gray-100 p-16 text-center w-full max-w-3xl">
+                <div className="w-32 h-32 bg-gray-50 rounded-[32px] border-4 border-gray-200 flex items-center justify-center mx-auto mb-8 animate-bounce">
+                  <span className="text-6xl">🎮</span>
                 </div>
-              )}
+                <h2 className="text-4xl font-black text-gray-900 tracking-tight">
+                  Trò chơi đang diễn ra!
+                </h2>
+                <p className="text-xl font-700 text-gray-500 mt-4">
+                  Người chơi hãy nhìn lên màn hình này.
+                </p>
+              </div>
+            )}
 
-              {/* Bộ Điều Khiển Host */}
-              <div className="flex gap-4 w-full max-w-3xl">
+            {/* Bảng xếp hạng thu gọn trực tiếp */}
+            {leaderboard.length > 0 && (
+              <div className="w-full max-w-3xl bg-white rounded-[32px] border-4 border-gray-100 shadow-[4px_4px_16px_rgba(0,0,0,0.05)] p-8">
+                <div className="flex items-center gap-3 mb-6">
+                   <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center">
+                      <Trophy size={20} className="text-amber-600" />
+                   </div>
+                   <h3 className="text-xl font-900 text-gray-900 tracking-tight">
+                     Top Người Chơi Hiện Tại
+                   </h3>
+                </div>
+                <div className="space-y-3">
+                  {leaderboard.slice(0, 5).map((p, idx) => (
+                    <div
+                      key={p.playerId ?? idx}
+                      className="flex items-center gap-4 bg-gray-50 border-2 border-gray-100 p-3 rounded-2xl"
+                    >
+                      <div className="w-10 h-10 bg-white border-2 border-gray-200 rounded-xl flex items-center justify-center font-900 text-gray-500">
+                         {idx + 1}
+                      </div>
+                      <span className="flex-1 font-900 text-lg text-gray-900 truncate">
+                        {p.nickname}
+                      </span>
+                      <span className="font-black text-xl text-violet-600 bg-violet-100 px-4 py-1.5 rounded-xl border-2 border-violet-200">
+                        {p.totalScore?.toLocaleString("vi-VN")} pts
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Bộ Điều Khiển Host */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 w-full max-w-3xl bg-white rounded-3xl border-2 border-gray-100 p-4 px-6 shadow-sm">
+              <div className="text-sm font-bold text-gray-600 flex items-center gap-2">
+                <span className="w-3 h-3 rounded-full bg-emerald-500 animate-ping" />
+                <span>Trận đấu đang diễn ra • {players.length} người chơi</span>
+              </div>
+              <div className="flex items-center gap-3">
                 <ActionButton
                   variant="primary"
-                  fullWidth
                   onClick={nextSlide}
-                  label="Qua Câu Tiếp Theo"
-                  icon={ChevronRight}
+                  label="Câu Tiếp Theo"
+                  icon={Play}
                 />
                 <ActionButton
                   variant="danger"
@@ -733,7 +747,7 @@ export default function HostLobbyPage() {
                 />
               </div>
             </div>
-          )
+          </div>
         )}
 
         {/* ════════════════════════════════════════════════════════════

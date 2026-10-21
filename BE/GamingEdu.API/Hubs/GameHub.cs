@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using GamingEdu.API.DTOs;
+using GamingEdu.API.Models;
 using GamingEdu.API.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
@@ -27,6 +28,7 @@ public class GameHub : Hub
 
     // In-memory room state (production: use Redis/distributed cache)
     private static readonly Dictionary<string, int> RoomSlideIndex = new();
+    private static readonly Dictionary<string, DateTime> LastSlideTransitionTime = new();
     private static readonly HashSet<string> LockedRooms = new();
 
     public GameHub(
@@ -274,14 +276,34 @@ public class GameHub : Hub
     {
         try
         {
+            var pinCode = Context.Items["PinCode"] as string;
+            Room? room = null;
+            if (!string.IsNullOrEmpty(pinCode))
+            {
+                room = await _roomService.GetRoomByPinAsync(pinCode);
+            }
+            if (room == null)
+            {
+                room = await _roomService.GetRoomByIdAsync(roomId);
+            }
+            if (room == null)
+            {
+                await SendErrorAsync("Không tìm thấy phòng.");
+                return;
+            }
+            pinCode = room.PinCode;
+            var groupName = $"room_{pinCode}";
+
+            Context.Items["PinCode"]   = pinCode;
+            Context.Items["RoomId"]    = room.Id;
+            Context.Items["GroupName"] = groupName;
+
             // Update rooms.status = 'PLAYING', rooms.start_time = NOW
             await _roomService.UpdateRoomStatusAsync(roomId, "PLAYING");
 
-            var pinCode   = Context.Items["PinCode"] as string ?? "";
-            var groupName = $"room_{pinCode}";
-
             // Initialize slide index for this room
             RoomSlideIndex[pinCode] = 0;
+            LastSlideTransitionTime[pinCode] = DateTime.UtcNow;
 
             // Load first slide
             var slideDto = await GetCurrentSlideAsync(roomId, pinCode);
@@ -389,8 +411,31 @@ public class GameHub : Hub
     {
         try
         {
-            var pinCode   = Context.Items["PinCode"] as string ?? "";
+            var pinCode = Context.Items["PinCode"] as string;
+            Room? room = null;
+            if (!string.IsNullOrEmpty(pinCode))
+            {
+                room = await _roomService.GetRoomByPinAsync(pinCode);
+            }
+            if (room == null)
+            {
+                room = await _roomService.GetRoomByIdAsync(roomId);
+            }
+            if (room == null || room.Status == "FINISHED") return;
+
+            pinCode = room.PinCode;
             var groupName = $"room_{pinCode}";
+            Context.Items["PinCode"]   = pinCode;
+            Context.Items["RoomId"]    = room.Id;
+            Context.Items["GroupName"] = groupName;
+
+            // Chống gọi NextSlide liên tiếp trong vòng 1.5 giây gây nhảy cóc câu hỏi
+            if (LastSlideTransitionTime.TryGetValue(pinCode, out var lastTime) && (DateTime.UtcNow - lastTime).TotalMilliseconds < 1500)
+            {
+                _logger.LogWarning("NextSlide ignored due to rapid successive trigger in room {PinCode}", pinCode);
+                return;
+            }
+            LastSlideTransitionTime[pinCode] = DateTime.UtcNow;
 
             // Xử lý phạt timeout cho những người không nộp ở câu hỏi trước (cho Battle Royale)
             var prevSlide = await GetCurrentSlideAsync(roomId, pinCode);
@@ -399,15 +444,41 @@ public class GameHub : Hub
                 await _roomService.ApplyBattleRoyaleTimeoutPenaltyAsync(roomId, prevSlide.SlideId);
             }
 
+            var quiz = await _quizService.GetQuizDetailAsync(room.QuizId);
+            if (quiz is null)
+            {
+                await EndGame(roomId);
+                return;
+            }
+
+            var slides = quiz.Slides
+                .OrderBy(s => s.OrderIndex)
+                .ToList();
+
+            if (slides.Count == 0)
+            {
+                await EndGame(roomId);
+                return;
+            }
+
             // Increment slide index
             RoomSlideIndex.TryGetValue(pinCode, out int currentIdx);
-            RoomSlideIndex[pinCode] = currentIdx + 1;
+            int nextIdx = currentIdx + 1;
+
+            if (nextIdx >= slides.Count)
+            {
+                // No more slides → end game
+                _logger.LogInformation("All {Count} questions completed in room {PinCode}. Ending game.", slides.Count, pinCode);
+                await EndGame(roomId);
+                return;
+            }
+
+            RoomSlideIndex[pinCode] = nextIdx;
 
             var slideDto = await GetCurrentSlideAsync(roomId, pinCode);
 
             if (slideDto is null)
             {
-                // No more slides → end game
                 await EndGame(roomId);
                 return;
             }
@@ -516,7 +587,7 @@ public class GameHub : Hub
 
             var room = await _roomService.GetRoomByPinAsync(pinCode);
             var quiz = room is null ? null : await _quizService.GetQuizDetailAsync(room.QuizId);
-            var slide = quiz?.Slides.FirstOrDefault(s => s.Id == slideId && s.Status == "PUBLISHED");
+            var slide = quiz?.Slides.FirstOrDefault(s => s.Id == slideId);
             if (slide is null)
             {
                 await SendErrorAsync("Không tìm thấy câu hỏi.");
@@ -569,6 +640,7 @@ public class GameHub : Hub
             var pinCode   = Context.Items["PinCode"] as string ?? "";
             var groupName = $"room_{pinCode}";
             RoomSlideIndex.Remove(pinCode);
+            LastSlideTransitionTime.Remove(pinCode);
 
             // Final leaderboard
             var finalLeaderboard = await _roomService.GetLeaderboardAsync(roomId);
@@ -693,18 +765,19 @@ public class GameHub : Hub
     private async Task<SlideStartedDto?> GetCurrentSlideAsync(Guid roomId, string pinCode)
     {
         // Get quiz via room — load from cache via QuizService
-        var room = await _roomService.GetRoomByPinAsync(pinCode);
+        var room = !string.IsNullOrEmpty(pinCode)
+            ? await _roomService.GetRoomByPinAsync(pinCode)
+            : await _roomService.GetRoomByIdAsync(roomId);
         if (room is null) return null;
 
         var quiz = await _quizService.GetQuizDetailAsync(room.QuizId);
         if (quiz is null) return null;
 
         var slides = quiz.Slides
-            .Where(s => s.Status == "PUBLISHED")
             .OrderBy(s => s.OrderIndex)
             .ToList();
 
-        int idx = RoomSlideIndex.GetValueOrDefault(pinCode, 0);
+        int idx = RoomSlideIndex.GetValueOrDefault(room.PinCode, 0);
         if (idx >= slides.Count) return null;
 
         var slide = slides[idx];
@@ -727,7 +800,7 @@ public class GameHub : Hub
 
         return new SlideStartedDto(
             idx, slide.Id, slide.Type, slide.QuestionText,
-            slide.TimeLimit, slide.Points, publicOptions);
+            slide.TimeLimit, slide.Points, publicOptions, slides.Count);
     }
 
     private async Task SendErrorAsync(string message)

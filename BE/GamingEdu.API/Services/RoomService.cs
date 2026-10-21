@@ -16,6 +16,7 @@ public interface IRoomService
     Task<RoomDto> CreateRoomAsync(Guid hostId, CreateRoomRequest request);
     Task<(Room room, RoomPlayer player)> JoinRoomAsync(Guid? userId, JoinRoomRequest request);
     Task<Room?> GetRoomByPinAsync(string pinCode);
+    Task<Room?> GetRoomByIdAsync(Guid roomId);
     Task<IEnumerable<LeaderboardEntryDto>> GetLeaderboardAsync(Guid roomId, int top = 0);
     Task<AnswerResultDto> SubmitAnswerAsync(Guid roomPlayerId, SubmitAnswerRequest request);
     Task UpdateRoomStatusAsync(Guid roomId, string status);
@@ -109,7 +110,7 @@ public class RoomService : IRoomService
         _db.Rooms.Add(room);
         await _db.SaveChangesAsync();
 
-        var theme = string.IsNullOrWhiteSpace(request.GameModeTheme) ? "SPEED_RACER" : request.GameModeTheme.Trim();
+        var theme = string.IsNullOrWhiteSpace(request.GameModeTheme) ? "CLASSIC" : request.GameModeTheme.Trim();
         await _cacheStore.SetStringAsync($"room_theme:{room.Id}", theme, TimeSpan.FromDays(2));
         await _cacheStore.SetStringAsync($"room_theme:pin:{pin}", theme, TimeSpan.FromDays(2));
 
@@ -181,6 +182,12 @@ public class RoomService : IRoomService
             .Include(r => r.Quiz)
             .Include(r => r.Players)
             .FirstOrDefaultAsync(r => r.PinCode == pinCode);
+
+    public async Task<Room?> GetRoomByIdAsync(Guid roomId)
+        => await _db.Rooms
+            .Include(r => r.Quiz)
+            .Include(r => r.Players)
+            .FirstOrDefaultAsync(r => r.Id == roomId);
 
     // ── SUBMIT ANSWER ──────────────────────────────────────────────────
     public async Task<AnswerResultDto> SubmitAnswerAsync(
@@ -1025,7 +1032,7 @@ public class RoomService : IRoomService
     public async Task<string> GetRoomThemeAsync(Guid roomId)
     {
         var theme = await _cacheStore.GetStringAsync($"room_theme:{roomId}");
-        return string.IsNullOrWhiteSpace(theme) ? "SPEED_RACER" : theme;
+        return string.IsNullOrWhiteSpace(theme) ? "CLASSIC" : theme;
     }
 
     public async Task SetRoomThemeAsync(Guid roomId, string theme)

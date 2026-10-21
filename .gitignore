@@ -1,0 +1,18 @@
+## .NET Core / .NET
+[Bb]in/
+[Oo]bj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+## Visual Studio / VS Code
+.vs/
+.vscode/
+
+## Node / Frontend
+node_modules/
+.next/
+out/
+dist/
+.env*.local

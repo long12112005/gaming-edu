@@ -235,7 +235,7 @@ public class AuthService : IAuthService
 
     public async Task LogoutAsync(Guid userId)
     {
-        await _cache.RemoveAsync($"session:{userId}");
+        await _cache.SetStringAsync($"session:{userId}", "LOGGED_OUT", TimeSpan.FromDays(1));
     }
 
     // ── JWT TOKEN GENERATION ───────────────────────────────────────────

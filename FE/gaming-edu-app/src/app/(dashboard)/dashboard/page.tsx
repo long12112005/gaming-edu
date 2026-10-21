@@ -27,6 +27,7 @@ import { Quiz } from "@/types/database";
 import { formatNumber } from "@/lib/utils";
 import { useAuthStore, UserQuota } from "@/store/useAuthStore";
 import SiteHeader from "@/components/layout/SiteHeader";
+import CreateRoomModal from "@/components/modals/CreateRoomModal";
 
 // ─── Stat Card ─────────────────────────────────────────────────────────────────
 function StatCard({
@@ -237,15 +238,16 @@ export default function DashboardPage() {
     fetchUserProfile();
   }, [isAuthenticated, router, setUser]);
 
-  const handleCreateRoom = async (quiz: Quiz) => {
-    try {
-      const res = await api.post("/rooms", { quizId: quiz.id, mode: "HOST_PACED" });
-      if (res.data?.success) {
-        router.push(`/host/${res.data.data.id}`);
-      }
-    } catch {
-      alert("Tạo phòng thi đấu thất bại. Vui lòng thử lại!");
-    }
+  const [createRoomModal, setCreateRoomModal] = useState<{
+    isOpen: boolean;
+    quizId?: string;
+  }>({ isOpen: false });
+
+  const handleCreateRoom = (quiz?: Quiz) => {
+    setCreateRoomModal({
+      isOpen: true,
+      quizId: quiz?.id,
+    });
   };
 
   const handleDelete = async (quizId: string) => {
@@ -315,7 +317,15 @@ export default function DashboardPage() {
               </p>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={() => handleCreateRoom()}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 hover:from-amber-400 hover:to-yellow-400 text-teal-950 font-black text-xs md:text-sm rounded-xl shadow-md active:scale-95 transition-all"
+              >
+                <Gamepad2 size={16} />
+                <span>Tạo Phòng Thi Đấu</span>
+              </button>
               <span className="text-xs font-bold text-teal-900 bg-teal-50 px-3 py-1.5 rounded-xl border border-teal-200">
                 Sức chứa tối đa: <b className="text-teal-950 font-mono text-sm">{maxCapacity} người chơi</b>
               </span>
@@ -496,6 +506,13 @@ export default function DashboardPage() {
       <footer className="py-8 border-t border-teal-600/20 text-center text-teal-900/60 bg-white/50 backdrop-blur-md text-xs relative z-10 font-sans">
         <p>© 2026 Gaming Edu · Bảng điều khiển quản lý học tập và thi đấu gamified.</p>
       </footer>
+
+      {/* Modal Khởi Tạo Phòng Chơi (Chọn Đề & Chọn Kiểu Chơi) */}
+      <CreateRoomModal
+        isOpen={createRoomModal.isOpen}
+        onClose={() => setCreateRoomModal({ isOpen: false })}
+        initialQuizId={createRoomModal.quizId}
+      />
     </div>
   );
 }

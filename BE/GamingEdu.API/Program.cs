@@ -105,16 +105,42 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             },
             OnTokenValidated = async ctx =>
             {
-                var userId = ctx.Principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                var jti = ctx.Principal?.FindFirst(JwtRegisteredClaimNames.Jti)?.Value;
+                var userId = ctx.Principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                    ?? ctx.Principal?.FindFirst(JwtRegisteredClaimNames.Sub)?.Value
+                    ?? ctx.Principal?.FindFirst("sub")?.Value;
+                var jti = ctx.Principal?.FindFirst(JwtRegisteredClaimNames.Jti)?.Value
+                    ?? ctx.Principal?.FindFirst("jti")?.Value;
                 if (userId != null && jti != null)
                 {
                     var store = ctx.HttpContext.RequestServices.GetRequiredService<ICacheStore>();
                     var activeSession = await store.GetStringAsync($"session:{userId}");
-                    if (activeSession != jti)
+                    if (activeSession == null)
+                    {
+                        // Cache was reset or server restarted: re-populate session from cryptographically valid token
+                        await store.SetStringAsync($"session:{userId}", jti, TimeSpan.FromDays(1));
+                    }
+                    else if (activeSession != jti)
                     {
                         ctx.Fail("Phiên đăng nhập không hợp lệ hoặc bạn đã đăng nhập ở nơi khác.");
                     }
+                }
+            },
+            OnChallenge = async ctx =>
+            {
+                if (!ctx.Response.HasStarted)
+                {
+                    ctx.HandleResponse();
+                    ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                    ctx.Response.ContentType = "application/json";
+                    var message = ctx.AuthenticateFailure?.Message
+                        ?? (ctx.ErrorDescription ?? "Phiên đăng nhập không hợp lệ hoặc đã hết hạn. Vui lòng đăng nhập lại.");
+                    var result = System.Text.Json.JsonSerializer.Serialize(new
+                    {
+                        success = false,
+                        message = message,
+                        data = (object?)null
+                    });
+                    await ctx.Response.WriteAsync(result);
                 }
             }
         };

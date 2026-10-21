@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import Cookies from "js-cookie";
 import {
   Users,
@@ -16,15 +17,18 @@ import {
   Trash2,
   Clock,
   Sparkles,
-  Info,
   ChevronRight,
   RefreshCw,
   X,
   AlertTriangle,
+  Lock,
+  Play,
+  ArrowRight,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAuthStore } from "@/store/useAuthStore";
 import SiteHeader from "@/components/layout/SiteHeader";
+import Footer from "@/components/layout/Footer";
 
 export interface GroupItem {
   id: string;
@@ -35,15 +39,7 @@ export interface GroupItem {
   hostNickname: string;
   memberCount: number;
   createdAt: string;
-}
-
-export interface GroupMemberItem {
-  id: string;
-  userId: string;
-  nickname: string;
-  avatarUrl?: string | null;
-  status: "PENDING" | "ACTIVE" | "REJECTED";
-  joinedAt: string;
+  isHost?: boolean;
 }
 
 export default function GroupsPage() {
@@ -57,36 +53,12 @@ export default function GroupsPage() {
   // Modals
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showJoinModal, setShowJoinModal] = useState(false);
-  const [selectedGroup, setSelectedGroup] = useState<GroupItem | null>(null);
-  const [members, setMembers] = useState<GroupMemberItem[]>([]);
-  const [loadingMembers, setLoadingMembers] = useState(false);
-
-  // Forms
   const [createForm, setCreateForm] = useState({ name: "", description: "" });
   const [joinCode, setJoinCode] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
-
-  // Copy state
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
-
-  // Confirm dialog state
-  const [confirmDialog, setConfirmDialog] = useState<{
-    isOpen: boolean;
-    title: string;
-    description: string;
-    confirmText: string;
-    variant: "danger" | "warning";
-    onConfirm: () => Promise<void>;
-  }>({
-    isOpen: false,
-    title: "",
-    description: "",
-    confirmText: "Xác nhận",
-    variant: "danger",
-    onConfirm: async () => {},
-  });
 
   const fetchGroups = useCallback(async () => {
     try {
@@ -98,7 +70,7 @@ export default function GroupsPage() {
         setGroups(res.data);
       }
     } catch (err: unknown) {
-      console.error("Lỗi khi tải danh sách nhóm:", err);
+      console.warn("Lỗi khi tải danh sách nhóm:", err);
     } finally {
       setLoading(false);
     }
@@ -106,43 +78,34 @@ export default function GroupsPage() {
 
   useEffect(() => {
     if (!isAuthenticated && !Cookies.get("token")) {
-      router.push("/login");
+      router.push("/auth");
       return;
     }
     fetchGroups();
   }, [isAuthenticated, router, fetchGroups]);
 
-  const copyToClipboard = (code: string) => {
-    if (!code || code === "HIDDEN") return;
+  const copyGroupCode = (code: string) => {
     navigator.clipboard.writeText(code);
     setCopiedCode(code);
-    setTimeout(() => setCopiedCode(null), 2500);
+    setTimeout(() => setCopiedCode(null), 2000);
   };
 
   const handleCreateGroup = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!createForm.name.trim()) {
-      setErrorMsg("Vui lòng nhập tên nhóm.");
-      return;
-    }
+    if (!createForm.name.trim()) return;
 
     try {
       setSubmitting(true);
       setErrorMsg("");
-      const res = await api.post("/groups", {
-        name: createForm.name.trim(),
-        description: createForm.description.trim() || null,
-      });
-
+      const res = await api.post("/groups", createForm);
       if (res.data?.success) {
-        setSuccessMsg(`Nhóm đã được tạo thành công! Mã tham gia: ${res.data.data.groupCode}`);
-        setCreateForm({ name: "", description: "" });
         setShowCreateModal(false);
-        await fetchGroups();
+        setCreateForm({ name: "", description: "" });
+        setSuccessMsg("Tạo nhóm mới thành công!");
+        fetchGroups();
       }
-    } catch (err: unknown) {
-      const errorObj = err as { response?: { data?: { message?: string } } };
-      setErrorMsg(errorObj.response?.data?.message || "Không thể tạo nhóm. Vui lòng thử lại.");
+    } catch (err: any) {
+      setErrorMsg(err.response?.data?.message || "Không thể tạo nhóm.");
     } finally {
       setSubmitting(false);
     }
@@ -150,444 +113,264 @@ export default function GroupsPage() {
 
   const handleJoinGroup = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!joinCode.trim() || joinCode.trim().length !== 6) {
-      setErrorMsg("Mã nhóm phải gồm đúng 6 ký tự số.");
-      return;
-    }
+    if (!joinCode.trim()) return;
 
     try {
       setSubmitting(true);
       setErrorMsg("");
-      const res = await api.post("/groups/join", {
-        groupCode: joinCode.trim(),
-      });
-
+      const res = await api.post("/groups/join", { groupCode: joinCode.trim() });
       if (res.data?.success) {
-        setSuccessMsg(res.data.message || "Yêu cầu gia nhập đã được gửi tới chủ phòng và đang chờ duyệt.");
-        setJoinCode("");
         setShowJoinModal(false);
-        await fetchGroups();
+        setJoinCode("");
+        setSuccessMsg("Đã gửi yêu cầu tham gia nhóm thành công!");
+        fetchGroups();
       }
-    } catch (err: unknown) {
-      const errorObj = err as { response?: { data?: { message?: string } } };
-      setErrorMsg(errorObj.response?.data?.message || "Mã nhóm không hợp lệ hoặc nhóm không tồn tại.");
+    } catch (err: any) {
+      setErrorMsg(err.response?.data?.message || "Mã nhóm không hợp lệ hoặc bạn đã ở trong nhóm.");
     } finally {
       setSubmitting(false);
     }
   };
 
-  const fetchMembers = async (groupId: string) => {
-    try {
-      setLoadingMembers(true);
-      const res = await api.get(`/groups/${groupId}/members`);
-      if (res.data?.success && Array.isArray(res.data.data)) {
-        setMembers(res.data.data);
-      } else if (Array.isArray(res.data)) {
-        setMembers(res.data);
-      }
-    } catch (err: unknown) {
-      console.error("Lỗi khi tải thành viên:", err);
-    } finally {
-      setLoadingMembers(false);
-    }
-  };
-
-  const openGroupDetails = (group: GroupItem) => {
-    setSelectedGroup(group);
-    fetchMembers(group.id);
-  };
-
-  const handleRespondJoin = async (memberId: string, isApproved: boolean) => {
-    if (!selectedGroup) return;
-    try {
-      await api.put(`/groups/${selectedGroup.id}/members/${memberId}`, { isApproved });
-      await fetchMembers(selectedGroup.id);
-      await fetchGroups();
-    } catch (err: unknown) {
-      const errorObj = err as { response?: { data?: { message?: string } } };
-      alert(errorObj.response?.data?.message || "Thao tác thất bại.");
-    }
-  };
-
-  const handleKickMember = (member: GroupMemberItem) => {
-    if (!selectedGroup) return;
-    setConfirmDialog({
-      isOpen: true,
-      title: "Loại Thành Viên",
-      description: `Bạn có chắc chắn muốn loại "${member.nickname}" khỏi nhóm "${selectedGroup.name}"?`,
-      confirmText: "Loại khỏi nhóm",
-      variant: "danger",
-      onConfirm: async () => {
-        try {
-          await api.delete(`/groups/${selectedGroup.id}/members/${member.id}`);
-          await fetchMembers(selectedGroup.id);
-          await fetchGroups();
-          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
-        } catch (err: unknown) {
-          const errorObj = err as { response?: { data?: { message?: string } } };
-          alert(errorObj.response?.data?.message || "Không thể xóa thành viên.");
-        }
-      },
-    });
-  };
-
-  const handleDisbandGroup = (group: GroupItem) => {
-    setConfirmDialog({
-      isOpen: true,
-      title: "Giải Tán Nhóm",
-      description: `CẢNH BÁO: Nhóm "${group.name}" sẽ bị xóa vĩnh viễn và toàn bộ thành viên sẽ bị giải tán. Thao tác này không thể hoàn tác!`,
-      confirmText: "Giải tán nhóm vĩnh viễn",
-      variant: "danger",
-      onConfirm: async () => {
-        try {
-          await api.delete(`/groups/${group.id}`);
-          setSelectedGroup(null);
-          await fetchGroups();
-          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
-        } catch (err: unknown) {
-          const errorObj = err as { response?: { data?: { message?: string } } };
-          alert(errorObj.response?.data?.message || "Không thể giải tán nhóm.");
-        }
-      },
-    });
-  };
-
-  const handleLeaveGroup = (group: GroupItem) => {
-    setConfirmDialog({
-      isOpen: true,
-      title: "Rời Khỏi Nhóm",
-      description: `Bạn có chắc chắn muốn rời khỏi nhóm "${group.name}"? Bạn sẽ cần nhập lại mã mời để gia nhập sau này.`,
-      confirmText: "Rời nhóm",
-      variant: "warning",
-      onConfirm: async () => {
-        try {
-          // Gửi request rời nhóm (nếu BE có endpoint /leave hoặc xóa chính bản thân khỏi group)
-          await api.delete(`/groups/${group.id}/members/me`).catch(async () => {
-            // fallback nếu BE dùng endpoint generic
-            await api.delete(`/groups/${group.id}/leave`);
-          });
-          setSelectedGroup(null);
-          await fetchGroups();
-          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
-        } catch (err: unknown) {
-          const errorObj = err as { response?: { data?: { message?: string } } };
-          alert(errorObj.response?.data?.message || "Rời nhóm thất bại.");
-        }
-      },
-    });
-  };
-
-  // Lọc nhóm: User là host nếu groupCode khác "HIDDEN" hoặc hostNickname trùng user.nickname
-  const isHost = (group: GroupItem) => group.groupCode !== "HIDDEN" || (user?.nickname && group.hostNickname === user.nickname);
-
-  const hostedGroups = groups.filter(isHost);
-  const joinedGroups = groups.filter((g) => !isHost(g));
-
-  const displayGroups =
-    activeTab === "hosted" ? hostedGroups : activeTab === "joined" ? joinedGroups : groups;
+  const filteredGroups = groups.filter((g) => {
+    const isOwner = g.hostNickname === user?.nickname;
+    if (activeTab === "hosted") return isOwner;
+    if (activeTab === "joined") return !isOwner;
+    return true;
+  });
 
   return (
-    <div className="min-h-screen text-[#1B2A2E] font-serif flex flex-col relative">
-      {/* Background tiên môn huyền ảo */}
-      <div
-        className="fixed inset-0 z-0"
-        style={{
-          backgroundImage: "url('/bg-misty-white.jpg')",
-          backgroundSize: "cover",
-          backgroundPosition: "center top",
-        }}
-      />
-      <div className="fixed inset-0 z-0 bg-[#f4f9f7]/70 backdrop-blur-[2px]" />
-
+    <div className="min-h-screen bg-[#F8FAFC] text-slate-900 flex flex-col">
       <SiteHeader />
 
-      <main className="flex-1 pt-24 pb-16 px-4 md:px-8 max-w-6xl mx-auto w-full relative z-10 space-y-8 font-sans">
-        {/* Header Section */}
-        <div className="bg-white/70 backdrop-blur-xl border border-white/90 rounded-[32px] p-6 md:p-8 shadow-[0_16px_40px_rgba(8,38,42,0.1)] flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
+        {/* HEADER & ACTIONS */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
           <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-xs font-bold text-emerald-800 uppercase tracking-wider mb-2">
-              <Users size={14} className="text-emerald-600" /> Không Gian Học Tập
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-50 border border-indigo-100 text-xs font-bold text-indigo-700 mb-2">
+              <Users size={14} />
+              <span>Không Gian Học Tập Nhóm</span>
             </div>
-            <h1 className="text-3xl md:text-4xl font-bold font-serif text-[#08282e] tracking-tight">
-              Quản Lý Nhóm & Lớp Học
+            <h1 className="font-heading font-black text-2xl sm:text-3xl text-slate-900">
+              Danh Sách Không Gian Nhóm
             </h1>
-            <p className="text-teal-800/80 text-sm md:text-base mt-1 max-w-xl">
-              Tạo phòng học tập, mời học viên tham gia bằng mã số bí mật 6 chữ số và quản lý danh sách thành viên dễ dàng.
+            <p className="text-xs sm:text-sm text-slate-500 mt-1">
+              Quản lý lớp học, chia sẻ bộ đề riêng tư và tổ chức thi đấu nội bộ.
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2.5">
             <button
-              onClick={() => {
-                setErrorMsg("");
-                setShowJoinModal(true);
-              }}
-              className="px-5 py-3 rounded-2xl bg-white/80 hover:bg-white text-teal-900 border border-teal-300/60 font-bold text-sm shadow-sm transition-all hover:scale-105 active:scale-95 flex items-center gap-2"
+              onClick={() => setShowJoinModal(true)}
+              className="px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs shadow-xs transition-colors flex items-center gap-1.5"
             >
-              <LogIn size={18} className="text-teal-700" />
+              <LogIn size={15} />
               <span>Gia Nhập Bằng Mã</span>
             </button>
-
             <button
-              onClick={() => {
-                setErrorMsg("");
-                setShowCreateModal(true);
-              }}
-              className="px-6 py-3 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-600 to-cyan-600 hover:from-emerald-400 hover:to-teal-500 text-white font-bold text-sm shadow-[0_6px_20px_rgba(13,148,136,0.3)] transition-all hover:scale-105 active:scale-95 flex items-center gap-2"
+              onClick={() => setShowCreateModal(true)}
+              className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-sm shadow-indigo-600/20 transition-all flex items-center gap-1.5 active:translate-y-0.5"
             >
-              <Plus size={18} />
+              <Plus size={16} />
               <span>Tạo Nhóm Mới</span>
             </button>
           </div>
         </div>
 
-        {/* Thông báo thành công */}
+        {/* FEEDBACK ALERT */}
         {successMsg && (
-          <div className="p-4 rounded-2xl bg-emerald-500/20 border border-emerald-400/50 text-emerald-900 text-sm font-semibold flex items-center justify-between animate-in fade-in">
+          <div className="mb-6 p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs sm:text-sm font-bold flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Check size={18} className="text-emerald-600" />
+              <Check size={18} />
               <span>{successMsg}</span>
             </div>
-            <button onClick={() => setSuccessMsg("")} className="text-emerald-700 hover:text-emerald-900">
+            <button onClick={() => setSuccessMsg("")} className="text-emerald-600 hover:text-emerald-900">
               <X size={16} />
             </button>
           </div>
         )}
 
-        {/* Tab Bộ Lọc */}
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          <div className="flex gap-2 p-1.5 bg-white/60 backdrop-blur-md rounded-2xl border border-white/80 shadow-sm">
-            {[
-              { id: "all", label: `Tất cả (${groups.length})` },
-              { id: "hosted", label: `Nhóm tôi làm Host (${hostedGroups.length})` },
-              { id: "joined", label: `Nhóm tham gia (${joinedGroups.length})` },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as "all" | "hosted" | "joined")}
-                className={`px-4 py-2 rounded-xl text-xs md:text-sm font-bold transition-all ${
-                  activeTab === tab.id
-                    ? "bg-gradient-to-r from-emerald-600 to-teal-700 text-white shadow-sm"
-                    : "text-teal-900/70 hover:text-teal-950 hover:bg-white/40"
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-
-          <button
-            onClick={fetchGroups}
-            className="p-2.5 rounded-xl bg-white/60 hover:bg-white border border-teal-200/50 text-teal-800 transition-colors shadow-sm"
-            title="Làm mới danh sách"
-          >
-            <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
-          </button>
+        {/* TABS */}
+        <div className="flex items-center gap-2 mb-6">
+          {[
+            { id: "all", label: "Tất cả nhóm" },
+            { id: "hosted", label: "Nhóm tôi quản lý" },
+            { id: "joined", label: "Nhóm tôi tham gia" },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as any)}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                activeTab === tab.id
+                  ? "bg-indigo-600 text-white shadow-xs"
+                  : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
 
-        {/* Danh Sách Thẻ Nhóm */}
+        {/* BENTO GROUPS GRID */}
         {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[1, 2, 3, 4, 5, 6].map((i) => (
-              <div
-                key={i}
-                className="h-56 bg-white/60 backdrop-blur-xl rounded-[28px] border border-white/80 animate-pulse p-6"
-              />
-            ))}
+          <div className="p-16 text-center">
+            <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+            <p className="text-xs font-bold text-slate-500">Đang tải danh sách nhóm...</p>
           </div>
-        ) : displayGroups.length === 0 ? (
-          <div className="bg-white/65 backdrop-blur-xl rounded-[32px] border-2 border-dashed border-teal-300/50 p-12 text-center max-w-xl mx-auto shadow-sm">
-            <div className="w-20 h-20 bg-teal-500/10 rounded-3xl flex items-center justify-center mx-auto mb-4 border border-teal-300/40">
-              <Users size={36} className="text-teal-700" />
-            </div>
-            <h3 className="text-xl font-bold font-serif text-[#08282e] mb-2">Chưa có nhóm nào</h3>
-            <p className="text-teal-800/80 text-sm mb-6">
-              Bạn chưa tham gia hoặc làm chủ nhóm học tập nào. Hãy tạo một nhóm mới hoặc nhập mã để bắt đầu gắn kết cùng mọi người!
-            </p>
-            <div className="flex items-center justify-center gap-3">
-              <button
-                onClick={() => setShowCreateModal(true)}
-                className="px-5 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold text-sm shadow-md transition-all"
-              >
-                Tạo Nhóm Mới
-              </button>
-              <button
-                onClick={() => setShowJoinModal(true)}
-                className="px-5 py-2.5 rounded-xl bg-white hover:bg-teal-50 text-teal-900 border border-teal-200 font-bold text-sm transition-all"
-              >
-                Gia Nhập Bằng Mã
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {displayGroups.map((group) => {
-              const userIsHost = isHost(group);
+        ) : filteredGroups.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {filteredGroups.map((group) => {
+              const isOwner = group.hostNickname === user?.nickname;
               return (
                 <div
                   key={group.id}
-                  className="bg-white/70 backdrop-blur-xl rounded-[28px] border border-white/90 p-6 shadow-[0_10px_30px_rgba(8,38,42,0.06)] hover:shadow-[0_16px_40px_rgba(8,38,42,0.12)] hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between group"
+                  className="bento-card p-6 flex flex-col justify-between group hover:border-indigo-300 transition-all"
                 >
                   <div>
-                    {/* Header Thẻ: Host Badge & Thành viên */}
-                    <div className="flex items-center justify-between gap-2 mb-3">
-                      {userIsHost ? (
-                        <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-400/40 text-amber-900 text-xs font-bold">
-                          <Shield size={12} className="text-amber-600" /> Bạn là Host
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-cyan-500/15 border border-cyan-400/30 text-teal-900 text-xs font-semibold">
-                          Host: {group.hostNickname}
-                        </span>
-                      )}
-
-                      <span className="text-xs font-bold text-teal-800/70 flex items-center gap-1">
-                        <Users size={14} />
-                        {group.memberCount} thành viên
+                    <div className="flex items-start justify-between gap-3 mb-3">
+                      <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-sm shrink-0">
+                        <Users size={20} />
+                      </div>
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                          isOwner
+                            ? "bg-purple-100 text-purple-700 border border-purple-200"
+                            : "bg-slate-100 text-slate-600"
+                        }`}
+                      >
+                        {isOwner ? "Chủ Nhóm" : "Thành Viên"}
                       </span>
                     </div>
 
-                    {/* Tên nhóm & Mô tả */}
-                    <h3 className="text-xl font-bold font-serif text-[#08282e] group-hover:text-teal-800 transition-colors line-clamp-1 mb-2">
+                    <h3 className="font-heading font-black text-lg text-slate-900 group-hover:text-indigo-600 transition-colors mb-1.5">
                       {group.name}
                     </h3>
-                    <p className="text-xs text-teal-900/70 line-clamp-2 min-h-[32px] mb-4">
-                      {group.description || "Không gian giao lưu học tập và thi đua điểm số."}
+                    <p className="text-xs text-slate-500 line-clamp-2 mb-4">
+                      {group.description || "Không gian giao lưu học tập và thi đua GameEdu."}
                     </p>
 
-                    {/* Mã Group Code (nếu là host) */}
-                    {userIsHost && group.groupCode !== "HIDDEN" && (
-                      <div className="p-3 bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-transparent rounded-2xl border border-teal-300/30 flex items-center justify-between mb-4">
-                        <div>
-                          <p className="text-[10px] font-bold uppercase tracking-wider text-teal-800/70">Mã Nhóm (6 Ký Tự)</p>
-                          <p className="font-mono text-lg font-black text-teal-950 tracking-wider">
-                            {group.groupCode}
-                          </p>
-                        </div>
-                        <button
-                          onClick={() => copyToClipboard(group.groupCode)}
-                          className="px-3 py-1.5 rounded-xl bg-white hover:bg-teal-50 text-teal-800 border border-teal-200 text-xs font-bold shadow-sm transition-all flex items-center gap-1.5"
-                          title="Sao chép mã nhóm"
-                        >
-                          {copiedCode === group.groupCode ? (
-                            <>
-                              <Check size={14} className="text-emerald-600" />
-                              <span className="text-emerald-700">Đã chép</span>
-                            </>
-                          ) : (
-                            <>
-                              <Copy size={14} />
-                              <span>Sao chép</span>
-                            </>
-                          )}
-                        </button>
+                    {/* Group Code Pill */}
+                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 flex items-center justify-between mb-4">
+                      <div className="text-[11px] font-semibold text-slate-500">
+                        Mã Mời:{" "}
+                        <span className="font-mono font-bold text-indigo-700 ml-1">
+                          {group.groupCode}
+                        </span>
                       </div>
-                    )}
+                      <button
+                        type="button"
+                        onClick={() => copyGroupCode(group.groupCode)}
+                        className="text-slate-400 hover:text-indigo-600 transition-colors"
+                        title="Sao chép mã"
+                      >
+                        {copiedCode === group.groupCode ? (
+                          <Check size={14} className="text-emerald-600" />
+                        ) : (
+                          <Copy size={14} />
+                        )}
+                      </button>
+                    </div>
                   </div>
 
-                  {/* Actions Chân Thẻ */}
-                  <div className="pt-4 border-t border-teal-300/20 flex items-center justify-between gap-2">
-                    <button
-                      onClick={() => openGroupDetails(group)}
-                      className="flex-1 py-2.5 px-4 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs shadow-sm transition-all flex items-center justify-center gap-1.5"
-                    >
-                      <span>Xem Thành Viên</span>
-                      <ChevronRight size={14} />
-                    </button>
+                  <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-500 flex items-center gap-1.5">
+                      <Users size={14} className="text-slate-400" />
+                      <span>{group.memberCount || 1} thành viên</span>
+                    </span>
 
-                    {userIsHost ? (
-                      <button
-                        onClick={() => handleDisbandGroup(group)}
-                        className="p-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 transition-colors"
-                        title="Giải tán nhóm"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => handleLeaveGroup(group)}
-                        className="p-2.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 transition-colors"
-                        title="Rời nhóm"
-                      >
-                        <LogOut size={16} />
-                      </button>
-                    )}
+                    <Link
+                      href={`/groups/${group.id}`}
+                      className="px-3.5 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-600 text-indigo-700 hover:text-white font-bold text-xs transition-colors flex items-center gap-1"
+                    >
+                      <span>Vào Nhóm</span>
+                      <ChevronRight size={14} />
+                    </Link>
                   </div>
                 </div>
               );
             })}
           </div>
+        ) : (
+          <div className="p-16 text-center bg-white rounded-2xl border border-dashed border-slate-200">
+            <div className="w-16 h-16 rounded-2xl bg-slate-50 text-slate-400 flex items-center justify-center mx-auto mb-4">
+              <Users size={32} />
+            </div>
+            <h3 className="font-heading font-black text-lg text-slate-800 mb-1">
+              Chưa có nhóm nào trong mục này
+            </h3>
+            <p className="text-xs text-slate-500 max-w-sm mx-auto mb-6">
+              Bạn có thể tự tạo nhóm mới cho lớp học của mình hoặc dùng mã mời từ giáo viên để gia nhập.
+            </p>
+            <div className="flex justify-center gap-3">
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="px-4 py-2 rounded-xl bg-indigo-600 text-white font-bold text-xs"
+              >
+                Tạo Nhóm Mới
+              </button>
+              <button
+                onClick={() => setShowJoinModal(true)}
+                className="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 font-bold text-xs"
+              >
+                Gia Nhập Bằng Mã
+              </button>
+            </div>
+          </div>
         )}
       </main>
 
-      {/* ── MODAL: TẠO NHÓM MỚI ── */}
+      {/* MODAL TẠO NHÓM */}
       {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-teal-950/40 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white/95 backdrop-blur-2xl border border-white rounded-[32px] max-w-lg w-full p-8 shadow-[0_25px_60px_rgba(8,38,42,0.25)] font-sans relative">
-            <button
-              onClick={() => setShowCreateModal(false)}
-              className="absolute top-6 right-6 p-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-500 transition-colors"
-            >
-              <X size={18} />
-            </button>
-
-            <div className="w-14 h-14 rounded-2xl bg-emerald-500/15 border border-emerald-400/30 flex items-center justify-center text-emerald-700 mb-5">
-              <Plus size={28} />
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-white rounded-[24px] max-w-md w-full p-6 border border-slate-200 shadow-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-heading font-black text-xl text-slate-900">Tạo Không Gian Nhóm Mới</h3>
+              <button onClick={() => setShowCreateModal(false)} className="text-slate-400 hover:text-slate-600">
+                <X size={20} />
+              </button>
             </div>
 
-            <h2 className="text-2xl font-bold font-serif text-[#08282e] mb-1">Tạo Không Gian Nhóm Mới</h2>
-            <p className="text-teal-800/70 text-sm mb-6">
-              Hệ thống sẽ tự động cấp một mã số 6 chữ số để bạn chia sẻ cho học sinh và bạn bè.
-            </p>
-
-            {errorMsg && (
-              <div className="p-3 mb-4 rounded-xl bg-red-500/15 border border-red-400/40 text-red-700 text-sm">
-                {errorMsg}
-              </div>
-            )}
-
             <form onSubmit={handleCreateGroup} className="space-y-4">
+              {errorMsg && (
+                <div className="p-3 rounded-xl bg-rose-50 text-rose-700 text-xs font-bold">{errorMsg}</div>
+              )}
               <div>
-                <label className="block text-xs font-bold text-teal-900 uppercase tracking-wider mb-1.5">
-                  Tên Nhóm / Lớp Học *
-                </label>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Tên Nhóm / Lớp Học</label>
                 <input
                   type="text"
                   required
-                  placeholder="Ví dụ: Ôn Thi Toán Học 12A1"
+                  placeholder="VD: Lớp 10A1 – Toán Học"
                   value={createForm.name}
                   onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
-                  className="w-full px-4 py-3 bg-white border-2 border-teal-200 rounded-2xl text-teal-950 font-semibold focus:border-teal-600 outline-none transition-colors"
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:bg-white focus:border-indigo-600"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-teal-900 uppercase tracking-wider mb-1.5">
-                  Mô Tả Nhóm (Tùy chọn)
-                </label>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Mô Tả Ngắn</label>
                 <textarea
                   rows={3}
-                  placeholder="Giới thiệu mục tiêu nhóm, lịch sinh hoạt học tập..."
+                  placeholder="Không gian ôn tập và thi đấu trắc nghiệm hàng tuần..."
                   value={createForm.description}
                   onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}
-                  className="w-full px-4 py-3 bg-white border-2 border-teal-200 rounded-2xl text-teal-950 font-semibold focus:border-teal-600 outline-none transition-colors"
+                  className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:bg-white focus:border-indigo-600"
                 />
               </div>
 
-              <div className="pt-2 flex items-center justify-end gap-3">
+              <div className="flex gap-2.5 pt-2">
                 <button
                   type="button"
                   onClick={() => setShowCreateModal(false)}
-                  className="px-5 py-3 rounded-2xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-sm transition-colors"
+                  className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs"
                 >
-                  Hủy Bỏ
+                  Hủy
                 </button>
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="px-6 py-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white font-bold text-sm shadow-md transition-all disabled:opacity-60"
+                  className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white font-bold text-xs"
                 >
-                  {submitting ? "Đang Khởi Tạo..." : "Xác Nhận Tạo Nhóm"}
+                  {submitting ? "Đang tạo..." : "Xác Nhận Tạo"}
                 </button>
               </div>
             </form>
@@ -595,62 +378,47 @@ export default function GroupsPage() {
         </div>
       )}
 
-      {/* ── MODAL: GIA NHẬP BẰNG MÃ ── */}
+      {/* MODAL GIA NHẬP NHÓM BẰNG MÃ */}
       {showJoinModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-teal-950/40 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white/95 backdrop-blur-2xl border border-white rounded-[32px] max-w-md w-full p-8 shadow-[0_25px_60px_rgba(8,38,42,0.25)] font-sans relative">
-            <button
-              onClick={() => setShowJoinModal(false)}
-              className="absolute top-6 right-6 p-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-500 transition-colors"
-            >
-              <X size={18} />
-            </button>
-
-            <div className="w-14 h-14 rounded-2xl bg-cyan-500/15 border border-cyan-400/30 flex items-center justify-center text-teal-700 mb-5">
-              <LogIn size={28} />
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-white rounded-[24px] max-w-sm w-full p-6 border border-slate-200 shadow-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-heading font-black text-xl text-slate-900">Gia Nhập Nhóm</h3>
+              <button onClick={() => setShowJoinModal(false)} className="text-slate-400 hover:text-slate-600">
+                <X size={20} />
+              </button>
             </div>
 
-            <h2 className="text-2xl font-bold font-serif text-[#08282e] mb-1">Gia Nhập Không Gian Nhóm</h2>
-            <p className="text-teal-800/70 text-sm mb-6">
-              Nhập mã nhóm gồm 6 chữ số được Host cung cấp. Yêu cầu của bạn sẽ được chuyển tới Host để phê duyệt.
-            </p>
-
-            {errorMsg && (
-              <div className="p-3 mb-4 rounded-xl bg-red-500/15 border border-red-400/40 text-red-700 text-sm">
-                {errorMsg}
-              </div>
-            )}
-
             <form onSubmit={handleJoinGroup} className="space-y-4">
+              {errorMsg && (
+                <div className="p-3 rounded-xl bg-rose-50 text-rose-700 text-xs font-bold">{errorMsg}</div>
+              )}
               <div>
-                <label className="block text-xs font-bold text-teal-900 uppercase tracking-wider mb-1.5 text-center">
-                  Nhập Mã Nhóm (6 Chữ Số)
-                </label>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Mã Nhóm (Invite Code)</label>
                 <input
                   type="text"
-                  maxLength={6}
                   required
-                  placeholder="123456"
+                  placeholder="VD: GRP-8921"
                   value={joinCode}
-                  onChange={(e) => setJoinCode(e.target.value.replace(/\D/g, ""))}
-                  className="w-full px-4 py-4 bg-white border-2 border-teal-200 rounded-2xl text-teal-950 font-mono text-center tracking-[0.4em] text-3xl font-black focus:border-teal-600 outline-none transition-colors"
+                  onChange={(e) => setJoinCode(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-center font-mono font-bold outline-none focus:bg-white focus:border-indigo-600"
                 />
               </div>
 
-              <div className="pt-2 flex items-center justify-end gap-3">
+              <div className="flex gap-2.5 pt-2">
                 <button
                   type="button"
                   onClick={() => setShowJoinModal(false)}
-                  className="px-5 py-3 rounded-2xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-sm transition-colors"
+                  className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs"
                 >
-                  Hủy Bỏ
+                  Hủy
                 </button>
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="px-6 py-3 rounded-2xl bg-gradient-to-r from-teal-600 to-cyan-600 hover:from-teal-500 hover:to-cyan-500 text-white font-bold text-sm shadow-md transition-all disabled:opacity-60"
+                  className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white font-bold text-xs"
                 >
-                  {submitting ? "Đang Gửi..." : "Gửi Yêu Cầu Gia Nhập"}
+                  {submitting ? "Đang gửi..." : "Gia Nhập"}
                 </button>
               </div>
             </form>
@@ -658,185 +426,7 @@ export default function GroupsPage() {
         </div>
       )}
 
-      {/* ── MODAL: CHI TIẾT & QUẢN LÝ THÀNH VIÊN NHÓM ── */}
-      {selectedGroup && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-teal-950/40 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white/95 backdrop-blur-2xl border border-white rounded-[32px] max-w-2xl w-full p-6 md:p-8 shadow-[0_25px_60px_rgba(8,38,42,0.25)] font-sans relative max-h-[90vh] flex flex-col">
-            <button
-              onClick={() => setSelectedGroup(null)}
-              className="absolute top-6 right-6 p-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-500 transition-colors"
-            >
-              <X size={18} />
-            </button>
-
-            {/* Header Modal */}
-            <div className="mb-6 pb-4 border-b border-teal-200/50">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="px-3 py-0.5 rounded-full bg-teal-500/15 border border-teal-400/30 text-teal-800 text-xs font-bold">
-                  {isHost(selectedGroup) ? "Bạn là Host" : `Host: ${selectedGroup.hostNickname}`}
-                </span>
-                {isHost(selectedGroup) && selectedGroup.groupCode !== "HIDDEN" && (
-                  <span className="font-mono text-xs font-bold text-teal-900 bg-teal-100 px-2 py-0.5 rounded-md">
-                    Code: {selectedGroup.groupCode}
-                  </span>
-                )}
-              </div>
-              <h2 className="text-2xl font-bold font-serif text-[#08282e]">{selectedGroup.name}</h2>
-              {selectedGroup.description && (
-                <p className="text-teal-800/70 text-xs mt-1">{selectedGroup.description}</p>
-              )}
-            </div>
-
-            {/* Nội dung danh sách thành viên */}
-            <div className="flex-1 overflow-y-auto space-y-6 pr-1">
-              {loadingMembers ? (
-                <div className="py-12 flex flex-col items-center justify-center text-teal-700">
-                  <RefreshCw size={24} className="animate-spin mb-2" />
-                  <span className="text-sm font-semibold">Đang tải danh sách thành viên...</span>
-                </div>
-              ) : (
-                <>
-                  {/* Danh sách chờ duyệt (Chỉ Host thấy) */}
-                  {isHost(selectedGroup) && (
-                    <div>
-                      <h4 className="text-xs font-bold uppercase tracking-wider text-amber-800 mb-3 flex items-center gap-1.5">
-                        <Clock size={14} className="text-amber-600" />
-                        Yêu Cầu Chờ Duyệt ({members.filter((m) => m.status === "PENDING").length})
-                      </h4>
-                      {members.filter((m) => m.status === "PENDING").length === 0 ? (
-                        <p className="text-xs text-gray-500 italic p-3 bg-gray-50 rounded-xl">
-                          Không có yêu cầu nào đang chờ duyệt.
-                        </p>
-                      ) : (
-                        <div className="space-y-2">
-                          {members
-                            .filter((m) => m.status === "PENDING")
-                            .map((member) => (
-                              <div
-                                key={member.id}
-                                className="p-3.5 bg-amber-500/10 border border-amber-300/40 rounded-2xl flex items-center justify-between gap-3"
-                              >
-                                <div className="flex items-center gap-3">
-                                  <div className="w-9 h-9 rounded-full bg-amber-200 border border-amber-300 flex items-center justify-center font-bold text-amber-800 text-sm">
-                                    {member.nickname.charAt(0).toUpperCase()}
-                                  </div>
-                                  <div>
-                                    <p className="font-bold text-teal-950 text-sm">{member.nickname}</p>
-                                    <p className="text-[11px] text-teal-800/60">
-                                      Xin gia nhập lúc {new Date(member.joinedAt).toLocaleDateString("vi-VN")}
-                                    </p>
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <button
-                                    onClick={() => handleRespondJoin(member.id, true)}
-                                    className="p-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white transition-colors"
-                                    title="Chấp nhận"
-                                  >
-                                    <UserCheck size={16} />
-                                  </button>
-                                  <button
-                                    onClick={() => handleRespondJoin(member.id, false)}
-                                    className="p-2 rounded-xl bg-rose-100 hover:bg-rose-200 text-rose-600 transition-colors"
-                                    title="Từ chối"
-                                  >
-                                    <UserX size={16} />
-                                  </button>
-                                </div>
-                              </div>
-                            ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Danh sách thành viên chính thức */}
-                  <div>
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-teal-900 mb-3 flex items-center gap-1.5">
-                      <Users size={14} className="text-teal-600" />
-                      Thành Viên Chính Thức ({members.filter((m) => m.status === "ACTIVE").length})
-                    </h4>
-                    {members.filter((m) => m.status === "ACTIVE").length === 0 ? (
-                      <p className="text-xs text-gray-500 italic p-3 bg-gray-50 rounded-xl">
-                        Chưa có thành viên nào khác trong nhóm.
-                      </p>
-                    ) : (
-                      <div className="space-y-2">
-                        {members
-                          .filter((m) => m.status === "ACTIVE")
-                          .map((member) => (
-                            <div
-                              key={member.id}
-                              className="p-3 bg-white border border-teal-200/60 rounded-2xl flex items-center justify-between gap-3 shadow-sm hover:border-teal-400 transition-colors"
-                            >
-                              <div className="flex items-center gap-3">
-                                <div className="w-9 h-9 rounded-full bg-teal-100 border border-teal-300 flex items-center justify-center font-bold text-teal-800 text-sm">
-                                  {member.nickname.charAt(0).toUpperCase()}
-                                </div>
-                                <div>
-                                  <p className="font-bold text-teal-950 text-sm">{member.nickname}</p>
-                                  <p className="text-[11px] text-teal-800/60">
-                                    Tham gia từ {new Date(member.joinedAt).toLocaleDateString("vi-VN")}
-                                  </p>
-                                </div>
-                              </div>
-
-                              {/* Nút loại thành viên (Nếu user là Host) */}
-                              {isHost(selectedGroup) && (
-                                <button
-                                  onClick={() => handleKickMember(member)}
-                                  className="p-2 rounded-xl text-rose-500 hover:bg-rose-50 border border-transparent hover:border-rose-200 transition-all"
-                                  title="Loại khỏi nhóm"
-                                >
-                                  <Trash2 size={15} />
-                                </button>
-                              )}
-                            </div>
-                          ))}
-                      </div>
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── CONFIRM DIALOG CHUYÊN NGHIỆP ── */}
-      {confirmDialog.isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-teal-950/40 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white/95 backdrop-blur-2xl border border-white rounded-[32px] max-w-md w-full p-6 md:p-8 shadow-[0_25px_60px_rgba(8,38,42,0.3)] font-sans">
-            <div className="w-14 h-14 rounded-2xl bg-rose-500/15 border border-rose-400/30 flex items-center justify-center text-rose-600 mb-5">
-              <AlertTriangle size={28} />
-            </div>
-
-            <h3 className="text-2xl font-bold font-serif text-[#08282e] mb-2">{confirmDialog.title}</h3>
-            <p className="text-teal-900/80 text-sm mb-6 leading-relaxed">{confirmDialog.description}</p>
-
-            <div className="flex items-center justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setConfirmDialog((prev) => ({ ...prev, isOpen: false }))}
-                className="px-5 py-3 rounded-2xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-sm transition-colors"
-              >
-                Hủy Bỏ
-              </button>
-              <button
-                type="button"
-                onClick={confirmDialog.onConfirm}
-                className={`px-6 py-3 rounded-2xl text-white font-bold text-sm shadow-md transition-all active:scale-95 ${
-                  confirmDialog.variant === "danger"
-                    ? "bg-rose-600 hover:bg-rose-500"
-                    : "bg-amber-600 hover:bg-amber-500"
-                }`}
-              >
-                {confirmDialog.confirmText}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <Footer />
     </div>
   );
 }
