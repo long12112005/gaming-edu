@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.IdentityModel.Tokens.Jwt;
 using GamingEdu.API.Data;
 using GamingEdu.API.DTOs;
 using GamingEdu.API.Models;
@@ -54,6 +55,42 @@ public class RoomsController : ControllerBase
         }
     }
 
+    // GET /api/rooms/{id:guid}
+    /// <summary>Find a room by ID. Used for room detail and report views.</summary>
+    [HttpGet("{id:guid}")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(ApiResponse<RoomDto>), 200)]
+    [ProducesResponseType(404)]
+    public async Task<IActionResult> GetRoomById(Guid id)
+    {
+        var room = await _roomService.GetRoomByIdAsync(id);
+        if (room is null)
+            return NotFound(new ApiResponse<string>(false, "Không tìm thấy phòng với ID này.", null));
+
+        var qrCode = _roomService.GenerateQrCodeBase64(room.PinCode);
+        var theme = await _roomService.GetRoomThemeAsync(room.Id);
+        var slideCount = await _db.Slides.CountAsync(s => s.QuizId == room.QuizId && !s.IsDeleted);
+        int? questionTimeLimit = null;
+        if (!string.IsNullOrEmpty(room.GameSettings))
+        {
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(room.GameSettings);
+                if (doc.RootElement.TryGetProperty("questionTimeLimit", out var qtlProp))
+                {
+                    questionTimeLimit = qtlProp.GetInt32();
+                }
+            }
+            catch {}
+        }
+        var dto = new RoomDto(
+            room.Id, room.PinCode, room.Mode, room.Status,
+            room.QuizId, room.Quiz?.Title ?? "", room.CreatedAt, qrCode, theme, slideCount, room.HostId,
+            room.EndTime, questionTimeLimit, room.IsEarlyFinished);
+
+        return Ok(new ApiResponse<RoomDto>(true, null, dto));
+    }
+
     // GET /api/rooms/pin/{pin}
     /// <summary>Find a room by PIN code. Used before joining via SignalR.</summary>
     [HttpGet("pin/{pin}")]
@@ -67,11 +104,38 @@ public class RoomsController : ControllerBase
             return NotFound(new ApiResponse<string>(false, "Không tìm thấy phòng với mã PIN này.", null));
 
         var qrCode = _roomService.GenerateQrCodeBase64(room.PinCode);
+        var theme = await _roomService.GetRoomThemeAsync(room.Id);
+        var slideCount = await _db.Slides.CountAsync(s => s.QuizId == room.QuizId && !s.IsDeleted);
+        int? questionTimeLimit = null;
+        if (!string.IsNullOrEmpty(room.GameSettings))
+        {
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(room.GameSettings);
+                if (doc.RootElement.TryGetProperty("questionTimeLimit", out var qtlProp))
+                {
+                    questionTimeLimit = qtlProp.GetInt32();
+                }
+            }
+            catch {}
+        }
         var dto = new RoomDto(
             room.Id, room.PinCode, room.Mode, room.Status,
-            room.QuizId, room.Quiz?.Title ?? "", room.CreatedAt, qrCode);
+            room.QuizId, room.Quiz?.Title ?? "", room.CreatedAt, qrCode, theme, slideCount, room.HostId,
+            room.EndTime, questionTimeLimit, room.IsEarlyFinished);
 
         return Ok(new ApiResponse<RoomDto>(true, null, dto));
+    }
+
+    // GET /api/rooms/{id}/arena-progress
+    /// <summary>Get 60 FPS arena players progress for a room.</summary>
+    [HttpGet("{id:guid}/arena-progress")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(ApiResponse<List<PlayerArenaProgressDto>>), 200)]
+    public async Task<IActionResult> GetArenaProgress(Guid id)
+    {
+        var progress = await _roomService.GetRoomPlayersArenaProgressAsync(id);
+        return Ok(new ApiResponse<List<PlayerArenaProgressDto>>(true, null, progress));
     }
 
     // GET /api/rooms/{id}/leaderboard
@@ -102,18 +166,20 @@ public class RoomsController : ControllerBase
         catch (KeyNotFoundException ex) { return NotFound(new ApiResponse<string>(false, ex.Message, null)); }
     }
 
-    // PUT /api/rooms/answers/draft
+    // PUT /api/rooms/answers/draft or PUT /api/answers/draft
     /// <summary>Auto-save draft answer every 30s to Redis cache.</summary>
     [HttpPut("answers/draft")]
+    [HttpPut("/api/answers/draft")]
     public async Task<IActionResult> SaveDraftAnswer([FromBody] SaveDraftRequest request)
     {
         await _roomService.SaveDraftAnswerAsync(request.RoomPlayerId, request.SlideId, request.AnswerData);
         return Ok(new ApiResponse<string>(true, "Đã lưu bản nháp vào Redis Cache.", null));
     }
 
-    // GET /api/rooms/answers/draft
+    // GET /api/rooms/answers/draft or GET /api/answers/draft
     /// <summary>Lấy bản nháp câu trả lời từ Redis cache khi thí sinh tải lại trang.</summary>
     [HttpGet("answers/draft")]
+    [HttpGet("/api/answers/draft")]
     public async Task<IActionResult> GetDraftAnswer([FromQuery] Guid roomPlayerId, [FromQuery] Guid slideId)
     {
         var draft = await _roomService.GetDraftAnswerAsync(roomPlayerId, slideId);
@@ -123,6 +189,22 @@ public class RoomsController : ControllerBase
         }
 
         return Ok(new ApiResponse<string>(true, "Lấy bản nháp thành công.", draft));
+    }
+
+    // POST /api/rooms/{id}/start
+    /// <summary>Start the room and transition status to PLAYING.</summary>
+    [HttpPost("{id:guid}/start")]
+    public async Task<IActionResult> StartRoom(Guid id)
+    {
+        var userId = GetCurrentUserId();
+        if (userId is null) return Unauthorized();
+
+        var room = await _roomService.GetRoomByIdAsync(id);
+        if (room is null) return NotFound(new ApiResponse<string>(false, "Không tìm thấy phòng.", null));
+        if (room.HostId != userId.Value) return StatusCode(403, new ApiResponse<string>(false, "Bạn không phải chủ phòng này.", null));
+
+        await _roomService.UpdateRoomStatusAsync(id, "PLAYING");
+        return Ok(new ApiResponse<string>(true, "Phòng đã bắt đầu thi đấu.", null));
     }
 
     // POST /api/rooms/{id}/finish
@@ -137,6 +219,23 @@ public class RoomsController : ControllerBase
         {
             var top3 = await _roomService.FinishRoomAsync(id, userId.Value);
             return Ok(new ApiResponse<IEnumerable<LeaderboardEntryDto>>(true, "Phòng đã kết thúc.", top3));
+        }
+        catch (UnauthorizedAccessException ex) { return StatusCode(403, new ApiResponse<string>(false, ex.Message, null)); }
+        catch (KeyNotFoundException ex) { return NotFound(new ApiResponse<string>(false, ex.Message, null)); }
+    }
+
+    // PUT /api/rooms/{id}/tournament-settings
+    /// <summary>Chủ phòng cập nhật thời gian kết thúc và thời gian câu hỏi cho phòng giải đấu.</summary>
+    [HttpPut("{id:guid}/tournament-settings")]
+    public async Task<IActionResult> UpdateTournamentSettings(Guid id, [FromBody] UpdateTournamentSettingsRequest request)
+    {
+        var userId = GetCurrentUserId();
+        if (userId is null) return Unauthorized();
+
+        try
+        {
+            var updated = await _roomService.UpdateTournamentSettingsAsync(id, userId.Value, request);
+            return Ok(new ApiResponse<RoomDto>(true, "Đã cập nhật cài đặt giải đấu thành công.", updated));
         }
         catch (UnauthorizedAccessException ex) { return StatusCode(403, new ApiResponse<string>(false, ex.Message, null)); }
         catch (KeyNotFoundException ex) { return NotFound(new ApiResponse<string>(false, ex.Message, null)); }
@@ -188,6 +287,24 @@ public class RoomsController : ControllerBase
         catch (KeyNotFoundException ex) { return NotFound(new ApiResponse<string>(false, ex.Message, null)); }
     }
 
+    // GET /api/rooms/history
+    /// <summary>Lấy tổng hợp lịch sử cả phòng đã host và phòng đã chơi.</summary>
+    [HttpGet("history")]
+    public async Task<IActionResult> GetCombinedRoomHistory()
+    {
+        var userId = GetCurrentUserId();
+        if (userId is null) return Unauthorized();
+
+        var hosted = await _roomService.GetHostedRoomsHistoryAsync(userId.Value);
+        var played = await _roomService.GetPlayedRoomsHistoryAsync(userId.Value);
+
+        return Ok(new ApiResponse<object>(true, "Lấy lịch sử phòng thành công.", new
+        {
+            hosted,
+            played
+        }));
+    }
+
     // GET /api/rooms/{id}/export
     /// <summary>Export room results to Excel.</summary>
     [HttpGet("{id:guid}/export")]
@@ -207,9 +324,45 @@ public class RoomsController : ControllerBase
         catch (KeyNotFoundException ex) { return NotFound(new ApiResponse<string>(false, ex.Message, null)); }
     }
 
+    // GET /api/rooms/{id}/detailed-report
+    /// <summary>Get detailed results for room.</summary>
+    [HttpGet("{id:guid}/detailed-report")]
+    public async Task<IActionResult> GetDetailedReport(Guid id)
+    {
+        var userId = GetCurrentUserId();
+        if (userId is null) return Unauthorized();
+
+        try
+        {
+            var report = await _roomService.GetRoomDetailedReportAsync(id, userId.Value);
+            return Ok(new ApiResponse<RoomDetailedReportDto>(true, "Lấy báo cáo chi tiết phòng thành công.", report));
+        }
+        catch (UnauthorizedAccessException ex) { return StatusCode(403, new ApiResponse<string>(false, ex.Message, null)); }
+        catch (KeyNotFoundException ex) { return NotFound(new ApiResponse<string>(false, ex.Message, null)); }
+    }
+
+    // POST /api/rooms/{id}/close
+    /// <summary>Close room permanently.</summary>
+    [HttpPost("{id:guid}/close")]
+    public async Task<IActionResult> CloseRoom(Guid id)
+    {
+        var userId = GetCurrentUserId();
+        if (userId is null) return Unauthorized();
+
+        try
+        {
+            await _roomService.CloseRoomAsync(id, userId.Value);
+            return Ok(new ApiResponse<string>(true, "Đã đóng phòng thành công.", null));
+        }
+        catch (UnauthorizedAccessException ex) { return StatusCode(403, new ApiResponse<string>(false, ex.Message, null)); }
+        catch (KeyNotFoundException ex) { return NotFound(new ApiResponse<string>(false, ex.Message, null)); }
+    }
+
     private Guid? GetCurrentUserId()
     {
-        var claim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var claim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+            ?? User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value
+            ?? User.FindFirst("sub")?.Value;
         return Guid.TryParse(claim, out var id) ? id : null;
     }
 }
@@ -217,6 +370,8 @@ public class RoomsController : ControllerBase
 /// <summary>
 /// AI Job endpoints: POST /api/aijobs (queue), GET /api/aijobs/{id} (status check)
 /// </summary>
+public record QuickParseAIRequest(string Text, string? Topic = null);
+
 [ApiController]
 [Route("api/aijobs")]
 [Produces("application/json")]
@@ -225,11 +380,34 @@ public class AIJobsController : ControllerBase
 {
     private readonly ApplicationDbContext _db;
     private readonly ICacheStore _cache;
+    private readonly IGeminiApiService _geminiService;
 
-    public AIJobsController(ApplicationDbContext db, ICacheStore cache)
+    public AIJobsController(ApplicationDbContext db, ICacheStore cache, IGeminiApiService geminiService)
     {
         _db = db;
         _cache = cache;
+        _geminiService = geminiService;
+    }
+
+    // POST /api/aijobs/quick-parse
+    /// <summary>Phân tích nhanh tài liệu văn bản thành câu hỏi qua Gemini AI.</summary>
+    [HttpPost("quick-parse")]
+    [AllowAnonymous]
+    public async Task<IActionResult> QuickParseText([FromBody] QuickParseAIRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Text))
+            return BadRequest(new ApiResponse<string>(false, "Vui lòng cung cấp nội dung văn bản để phân tích.", null));
+
+        try
+        {
+            var prompt = $"Vui lòng phân tích nội dung tài liệu sau và trích xuất thành danh sách các câu hỏi đa dạng (Trắc nghiệm QUIZ 4 lựa chọn, Điền khuyết FILL_IN_BLANK và Ghép cặp MATCHING):\n\n{request.Text}";
+            var json = await _geminiService.GenerateQuizJsonAsync(prompt, null);
+            return Ok(new ApiResponse<string>(true, "Phân tích tài liệu thành công.", json));
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new ApiResponse<string>(false, ex.Message, null));
+        }
     }
 
     // POST /api/aijobs
@@ -245,11 +423,22 @@ public class AIJobsController : ControllerBase
         var quota = await _db.UserQuotas
             .FirstOrDefaultAsync(q => q.UserId == userId.Value);
 
-        if (quota is not null && quota.AIUsedToday >= quota.AIGenerationLimit)
-            return StatusCode(429, new ApiResponse<string>(
-                false,
-                $"Bạn đã dùng hết {quota.AIGenerationLimit} lượt sinh đề AI hôm nay. Reset lúc {quota.ResetDate}.",
-                null));
+        if (quota is not null)
+        {
+            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+            if (!quota.ResetDate.HasValue || quota.ResetDate.Value <= today)
+            {
+                quota.AIUsedToday = 0;
+                quota.ResetDate = today.AddDays(1);
+                await _db.SaveChangesAsync();
+            }
+
+            if (quota.AIUsedToday >= quota.AIGenerationLimit)
+                return StatusCode(429, new ApiResponse<string>(
+                    false,
+                    $"Bạn đã dùng hết {quota.AIGenerationLimit} lượt sinh đề AI hôm nay. Reset lúc {quota.ResetDate}.",
+                    null));
+        }
 
         var job = new AIJob
         {
@@ -317,7 +506,9 @@ public class AIJobsController : ControllerBase
 
     private Guid? GetCurrentUserId()
     {
-        var claim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var claim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+            ?? User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value
+            ?? User.FindFirst("sub")?.Value;
         return Guid.TryParse(claim, out var id) ? id : null;
     }
 }

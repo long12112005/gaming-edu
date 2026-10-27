@@ -32,6 +32,7 @@ export default function ForgotPasswordPage() {
   const [isResending, setIsResending] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
+  const [devOtp, setDevOtp] = useState<string | null>(null);
 
   // Countdown timer 60s
   const [countdown, setCountdown] = useState(60);
@@ -70,6 +71,10 @@ export default function ForgotPasswordPage() {
     try {
       setIsLoading(true);
       const res = await api.post("/auth/forgot-password", { email: cleanEmail });
+      if (res.data?.data) {
+        setDevOtp(res.data.data);
+        setOtp(res.data.data);
+      }
       setSuccessMsg(
         res.data?.message || "Mã xác thực OTP đã được gửi đến email của bạn nếu tài khoản tồn tại."
       );
@@ -93,6 +98,10 @@ export default function ForgotPasswordPage() {
     try {
       setIsResending(true);
       const res = await api.post("/auth/forgot-password", { email: email.trim() });
+      if (res.data?.data) {
+        setDevOtp(res.data.data);
+        setOtp(res.data.data);
+      }
       setSuccessMsg(res.data?.message || "Đã gửi lại mã OTP mới đến hòm thư của bạn.");
       setCountdown(60);
       setCanResend(false);
@@ -149,37 +158,30 @@ export default function ForgotPasswordPage() {
   };
 
   return (
-    <div className="min-h-screen text-[#1B2A2E] font-serif flex flex-col relative overflow-hidden">
-      {/* Background tiên phong cảnh đồng bộ */}
-      <div
-        className="fixed inset-0 z-0"
-        style={{
-          backgroundImage: "url('/bg-bamboo-mist.jpg')",
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-        }}
-      />
-      <div className="fixed inset-0 z-0 bg-[#eef8f3]/60 backdrop-blur-[2px]" />
+    <div className="min-h-screen bg-[#F4F6FB] text-slate-900 flex flex-col font-sans relative overflow-hidden">
+      {/* Subtle modern ambient background glows */}
+      <div className="fixed top-0 left-1/4 w-96 h-96 bg-indigo-500/5 rounded-full blur-3xl pointer-events-none" />
+      <div className="fixed bottom-0 right-1/4 w-96 h-96 bg-purple-500/5 rounded-full blur-3xl pointer-events-none" />
 
       <SiteHeader />
 
       <div className="flex-1 flex flex-col md:flex-row items-center justify-center p-6 pt-24 relative z-10 max-w-6xl mx-auto w-full font-sans">
         {/* NỬA TRÁI: THÔNG TIN HƯỚNG DẪN */}
         <div className="hidden md:flex w-1/2 flex-col items-center justify-center p-12 text-center">
-          <div className="w-24 h-24 border-2 border-amber-500/60 bg-amber-400/15 rounded-full flex items-center justify-center text-amber-600 mb-8 shadow-[0_0_30px_rgba(251,191,36,0.25)] animate-pulse">
+          <div className="w-24 h-24 border-2 border-indigo-200 bg-indigo-50 rounded-full flex items-center justify-center text-indigo-600 mb-8 shadow-sm">
             <Compass size={48} strokeWidth={1.5} />
           </div>
-          <h2 className="text-4xl lg:text-5xl font-bold font-serif text-[#08282e] mb-4 tracking-wide leading-tight drop-shadow-sm">
+          <h2 className="text-4xl lg:text-5xl font-black font-heading text-slate-900 mb-4 tracking-tight leading-tight">
             Khôi Phục Quyền <br />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-600 via-emerald-600 to-teal-600">
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-500 via-violet-600 to-indigo-600">
               Truy Cập Tài Khoản
             </span>
           </h2>
-          <p className="text-base text-teal-900/80 max-w-sm leading-relaxed">
+          <p className="text-base text-slate-500 max-w-sm leading-relaxed">
             Đừng lo lắng! Nhập địa chỉ email đăng ký để nhận mã xác minh OTP 6 số và thiết lập mật khẩu mới ngay lập tức.
           </p>
 
-          <div className="mt-8 flex items-center gap-2 text-xs font-semibold text-teal-800 bg-white/60 backdrop-blur-md px-4 py-2 rounded-full border border-teal-300/40">
+          <div className="mt-8 flex items-center gap-2 text-xs font-semibold text-indigo-700 bg-indigo-50 px-4 py-2 rounded-full border border-indigo-200">
             <Sparkles size={14} className="text-amber-500" />
             Bảo mật tối đa với mã khóa một lần
           </div>
@@ -187,16 +189,16 @@ export default function ForgotPasswordPage() {
 
         {/* NỬA PHẢI: FORM XỬ LÝ 2 BƯỚC */}
         <div className="w-full max-w-md md:w-1/2 md:pl-8">
-          <div className="bg-white/70 backdrop-blur-2xl border border-white/90 rounded-[36px] p-8 md:p-10 shadow-[0_20px_50px_rgba(8,38,42,0.18)]">
+          <div className="bg-white border border-slate-200/90 rounded-[36px] p-8 md:p-10 shadow-2xl">
             {/* Header Form */}
             <div className="mb-6 text-center">
-              <div className="w-16 h-16 rounded-2xl bg-amber-400/20 border border-amber-400/40 text-amber-700 flex items-center justify-center mx-auto mb-3 shadow-inner">
+              <div className="w-16 h-16 rounded-2xl bg-indigo-50 border border-indigo-200 text-indigo-600 flex items-center justify-center mx-auto mb-3 shadow-xs">
                 {step === 1 ? <Mail size={30} /> : <ShieldCheck size={30} />}
               </div>
-              <h1 className="text-2xl md:text-3xl font-bold font-serif text-[#08282e]">
+              <h1 className="text-2xl md:text-3xl font-black font-heading text-slate-900">
                 {step === 1 ? "Quên Mật Khẩu" : "Đặt Lại Mật Khẩu Mới"}
               </h1>
-              <p className="text-xs md:text-sm text-teal-900/70 mt-1">
+              <p className="text-xs md:text-sm text-slate-500 mt-1">
                 {step === 1
                   ? "Bước 1/2: Nhập email để nhận mã OTP xác thực"
                   : `Bước 2/2: Nhập OTP gửi về ${email}`}
@@ -247,6 +249,27 @@ export default function ForgotPasswordPage() {
             ) : (
               /* BƯỚC 2: NHẬP OTP VÀ MẬT KHẨU MỚI */
               <form onSubmit={handleResetPassword} className="space-y-4">
+                {devOtp && (
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl text-left">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[11px] font-bold text-amber-800 flex items-center gap-1">
+                        <Sparkles size={12} className="text-amber-500" />
+                        Mã OTP thử nghiệm (Dev Mode)
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setOtp(devOtp)}
+                        className="text-[11px] font-bold text-teal-700 hover:text-teal-900 bg-white px-2 py-0.5 rounded-lg border border-teal-200 shadow-xs"
+                      >
+                        Điền lại
+                      </button>
+                    </div>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-xs text-amber-700">Mã của bạn:</span>
+                      <span className="font-mono font-black text-lg text-amber-900 tracking-wider">{devOtp}</span>
+                    </div>
+                  </div>
+                )}
                 {/* OTP Input */}
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">

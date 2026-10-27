@@ -1,62 +1,36 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Wind, Flame, Sparkles, ChevronDown, Swords, PenLine, Compass, ScrollText } from "lucide-react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import Cookies from "js-cookie";
+import Link from "next/link";
+import {
+  Users,
+  Sparkles,
+  Play,
+  ArrowRight,
+  ShieldCheck,
+  PlusCircle,
+  Gamepad2,
+  Anchor,
+} from "lucide-react";
 import SiteHeader from "@/components/layout/SiteHeader";
+import Footer from "@/components/layout/Footer";
+import CreateRoomModal from "@/components/modals/CreateRoomModal";
+import NavalRulesModal from "@/components/modals/NavalRulesModal";
+import GameModesSection from "@/components/home/GameModesSection";
+import QuizGallerySection from "@/components/home/QuizGallerySection";
+import { useAuthStore } from "@/store/useAuthStore";
 
-// Linh khí tiên giới: Trắng tuyết, Xanh ngọc bích, Xanh thiên thanh
-const PARTICLE_COLORS = ["#FFFFFF", "#E0F2FE", "#A7F3D0", "#BAE6FD", "#6EE7B7"];
-
-export default function LandingTuTien() {
+export default function HomePage() {
   const router = useRouter();
+  const { user } = useAuthStore();
   const [pin, setPin] = useState("");
   const [isJoining, setIsJoining] = useState(false);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [mounted, setMounted] = useState(false);
-  const heroRef = useRef<HTMLElement>(null);
-  const [tilt, setTilt] = useState({ x: 0, y: 0 });
-
-  useEffect(() => {
-    setMounted(true);
-    setIsLoggedIn(!!Cookies.get("token"));
-  }, []);
-
-  // Tinh tú / linh khí với thuật toán pseudo-random xác định (pure)
-  const particles = useMemo(() => {
-    if (!mounted) return [];
-    return Array.from({ length: 32 }, (_, i) => {
-      const pseudoRand = (seed: number) => {
-        const x = Math.sin(seed) * 10000;
-        return x - Math.floor(x);
-      };
-      const r1 = pseudoRand(i * 1.618 + 1);
-      const r2 = pseudoRand(i * 2.718 + 2);
-      const r3 = pseudoRand(i * 3.141 + 3);
-      const r4 = pseudoRand(i * 4.414 + 4);
-      const r5 = pseudoRand(i * 5.618 + 5);
-
-      return {
-        id: i,
-        left: r1 * 100,
-        size: 1.8 + r2 * 2.8,
-        duration: 12 + r3 * 14,
-        delay: -r4 * 20,
-        drift: (r5 - 0.5) * 120,
-        color: PARTICLE_COLORS[i % PARTICLE_COLORS.length],
-      };
-    });
-  }, [mounted]);
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    const rect = heroRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    setTilt({
-      x: (e.clientX - rect.left) / rect.width - 0.5,
-      y: (e.clientY - rect.top) / rect.height - 0.5,
-    });
-  };
+  const [isCreateRoomOpen, setIsCreateRoomOpen] = useState(false);
+  const [isRulesModalOpen, setIsRulesModalOpen] = useState(false);
+  const [createRoomMode, setCreateRoomMode] = useState<"HOST_PACED" | "ASYNC_TOURNAMENT">("HOST_PACED");
+  const [createRoomTheme, setCreateRoomTheme] = useState<string>("CLASSIC");
+  const [selectedQuizForRoom, setSelectedQuizForRoom] = useState<string | undefined>(undefined);
 
   const formatPin = (value: string) => {
     const digits = value.replace(/\D/g, "").slice(0, 6);
@@ -64,178 +38,173 @@ export default function LandingTuTien() {
     return digits.slice(0, 3) + " - " + digits.slice(3);
   };
 
-  const pinReady = pin.replace(/\D/g, "").length >= 4;
-
-  const handleJoin = () => {
-    if (!pinReady) return;
+  const handleJoinByPin = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const cleanPin = pin.replace(/\D/g, "");
+    if (cleanPin.length < 4) return;
     setIsJoining(true);
-    router.push(`/play?pin=${pin.replace(/\D/g, "")}`);
+    router.push(`/play/${cleanPin}`);
   };
 
-  const requireAuth = (href: string) => router.push(isLoggedIn ? href : "/login");
+  const handleOpenCreateRoom = (
+    mode: "HOST_PACED" | "ASYNC_TOURNAMENT" = "HOST_PACED",
+    theme: string = "CLASSIC"
+  ) => {
+    setCreateRoomMode(mode);
+    setCreateRoomTheme(theme);
+    setSelectedQuizForRoom(undefined);
+    setIsCreateRoomOpen(true);
+  };
 
-  const features = [
-    { icon: Flame, title: "Thi Đấu Trực Tiếp", desc: "Tranh tài tốc độ với bạn bè trong các phòng thi thời gian thực do giáo viên hoặc người quản trị chủ trì." },
-    { icon: Wind, title: "Luyện Tập Tự Do", desc: "Tự do ôn luyện theo tốc độ cá nhân, củng cố nền tảng kiến thức mọi lúc mọi nơi." },
-    { icon: Sparkles, title: "Tạo Đề Bằng AI", desc: "Tận dụng trí tuệ nhân tạo để tự động tạo ra những bộ đề thi chất lượng cao chỉ trong tích tắc." },
-  ];
+  const handleSelectQuizToHost = (quizId: string) => {
+    setSelectedQuizForRoom(quizId);
+    setCreateRoomMode("HOST_PACED");
+    setCreateRoomTheme("CLASSIC");
+    setIsCreateRoomOpen(true);
+  };
 
   return (
-    <div className="min-h-screen relative overflow-x-hidden bg-[#10434b] text-[#E6F2F5]">
+    <div className="min-h-screen bg-[#F8FAFC] flex flex-col font-sans select-none">
       <SiteHeader />
 
-      {/* ── HERO SECTION ── */}
-      <section
-        ref={heroRef}
-        onMouseMove={handleMouseMove}
-        onMouseLeave={() => setTilt({ x: 0, y: 0 })}
-        className="relative min-h-screen flex flex-col justify-between overflow-hidden pt-16"
-      >
-        {/* Lớp nền thiên nhiên thoáng đãng */}
-        <div
-          className="absolute inset-[-2%] z-0 transition-transform duration-700 ease-out"
-          style={{ transform: `translate3d(${tilt.x * -20}px, ${tilt.y * -12}px, 0)` }}
-        >
-          <div
-            className="absolute inset-0 bg-cover bg-center md:bg-[center_top]"
-            style={{ backgroundImage: "url('/bg-xianxia-realm.jpg')" }}
-          />
-        </div>
-
-        {/* Lớp 2: Luồng ánh sáng thiên quang & mây sương trắng mềm mại trôi dạt */}
-        <div className="absolute inset-0 z-[1] pointer-events-none">
-          <div className="absolute -top-10 right-0 w-[50vw] h-[45vh] bg-gradient-to-bl from-white/30 via-cyan-100/15 to-transparent blur-2xl" />
-          <div className="animate-aurora absolute bottom-[5%] left-[-10%] w-[75%] h-[30%] rounded-full bg-white/20 blur-[90px]" />
-          <div className="animate-aurora absolute bottom-[18%] right-[-8%] w-[55%] h-[28%] rounded-full bg-[#A7F3D0]/20 blur-[85px]" style={{ animationDelay: "-9s" }} />
-        </div>
-
-        {/* Lớp 3: Phủ mực dịu và chuyển màu mượt mà xuống phần tính năng */}
-        <div className="absolute inset-0 z-[2] pointer-events-none bg-[radial-gradient(ellipse_at_50%_40%,transparent_0%,rgba(16,67,75,0.3)_70%)]" />
-        <div className="absolute bottom-0 left-0 right-0 h-44 z-[2] pointer-events-none bg-gradient-to-b from-transparent to-[#10434b]" />
-
-        {/* Lớp 4: Hiệu ứng hạt ánh sáng lung linh */}
-        <div className="absolute inset-0 z-[3] pointer-events-none overflow-hidden">
-          {particles.map((p) => (
-            <span
-              key={p.id}
-              className="spirit-particle"
-              style={{
-                left: `${p.left}%`,
-                width: p.size,
-                height: p.size,
-                background: p.color,
-                boxShadow: `0 0 ${p.size * 3}px ${p.color}`,
-                animationDuration: `${p.duration}s`,
-                animationDelay: `${p.delay}s`,
-                ["--drift" as string]: `${p.drift}px`,
-              } as React.CSSProperties}
-            />
-          ))}
-        </div>
-
-        {/* ── TIÊU ĐỀ CHÍNH ── */}
-        <div className="relative z-10 flex-1 flex items-center justify-center px-6 text-center">
-          <div
-            className="transition-transform duration-500 ease-out"
-            style={{ transform: `translate3d(${tilt.x * 10}px, ${tilt.y * 6}px, 0)` }}
-          >
-            <p className="mb-3 text-xs md:text-sm tracking-[0.5em] text-[#d4f2f4] font-semibold animate-ink drop-shadow">
-              NỀN TẢNG HỌC TẬP TƯƠNG TÁC
-            </p>
-            <h1 className="text-brush leading-[1.05]">
-              <span className="block text-6xl md:text-8xl ink-write">Học Vui · Dễ Nhớ</span>
-            </h1>
-            <p className="mt-4 text-base md:text-lg text-white/95 max-w-xl mx-auto leading-relaxed animate-ink drop-shadow-[0_2px_4px_rgba(0,0,0,0.6)] font-medium">
-              Tham gia các bài trắc nghiệm tương tác thời gian thực, củng cố kiến thức và thi đua cùng bạn bè.
-            </p>
-          </div>
-        </div>
-
-        {/* ── CỤM HÀNH ĐỘNG NHẬP MÃ & THAM GIA (DOCK) ── */}
-        <div className="relative z-10 px-4 pb-6">
-          <div className="max-w-xl mx-auto flex flex-col sm:flex-row gap-3 items-stretch">
-            {/* Ô nhập mã phòng chính */}
-            <div className="dock-tile flex-1 !cursor-default !items-stretch p-3.5 shadow-lg">
-              <label htmlFor="input-pin" className="flex items-center gap-1.5 text-xs tracking-[0.2em] text-[#135259] uppercase px-1 font-bold mb-1">
-                <ScrollText size={14} /> Nhập Mã Phòng
-              </label>
-              <div className="flex gap-2">
-                <input
-                  id="input-pin"
-                  type="text"
-                  inputMode="numeric"
-                  value={pin}
-                  onChange={(e) => setPin(formatPin(e.target.value))}
-                  onKeyDown={(e) => e.key === "Enter" && handleJoin()}
-                  placeholder="123 - 456"
-                  className="flex-1 min-w-0 rounded-xl bg-white/95 border border-[#135259]/20 px-3.5 py-2.5 text-xl tracking-[0.25em] text-center font-bold text-[#135259] placeholder:text-[#135259]/35 outline-none focus:border-[#135259]/60 shadow-inner"
-                />
-                <button
-                  id="btn-join"
-                  onClick={handleJoin}
-                  disabled={!pinReady}
-                  className="shrink-0 rounded-xl bg-gradient-to-b from-[#175d67] to-[#114951] text-white px-6 font-bold tracking-wide hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-md active:scale-95 text-base"
-                >
-                  {isJoining ? "..." : "Vào"}
-                </button>
-              </div>
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-16">
+        {/* ══════════════════════════════════════════════════════════════════
+            HERO BANNER: TIÊU ĐỀ LỚN & KHUNG NHẬP PIN THAM GIA PHÒNG
+        ══════════════════════════════════════════════════════════════════ */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center mb-12">
+          {/* CỘT TRÁI: TIÊU ĐỀ CHÍNH & MÔ TẢ NỀN TẢNG */}
+          <div className="lg:col-span-6 text-center lg:text-left">
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-indigo-50 border border-indigo-200/60 text-indigo-700 text-xs font-black mb-5 shadow-xs">
+              <Sparkles size={14} className="text-indigo-600 animate-pulse" />
+              <span>NỀN TẢNG HỌC TẬP GAMIFICATION 60 FPS</span>
             </div>
 
-            {/* Nút Tạo Phòng */}
-            <button
-              id="dock-create-room"
-              onClick={() => requireAuth("/dashboard")}
-              className="dock-tile !flex-row sm:!flex-col px-6 py-3.5 gap-2.5 shrink-0 justify-center group"
-            >
-              <Swords size={28} strokeWidth={1.75} className="text-[#135259] group-hover:scale-110 transition-transform duration-300" />
-              <span className="font-serif font-bold text-lg text-[#135259] tracking-wide">
-                Tạo Phòng
-              </span>
-            </button>
-          </div>
+            <h1 className="font-heading font-black text-4xl sm:text-5xl lg:text-6xl text-slate-900 tracking-tight leading-[1.1]">
+              Học tập vui hơn <br className="hidden sm:inline" />
+              với <span className="text-[#1E1B4B]">Gaming Edu</span>
+            </h1>
 
-          <a href="#features" className="mt-5 flex flex-col items-center text-sm font-medium text-white/90 hover:text-white transition-colors drop-shadow">
-            Lướt xuống
-            <ChevronDown size={20} className="animate-bounce mt-0.5 text-cyan-200" />
-          </a>
-        </div>
-      </section>
+            <p className="mt-5 text-sm sm:text-base text-slate-500 max-w-lg leading-relaxed mx-auto lg:mx-0">
+              Tạo phòng học, sinh đề bằng AI và trải nghiệm Đấu trường Hải Tặc Tri Thức cùng các chế độ thi đấu trực tiếp theo thời gian thực. Mọi buổi học đều trở nên hào hứng, kịch tính và kết nối tri thức.
+            </p>
 
-      {/* ── CÁC CHẾ ĐỘ CHƠI (FEATURES) NGUYÊN BẢN VỚI TÔNG MÀU MỚI ── */}
-      <section id="features" className="relative py-28 px-6 overflow-hidden scroll-mt-16 bg-gradient-to-b from-[#10434b] via-[#0b333a] to-[#072428]">
-        <div className="max-w-6xl mx-auto relative z-10">
-          <div className="text-center mb-16">
-            <h2 className="text-brush text-6xl md:text-7xl">Tính Năng Nổi Bật</h2>
-            <p className="mt-3 text-cyan-200/90 text-lg">Các chế độ học tập đa dạng giúp bạn tiếp thu kiến thức.</p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {features.map((f, idx) => (
-              <div
-                key={idx}
-                className="feature-card-vivid group"
-                style={{ ["--card-color" as string]: "rgba(56, 189, 248, 0.35)" } as React.CSSProperties}
+            <div className="mt-6 flex flex-wrap items-center justify-center lg:justify-start gap-3">
+              <a
+                href="#kham-pha-tro-choi"
+                className="inline-flex items-center gap-2 text-xs sm:text-sm font-heading font-bold text-cyan-700 bg-cyan-50 border border-cyan-200 px-4 py-2 rounded-xl hover:bg-cyan-100 transition-colors shadow-2xs"
               >
-                <div className="flex items-center justify-between mb-6">
-                  <div className="w-14 h-14 rounded-full border border-cyan-300/30 flex items-center justify-center text-cyan-100 group-hover:bg-cyan-300/15 group-hover:text-white transition-colors duration-500">
-                    <f.icon size={26} strokeWidth={1.4} />
-                  </div>
-                  <span className="seal-mark !w-9 !h-9 !text-lg rotate-6 group-hover:rotate-0">{idx + 1}</span>
+                <Anchor size={15} className="text-cyan-600 animate-pulse" />
+                <span>Khám Phá Hải Tặc Tri Thức</span>
+                <ArrowRight size={14} />
+              </a>
+            </div>
+          </div>
+
+          {/* CỘT PHẢI: KHUNG NHẬP PIN NỔI BẬT & 2 THẺ HÀNH ĐỘNG */}
+          <div className="lg:col-span-6 flex flex-col gap-4 max-w-xl mx-auto w-full">
+            {/* THẺ VIỀN VÀNG: SẴN SÀNG CHƠI? */}
+            <div className="bg-white border-[2.5px] border-[#F59E0B] rounded-[28px] sm:rounded-[32px] p-6 sm:p-8 shadow-xl shadow-amber-500/10 text-center relative overflow-hidden">
+              <h2 className="font-heading font-black text-2xl sm:text-3xl text-slate-900 mb-1.5">
+                Sẵn sàng chơi?
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-500 mb-6 font-medium">
+                Nhập mã phòng PIN để tham gia ngay trên điện thoại hoặc máy tính bảng.
+              </p>
+
+              <form onSubmit={handleJoinByPin} className="space-y-4">
+                <div>
+                  <label
+                    htmlFor="pin-input-home"
+                    className="block text-[11px] font-black text-[#6366F1] uppercase tracking-wider mb-2 text-center"
+                  >
+                    NHẬP MÃ PHÒNG PIN
+                  </label>
+                  <input
+                    id="pin-input-home"
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    value={pin}
+                    onChange={(e) => setPin(formatPin(e.target.value))}
+                    placeholder="000 - 000"
+                    maxLength={9}
+                    className="w-full text-center py-3.5 sm:py-4 bg-[#F8FAFC] border-2 border-indigo-100/90 rounded-2xl font-heading font-black text-3xl sm:text-4xl tracking-widest text-[#6366F1] placeholder:text-slate-300 outline-none focus:bg-white focus:border-[#6366F1] focus:ring-4 focus:ring-indigo-100 transition-all shadow-inner"
+                  />
                 </div>
-                <h3 className="text-brush text-4xl mb-3">{f.title}</h3>
-                <p className="text-[#e2f1f3]/85 leading-relaxed">{f.desc}</p>
-              </div>
-            ))}
+
+                <button
+                  type="submit"
+                  disabled={pin.replace(/\D/g, "").length < 4 || isJoining}
+                  className="w-full py-4 rounded-2xl bg-[#F59E0B] hover:bg-[#D97706] active:translate-y-0.5 text-slate-950 font-heading font-black text-base shadow-md shadow-amber-500/25 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:shadow-none cursor-pointer"
+                >
+                  <span>{isJoining ? "Đang Kết Nối..." : "Vào Chơi"}</span>
+                </button>
+              </form>
+            </div>
+
+            {/* 2 THẺ SUB-CARDS BÊN DƯỚI: TẠO PHÒNG & TẠO ĐỀ BẰNG AI */}
+            <div className="grid grid-cols-2 gap-4">
+              {/* Thẻ 1: Tạo Phòng */}
+              <button
+                type="button"
+                onClick={() => handleOpenCreateRoom("HOST_PACED", "CLASSIC")}
+                className="bg-white border-2 border-slate-100 hover:border-indigo-200 rounded-2xl p-4 sm:p-5 flex items-center justify-center gap-3 shadow-xs hover:shadow-md transition-all group text-left cursor-pointer"
+              >
+                <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                  <Users size={20} />
+                </div>
+                <span className="font-heading font-black text-xs sm:text-sm text-slate-800 group-hover:text-indigo-600 transition-colors">
+                  Tạo Phòng
+                </span>
+              </button>
+
+              {/* Thẻ 2: Tạo Đề Bằng AI */}
+              <Link
+                href="/quiz/create"
+                className="bg-white border-2 border-slate-100 hover:border-pink-200 rounded-2xl p-4 sm:p-5 flex items-center justify-center gap-3 shadow-xs hover:shadow-md transition-all group text-left"
+              >
+                <div className="w-10 h-10 rounded-xl bg-pink-50 text-pink-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                  <Sparkles size={20} />
+                </div>
+                <span className="font-heading font-black text-xs sm:text-sm text-slate-800 group-hover:text-pink-600 transition-colors">
+                  Tạo Đề Bằng AI
+                </span>
+              </Link>
+            </div>
           </div>
         </div>
-      </section>
 
-      {/* ── LƯU BÚT (FOOTER) NGUYÊN BẢN ── */}
-      <footer className="py-10 border-t border-cyan-800/40 text-center text-cyan-200/70 bg-[#072428]">
-        <p className="tracking-widest">© 2026 Gaming Edu · Học tập qua trò chơi, kết nối tri thức.</p>
-      </footer>
+        {/* ══════════════════════════════════════════════════════════════════
+            KHÁM PHÁ TRÒ CHƠI & CÁC CHẾ ĐỘ ĐẤU TRƯỜNG (HẢI TẶC TRI THỨC)
+        ══════════════════════════════════════════════════════════════════ */}
+        <GameModesSection
+          onOpenCreateRoom={handleOpenCreateRoom}
+          onOpenRulesModal={() => setIsRulesModalOpen(true)}
+        />
+
+        {/* ══════════════════════════════════════════════════════════════════
+            KHO BỘ ĐỀ TRẮC NGHIỆM CỘNG ĐỒNG NỔI BẬT
+        ══════════════════════════════════════════════════════════════════ */}
+        <QuizGallerySection onSelectQuiz={handleSelectQuizToHost} />
+      </main>
+
+      {/* Modal Tạo Phòng */}
+      <CreateRoomModal
+        isOpen={isCreateRoomOpen}
+        onClose={() => setIsCreateRoomOpen(false)}
+        initialMode={createRoomMode}
+        initialTheme={createRoomTheme}
+        initialQuizId={selectedQuizForRoom}
+      />
+
+      {/* Modal Hướng Dẫn Luật Chơi Hải Tặc Tri Thức */}
+      <NavalRulesModal
+        isOpen={isRulesModalOpen}
+        onClose={() => setIsRulesModalOpen(false)}
+        onPlayNow={() => handleOpenCreateRoom("HOST_PACED", "NAVAL_WAR")}
+      />
+
+      <Footer />
     </div>
   );
 }
-
-

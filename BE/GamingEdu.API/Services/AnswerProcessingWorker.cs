@@ -128,6 +128,93 @@ public class AnswerProcessingWorker : BackgroundService
                         var leaderboard = await roomService.GetLeaderboardAsync(payload.RoomId, top: 10);
                         await _hubContext.Clients.Group(payload.GroupName).SendAsync("LeaderboardUpdated", leaderboard, cancellationToken: stoppingToken);
                     }
+
+                    // 4. Phát sóng tiến độ nộp bài và phân bổ đáp án (Answer Distribution) thời gian thực
+                    var distribution = await roomService.GetSlideAnswerDistributionAsync(payload.RoomId, payload.Request.SlideId);
+
+                    // 5. Đồng bộ tiến độ 60 FPS Arena cho toàn bộ đấu trường (kích hoạt hiệu ứng Boost)
+                    var playersProgress = await roomService.GetRoomPlayersArenaProgressAsync(payload.RoomId, payload.RoomPlayerId, result.ScoreAwarded, payload.Request.SlideId);
+                    await _hubContext.Clients.Group(payload.GroupName).SendAsync("PlayersProgressUpdated", playersProgress, cancellationToken: stoppingToken);
+                    var theme = await roomService.GetRoomThemeAsync(payload.RoomId);
+                    BattleRoyaleStateDto? survival = null;
+                    if (theme == "BATTLE_ROYALE")
+                    {
+                        survival = await roomService.GetBattleRoyaleStateAsync(payload.RoomId);
+                    }
+
+                    WagerPoolStateDto? wagerPool = null;
+                    if (theme == "QUIZ_WAGER")
+                    {
+                        wagerPool = await roomService.GetWagerPoolStateAsync(payload.RoomId, payload.Request.SlideId);
+                    }
+
+                    BombDefusalStateDto? bombDefusal = null;
+                    if (theme == "DEFUSE_BOMB")
+                    {
+                        bombDefusal = await roomService.GetBombDefusalStateAsync(payload.RoomId, payload.Request.SlideId);
+                    }
+
+                    WordHunterStateDto? wordHunter = null;
+                    if (theme == "WORD_HUNTER")
+                    {
+                        wordHunter = await roomService.GetWordHunterStateAsync(payload.RoomId, payload.Request.SlideId);
+                    }
+
+                    BridgeBuilderStateDto? bridgeBuilder = null;
+                    if (theme == "BRIDGE_BUILDER")
+                    {
+                        bridgeBuilder = await roomService.GetBridgeBuilderStateAsync(payload.RoomId, payload.Request.SlideId);
+                    }
+
+                    CircuitConnectStateDto? circuitConnect = null;
+                    if (theme == "CIRCUIT_CONNECT")
+                    {
+                        circuitConnect = await roomService.GetCircuitConnectStateAsync(payload.RoomId, payload.Request.SlideId);
+                    }
+
+                    await _hubContext.Clients.Group(payload.GroupName).SendAsync("AnswerCountUpdated", new
+                    {
+                        SlideId = payload.Request.SlideId,
+                        AnsweredCount = distribution.TotalAnswers,
+                        TotalPlayers = distribution.TotalPlayers,
+                        Distribution = distribution,
+                        BattleRoyale = survival,
+                        WagerPool = wagerPool,
+                        BombDefusal = bombDefusal,
+                        WordHunter = wordHunter,
+                        BridgeBuilder = bridgeBuilder,
+                        CircuitConnect = circuitConnect
+                    }, cancellationToken: stoppingToken);
+
+                    if (survival != null)
+                    {
+                        await _hubContext.Clients.Group(payload.GroupName).SendAsync("SurvivalStatusUpdated", survival, cancellationToken: stoppingToken);
+                    }
+
+                    if (wagerPool != null)
+                    {
+                        await _hubContext.Clients.Group(payload.GroupName).SendAsync("WagerPoolUpdated", wagerPool, cancellationToken: stoppingToken);
+                    }
+
+                    if (bombDefusal != null)
+                    {
+                        await _hubContext.Clients.Group(payload.GroupName).SendAsync("BombDefusalUpdated", bombDefusal, cancellationToken: stoppingToken);
+                    }
+
+                    if (wordHunter != null)
+                    {
+                        await _hubContext.Clients.Group(payload.GroupName).SendAsync("WordHunterUpdated", wordHunter, cancellationToken: stoppingToken);
+                    }
+
+                    if (bridgeBuilder != null)
+                    {
+                        await _hubContext.Clients.Group(payload.GroupName).SendAsync("BridgeBuilderUpdated", bridgeBuilder, cancellationToken: stoppingToken);
+                    }
+
+                    if (circuitConnect != null)
+                    {
+                        await _hubContext.Clients.Group(payload.GroupName).SendAsync("CircuitConnectUpdated", circuitConnect, cancellationToken: stoppingToken);
+                    }
                 }
             }
             catch (Exception ex)

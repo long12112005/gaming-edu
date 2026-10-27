@@ -11,8 +11,13 @@ namespace GamingEdu.API.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly IAuthService _auth;
+    private readonly IConfiguration _config;
 
-    public AuthController(IAuthService auth) => _auth = auth;
+    public AuthController(IAuthService auth, IConfiguration config)
+    {
+        _auth = auth;
+        _config = config;
+    }
 
     [HttpPost("send-register-otp")]
     [EnableRateLimiting("OtpRateLimit")]
@@ -20,8 +25,12 @@ public class AuthController : ControllerBase
     {
         try
         {
-            await _auth.SendRegisterOtpAsync(request);
-            return Ok(new ApiResponse<string>(true, "Đã gửi mã OTP đăng ký.", null));
+            var otp = await _auth.SendRegisterOtpAsync(request);
+            var isMock = string.IsNullOrEmpty(_config["Smtp:User"]) || _config["Smtp:User"]?.Contains("YOUR_GMAIL") == true;
+            var message = isMock 
+                ? $"[DEV] Mã OTP là {otp} (Chưa cấu hình Gmail SMTP thực tế)" 
+                : "Đã gửi mã OTP đăng ký tới email của bạn.";
+            return Ok(new ApiResponse<string>(true, message, isMock ? otp : null));
         }
         catch (InvalidOperationException ex)
         {
@@ -61,8 +70,12 @@ public class AuthController : ControllerBase
     [EnableRateLimiting("OtpRateLimit")]
     public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request)
     {
-        await _auth.SendForgotPasswordOtpAsync(request);
-        return Ok(new ApiResponse<string>(true, "Nếu email tồn tại, OTP sẽ được gửi.", null));
+        var otp = await _auth.SendForgotPasswordOtpAsync(request);
+        var isMock = string.IsNullOrEmpty(_config["Smtp:User"]) || _config["Smtp:User"]?.Contains("YOUR_GMAIL") == true;
+        var message = isMock && otp != null
+            ? $"[DEV] Mã OTP là {otp} (Chưa cấu hình Gmail SMTP thực tế)"
+            : "Nếu email tồn tại, OTP sẽ được gửi.";
+        return Ok(new ApiResponse<string>(true, message, isMock ? otp : null));
     }
 
     [HttpPost("reset-password")]

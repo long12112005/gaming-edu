@@ -23,6 +23,7 @@ import {
   TrendingUp,
   TrendingDown,
   HelpCircle,
+  AlertTriangle,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAuthStore } from "@/store/useAuthStore";
@@ -38,6 +39,8 @@ export interface HostedRoomReport {
   playerCount: number;
   status: string;
   createdAt: string;
+  endTime?: string;
+  isEarlyFinished?: boolean;
 }
 
 export interface PlayedRoomReport {
@@ -97,7 +100,32 @@ export default function ReportsPage() {
   const [selectedRoomReport, setSelectedRoomReport] = useState<RoomDetailReport | null>(null);
   const [loadingDetailId, setLoadingDetailId] = useState<string | null>(null);
   const [modalTab, setModalTab] = useState<"players" | "questions">("players");
+  const [finishingRoomId, setFinishingRoomId] = useState<string | null>(null);
   const [toastMsg, setToastMsg] = useState<{ text: string; type: "success" | "error" } | null>(null);
+
+  const normalizeHosted = (list: any[]): HostedRoomReport[] =>
+    (list || []).map((r) => ({
+      id: r.id || r.roomId || "",
+      pinCode: r.pinCode || "",
+      quizTitle: r.quizTitle || "Bộ đề không tên",
+      mode: r.mode || "HOST_PACED",
+      playerCount: r.playerCount ?? 0,
+      status: r.status || "FINISHED",
+      createdAt: r.createdAt || r.created_at || new Date().toISOString(),
+      endTime: r.endTime || r.end_time,
+      isEarlyFinished: Boolean(r.isEarlyFinished || r.is_early_finished),
+    }));
+
+  const normalizePlayed = (list: any[]): PlayedRoomReport[] =>
+    (list || []).map((g) => ({
+      id: g.id || g.roomId || "",
+      pinCode: g.pinCode || "",
+      quizTitle: g.quizTitle || "Bộ đề không tên",
+      hostNickname: g.hostNickname || g.host_nickname || "Chủ phòng",
+      rank: g.rank ?? 1,
+      score: g.score ?? g.totalScore ?? g.total_score ?? 0,
+      createdAt: g.createdAt || g.playedAt || g.played_at || g.created_at || new Date().toISOString(),
+    }));
 
   const fetchReports = useCallback(async () => {
     try {
@@ -112,58 +140,26 @@ export default function ReportsPage() {
       let hasPlayedData = false;
 
       if (resHosted.status === "fulfilled" && resHosted.value.data?.success) {
-        setHostedRooms(resHosted.value.data.data || []);
+        setHostedRooms(normalizeHosted(resHosted.value.data.data));
         hasHostedData = true;
       }
 
       if (resPlayed.status === "fulfilled" && resPlayed.value.data?.success) {
-        setPlayedRooms(resPlayed.value.data.data || []);
+        setPlayedRooms(normalizePlayed(resPlayed.value.data.data));
         hasPlayedData = true;
       }
 
-      // Fallback graceful nếu Backend chưa bổ sung 2 route danh sách lịch sử này
+      // Fallback graceful nếu chưa có dữ liệu từ 2 route riêng
       if (!hasHostedData && !hasPlayedData) {
-        // Cố gắng query /rooms nếu có
         try {
           const resGeneric = await api.get("/rooms/history");
           if (resGeneric.data?.success) {
-            setHostedRooms(resGeneric.data.data?.hosted || []);
-            setPlayedRooms(resGeneric.data.data?.played || []);
+            setHostedRooms(normalizeHosted(resGeneric.data.data?.hosted));
+            setPlayedRooms(normalizePlayed(resGeneric.data.data?.played));
           }
         } catch {
-          // Mock data mẫu phong phú để Host kiểm tra chức năng Tải Excel và hiển thị
-          setHostedRooms([
-            {
-              id: "33333333-4444-5555-6666-777777777777",
-              pinCode: "987654",
-              quizTitle: "Kiểm tra Lịch Sử 12 – Ôn Thi THPT Quốc Gia",
-              mode: "HOST_PACED",
-              playerCount: 38,
-              status: "FINISHED",
-              createdAt: new Date(Date.now() - 3600000 * 5).toISOString(),
-            },
-            {
-              id: "44444444-5555-6666-7777-888888888888",
-              pinCode: "654321",
-              quizTitle: "Đố Vui Toán Học Nhanh Như Chớp",
-              mode: "PLAYER_PACED",
-              playerCount: 24,
-              status: "FINISHED",
-              createdAt: new Date(Date.now() - 86400000 * 2).toISOString(),
-            },
-          ]);
-
-          setPlayedRooms([
-            {
-              id: "55555555-6666-7777-8888-999999999999",
-              pinCode: "112233",
-              quizTitle: "Thử Thách Từ Vựng Tiếng Anh IELTS",
-              hostNickname: "Teacher Sarah",
-              rank: 2,
-              score: 9500,
-              createdAt: new Date(Date.now() - 86400000).toISOString(),
-            },
-          ]);
+          setHostedRooms([]);
+          setPlayedRooms([]);
         }
       }
     } catch (err: unknown) {
@@ -228,58 +224,64 @@ export default function ReportsPage() {
     }
   };
 
-  return (
-    <div className="min-h-screen text-[#1B2A2E] font-serif flex flex-col relative">
-      {/* Background tiên phong cảnh đồng bộ */}
-      <div
-        className="fixed inset-0 z-0"
-        style={{
-          backgroundImage: "url('/bg-sunrise-peak.jpg')",
-          backgroundSize: "cover",
-          backgroundPosition: "center top",
-        }}
-      />
-      <div className="fixed inset-0 z-0 bg-[#f8f4eb]/60 backdrop-blur-[2px]" />
+  const handleFinishRoomEarly = async (roomId: string, title: string) => {
+    if (!confirm(`Bạn có chắc chắn muốn kết thúc sớm phòng "${title}"? Thí sinh sẽ không thể tiếp tục nộp bài mới.`)) {
+      return;
+    }
+    try {
+      setFinishingRoomId(roomId);
+      await api.post(`/rooms/${roomId}/finish`);
+      setToastMsg({ text: `Đã kết thúc phòng "${title}" thành công!`, type: "success" });
+      await fetchReports();
+    } catch (err: any) {
+      setToastMsg({ text: err.response?.data?.message || "Không thể kết thúc phòng. Vui lòng thử lại.", type: "error" });
+    } finally {
+      setFinishingRoomId(null);
+      setTimeout(() => setToastMsg(null), 3500);
+    }
+  };
 
+  return (
+    <div className="min-h-screen bg-[#F8FAFC] text-[#0F172A] flex flex-col font-sans">
       <SiteHeader />
 
-      <main className="flex-1 pt-24 pb-16 px-4 md:px-8 max-w-5xl mx-auto w-full space-y-8 relative z-10 font-sans">
+      <main className="flex-1 pt-24 pb-16 px-4 md:px-8 max-w-6xl mx-auto w-full space-y-8">
         {/* Header Section */}
-        <div className="bg-white/70 backdrop-blur-xl p-8 md:p-10 rounded-[32px] border border-white/90 shadow-[0_16px_40px_rgba(8,38,42,0.1)] flex items-center justify-between">
+        <div className="bg-white border border-[#E2E8F0] p-6 md:p-8 rounded-[24px] shadow-sm flex items-center justify-between">
           <div>
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-400/40 text-amber-900 text-xs font-bold uppercase tracking-wider mb-2">
-              <BarChart3 size={14} className="text-amber-600" /> Báo Cáo Học Tập & Thi Đấu
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-600 text-xs font-bold uppercase tracking-wider mb-2 font-heading">
+              <BarChart3 size={14} className="text-indigo-600" /> Báo Cáo Học Tập & Thi Đấu
             </div>
-            <h1 className="text-3xl md:text-5xl font-bold font-serif text-[#08282e] tracking-tight drop-shadow-sm">
-              Lịch Sử Phòng Chơi & Báo Cáo 📊
+            <h1 className="text-3xl md:text-4xl font-extrabold text-[#0F172A] tracking-tight font-heading">
+              Lịch Sử Phòng Chơi & Báo Cáo
             </h1>
-            <p className="text-teal-800/80 mt-2 text-sm md:text-base max-w-xl">
+            <p className="text-slate-500 mt-2 text-sm md:text-base max-w-xl">
               Theo dõi kết quả thi đấu, thứ hạng thí sinh và xuất báo cáo kết quả chi tiết dưới định dạng Excel (.xlsx).
             </p>
           </div>
-          <div className="w-16 h-16 md:w-20 md:h-20 bg-gradient-to-br from-amber-400 to-teal-600 rounded-2xl shadow-lg flex items-center justify-center transform -rotate-3 hover:rotate-0 hover:scale-105 transition-all shrink-0">
-            <BarChart3 size={36} className="text-white" />
+          <div className="w-16 h-16 rounded-[18px] bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shadow-sm shrink-0">
+            <BarChart3 size={32} />
           </div>
         </div>
 
         {/* Toast thông báo */}
         {toastMsg && (
           <div
-            className={`p-4 rounded-2xl border text-sm font-semibold flex items-center justify-between animate-in fade-in ${
+            className={`p-4 rounded-[14px] border text-sm font-semibold flex items-center justify-between shadow-sm animate-in fade-in ${
               toastMsg.type === "success"
-                ? "bg-emerald-500/20 border-emerald-400/50 text-emerald-950"
-                : "bg-rose-500/20 border-rose-400/50 text-rose-950"
+                ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                : "bg-rose-50 border-rose-200 text-rose-800"
             }`}
           >
             <div className="flex items-center gap-2">
               {toastMsg.type === "success" ? (
-                <CheckCircle2 size={18} className="text-emerald-700" />
+                <CheckCircle2 size={18} className="text-emerald-600" />
               ) : (
-                <AlertCircle size={18} className="text-rose-700" />
+                <AlertCircle size={18} className="text-rose-600" />
               )}
               <span>{toastMsg.text}</span>
             </div>
-            <button onClick={() => setToastMsg(null)} className="text-gray-600 hover:text-black">
+            <button onClick={() => setToastMsg(null)} className="text-slate-400 hover:text-slate-600 text-xs">
               ✕
             </button>
           </div>
@@ -287,23 +289,23 @@ export default function ReportsPage() {
 
         {/* Tab Selection */}
         <div className="flex items-center justify-between flex-wrap gap-4">
-          <div className="flex gap-2 p-1.5 bg-white/60 backdrop-blur-md rounded-2xl border border-white/80 shadow-sm">
+          <div className="flex gap-2 p-1 bg-slate-100 rounded-[14px]">
             <button
               onClick={() => setActiveTab("hosted")}
-              className={`px-6 py-2.5 rounded-xl font-bold text-sm md:text-base transition-all ${
+              className={`px-5 py-2 rounded-[10px] font-bold text-sm transition-all ${
                 activeTab === "hosted"
-                  ? "bg-gradient-to-r from-emerald-600 to-teal-700 text-white shadow-md"
-                  : "text-teal-800/70 hover:text-teal-950 hover:bg-white/40"
+                  ? "bg-white text-indigo-600 shadow-sm"
+                  : "text-slate-600 hover:text-slate-900"
               }`}
             >
               Phòng Đã Tổ Chức ({hostedRooms.length})
             </button>
             <button
               onClick={() => setActiveTab("played")}
-              className={`px-6 py-2.5 rounded-xl font-bold text-sm md:text-base transition-all ${
+              className={`px-5 py-2 rounded-[10px] font-bold text-sm transition-all ${
                 activeTab === "played"
-                  ? "bg-gradient-to-r from-amber-400 to-amber-600 text-amber-950 shadow-md"
-                  : "text-teal-800/70 hover:text-teal-950 hover:bg-white/40"
+                  ? "bg-white text-indigo-600 shadow-sm"
+                  : "text-slate-600 hover:text-slate-900"
               }`}
             >
               Phòng Đã Tham Gia ({playedRooms.length})
@@ -338,10 +340,10 @@ export default function ReportsPage() {
                   <div className="w-20 h-20 bg-emerald-500/15 rounded-3xl flex items-center justify-center mx-auto mb-4 border border-emerald-400/30">
                     <Play size={36} className="text-emerald-700 ml-1" />
                   </div>
-                  <h3 className="text-xl font-bold font-serif text-[#08282e] mb-2">
+                  <h3 className="text-xl font-bold font-heading text-slate-900 mb-2">
                     Chưa có phòng thi nào được tổ chức
                   </h3>
-                  <p className="text-sm text-teal-800/70 max-w-md mx-auto mb-6">
+                  <p className="text-sm text-slate-500 max-w-md mx-auto mb-6 font-medium">
                     Khi bạn mở phòng thi cho người học, báo cáo điểm số và bảng xếp hạng chi tiết sẽ được tự động lưu trữ và cho phép xuất file Excel tại đây.
                   </p>
                   <Link
@@ -366,31 +368,68 @@ export default function ReportsPage() {
                           <span className="px-2.5 py-0.5 bg-teal-100 text-teal-900 border border-teal-200 rounded-md font-mono text-xs font-bold">
                             PIN: {room.pinCode}
                           </span>
-                          <span className="px-2.5 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-md text-xs font-bold">
-                            {room.status === "FINISHED" ? "Đã kết thúc" : "Đang diễn ra"}
-                          </span>
+                          {room.mode === "ASYNC_TOURNAMENT" ? (
+                            <span className="px-2.5 py-0.5 bg-amber-50 text-amber-900 border border-amber-300 rounded-md text-xs font-black">
+                              ⚡ Phòng Giải Đấu (Async)
+                            </span>
+                          ) : (
+                            <span className="px-2.5 py-0.5 bg-slate-50 text-slate-700 border border-slate-200 rounded-md text-xs font-bold">
+                              🎮 Phòng Thường
+                            </span>
+                          )}
+                          {room.status === "FINISHED" ? (
+                            <span className="px-2.5 py-0.5 bg-rose-50 text-rose-800 border border-rose-200 rounded-md text-xs font-bold">
+                              🏁 Đã kết thúc {room.isEarlyFinished ? "(Sớm)" : ""}
+                            </span>
+                          ) : room.mode === "ASYNC_TOURNAMENT" ? (
+                            <span className="px-2.5 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-300 rounded-md text-xs font-bold flex items-center gap-1">
+                              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                              Đang mở 24/7
+                            </span>
+                          ) : (
+                            <span className="px-2.5 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-md text-xs font-bold">
+                              Đang diễn ra
+                            </span>
+                          )}
                         </div>
-                        <h3 className="text-lg md:text-xl font-bold font-serif text-[#08282e] group-hover:text-teal-800 transition-colors">
+                        <h3 className="text-lg md:text-xl font-bold font-heading text-slate-900 group-hover:text-indigo-600 transition-colors">
                           {room.quizTitle}
                         </h3>
-                        <div className="flex items-center gap-4 mt-1.5 text-xs text-teal-800/70 font-semibold">
+                        <div className="flex items-center gap-4 mt-1.5 text-xs text-teal-800/70 font-semibold flex-wrap">
                           <span className="flex items-center gap-1">
-                            <Clock size={14} /> {new Date(room.createdAt).toLocaleDateString("vi-VN")}
+                            <Clock size={14} /> Tạo: {new Date(room.createdAt).toLocaleDateString("vi-VN")}
                           </span>
+                          {room.endTime && (
+                            <span className="flex items-center gap-1 text-amber-800 font-bold">
+                              <Clock size={14} /> Hạn: {new Date(room.endTime).toLocaleDateString("vi-VN")}
+                            </span>
+                          )}
                           <span className="flex items-center gap-1">
                             <Users size={14} /> {room.playerCount} thí sinh tham gia
                           </span>
-                          <span className="hidden sm:inline-block">Chế độ: {room.mode}</span>
                         </div>
                       </div>
                     </div>
 
                     {/* CÁC NÚT THAO TÁC BÁO CÁO */}
                     <div className="flex items-center gap-2.5 w-full md:w-auto justify-end pt-3 md:pt-0 border-t md:border-t-0 border-teal-100 flex-wrap">
+                      {room.status !== "FINISHED" && (
+                        <button
+                          type="button"
+                          onClick={() => handleFinishRoomEarly(room.id, room.quizTitle)}
+                          disabled={finishingRoomId === room.id}
+                          className="px-3.5 py-2.5 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 font-bold text-xs md:text-sm rounded-xl transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                          title="Kết thúc phòng giải đấu sớm và chốt bảng điểm"
+                        >
+                          <AlertTriangle size={15} />
+                          <span>{finishingRoomId === room.id ? "Đang kết thúc..." : "Kết Thúc Sớm"}</span>
+                        </button>
+                      )}
+
                       <button
                         onClick={() => handleViewDetailReport(room.id)}
                         disabled={loadingDetailId === room.id}
-                        className="px-4 py-2.5 bg-white hover:bg-teal-50 border border-teal-300/80 text-teal-800 font-bold text-xs md:text-sm rounded-xl shadow-sm transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-1.5"
+                        className="px-4 py-2.5 bg-white hover:bg-teal-50 border border-teal-300/80 text-teal-800 font-bold text-xs md:text-sm rounded-xl shadow-xs transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-1.5"
                         title="Xem bảng điểm và phân tích câu hỏi trực tiếp trên màn hình"
                       >
                         {loadingDetailId === room.id ? (
@@ -405,6 +444,15 @@ export default function ReportsPage() {
                           </>
                         )}
                       </button>
+
+                      <Link
+                        href={`/reports/${room.id}`}
+                        className="px-4 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs md:text-sm rounded-xl shadow-xs transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-1.5"
+                        title="Xem bảng xếp hạng, số câu học sinh đã làm và tiến độ"
+                      >
+                        <Eye size={16} className="text-indigo-600" />
+                        <span>Xem Chi Tiết</span>
+                      </Link>
 
                       <button
                         onClick={() => handleDownloadExcel(room.id, room.quizTitle)}
@@ -436,10 +484,10 @@ export default function ReportsPage() {
                   <div className="w-20 h-20 bg-amber-500/15 rounded-3xl flex items-center justify-center mx-auto mb-4 border border-amber-400/30">
                     <Trophy size={36} className="text-amber-600" />
                   </div>
-                  <h3 className="text-xl font-bold font-serif text-[#08282e] mb-2">
+                  <h3 className="text-xl font-bold font-heading text-slate-900 mb-2">
                     Chưa có lịch sử tham gia bài thi
                   </h3>
-                  <p className="text-sm text-teal-800/70 max-w-md mx-auto mb-6">
+                  <p className="text-sm text-slate-500 max-w-md mx-auto mb-6 font-medium">
                     Bạn chưa tham gia phòng thi đấu nào. Nhập mã PIN hoặc tham gia nhóm học tập để bắt đầu thử thách kiến thức của mình!
                   </p>
                   <div className="flex items-center justify-center gap-3">
@@ -452,9 +500,9 @@ export default function ReportsPage() {
                   </div>
                 </div>
               ) : (
-                playedRooms.map((game) => (
+                playedRooms.map((game, idx) => (
                   <div
-                    key={game.id}
+                    key={game.id || `played-${idx}`}
                     className="bg-white/70 backdrop-blur-xl p-6 rounded-[24px] border border-white/90 hover:border-amber-400/60 hover:-translate-y-0.5 transition-all duration-300 flex flex-col md:flex-row items-start md:items-center justify-between gap-5 shadow-sm group"
                   >
                     <div className="flex items-center gap-5">
@@ -464,13 +512,13 @@ export default function ReportsPage() {
                       <div>
                         <div className="flex items-center gap-2 mb-1">
                           <span className="px-2.5 py-0.5 bg-amber-100 text-amber-950 rounded-md font-mono text-xs font-bold">
-                            Mã phòng: {game.pinCode}
+                            Mã phòng: {game.pinCode || "Chung"}
                           </span>
                         </div>
-                        <h3 className="text-lg md:text-xl font-bold font-serif text-[#08282e]">{game.quizTitle}</h3>
+                        <h3 className="text-lg md:text-xl font-bold font-heading text-slate-900">{game.quizTitle}</h3>
                         <div className="flex items-center gap-4 mt-1.5 text-xs text-teal-800/70 font-semibold">
                           <span className="flex items-center gap-1">
-                            <Clock size={14} /> {new Date(game.createdAt).toLocaleDateString("vi-VN")}
+                            <Clock size={14} /> {new Date(game.createdAt || Date.now()).toLocaleDateString("vi-VN")}
                           </span>
                           <span className="flex items-center gap-1">
                             <Users size={14} /> Chủ phòng: {game.hostNickname}
@@ -481,7 +529,7 @@ export default function ReportsPage() {
 
                     <div className="flex items-center gap-3">
                       <span className="px-4 py-2 bg-gradient-to-r from-amber-400/20 to-amber-500/30 text-amber-950 rounded-2xl border border-amber-400/40 font-black text-sm">
-                        Hạng {game.rank} &bull; {game.score.toLocaleString()} điểm
+                        Hạng {game.rank} &bull; {(game.score ?? 0).toLocaleString()} điểm
                       </span>
                     </div>
                   </div>

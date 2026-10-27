@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Text.Json.Serialization;
 
 namespace GamingEdu.API.Models;
 
@@ -22,6 +23,9 @@ public class User
 
     [MaxLength(500)]
     public string? AvatarUrl { get; set; }
+
+    [MaxLength(100)]
+    public string? AvatarFrame { get; set; } = "default";
 
     public bool IsAdmin { get; set; } = false; // maps to BIT
 
@@ -262,6 +266,12 @@ public class Room
 
     public int CurrentSlideIndex { get; set; } = 0;
 
+    public int MapSize { get; set; } = 15;
+    public string? GameSettings { get; set; } // JSON configuration: radar, shield, combo mode, etc.
+    public bool IsEarlyFinished { get; set; } = false; // Ghi nhận chủ phòng kết thúc sớm
+    [MaxLength(10)]
+    public string? WinnerTeam { get; set; } // 'TEAM_A' | 'TEAM_B' | 'DRAW'
+
     public DateTime? StartTime { get; set; }
     public DateTime? EndTime { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
@@ -275,6 +285,9 @@ public class Room
 
     public ICollection<RoomPlayer> Players { get; set; } = [];
     public ICollection<QuestionQA> Questions { get; set; } = [];
+    public ICollection<NavalTeam> NavalTeams { get; set; } = [];
+    public ICollection<NavalShip> NavalShips { get; set; } = [];
+    public ICollection<NavalAction> NavalActions { get; set; } = [];
 }
 
 // ============================================================
@@ -297,6 +310,18 @@ public class RoomPlayer
     public int TotalScore { get; set; } = 0;
     public int? Rank { get; set; }
 
+    [MaxLength(10)]
+    public string? TeamSide { get; set; } // 'TEAM_A' | 'TEAM_B'
+
+    public int CurrentCombo { get; set; } = 0;
+    public int MaxCombo { get; set; } = 0;
+    public int EnergyPoints { get; set; } = 0;
+    public int ShotsEarned { get; set; } = 0;
+    public int ValidShotsCount { get; set; } = 0;
+    public int HitsCount { get; set; } = 0;
+    public int ShipsSunkContribution { get; set; } = 0;
+    public int SkillsUsedCount { get; set; } = 0;
+
     public DateTime JoinedAt { get; set; } = DateTime.UtcNow;
 
     // Navigation
@@ -308,6 +333,7 @@ public class RoomPlayer
 
     public ICollection<PlayerResponse> Responses { get; set; } = [];
     public ICollection<QuestionQA> Questions { get; set; } = [];
+    public ICollection<NavalAction> NavalActions { get; set; } = [];
 }
 
 // ============================================================
@@ -364,3 +390,108 @@ public class QuestionQA
     [ForeignKey(nameof(PlayerId))]
     public RoomPlayer Player { get; set; } = null!;
 }
+
+// ============================================================
+// maps to: naval_teams table
+// ============================================================
+public class NavalTeam
+{
+    [Key]
+    public Guid Id { get; set; } = Guid.NewGuid();
+
+    public Guid RoomId { get; set; }
+
+    [Required, MaxLength(10)]
+    public string TeamSide { get; set; } = string.Empty; // 'TEAM_A' | 'TEAM_B'
+
+    public int RadarRemaining { get; set; } = 2;
+    public int ShieldRemaining { get; set; } = 2;
+    public int PrecisionShotRemaining { get; set; } = 1;
+    public int TeamCombo { get; set; } = 0;
+    public int ShipsRemaining { get; set; } = 5;
+
+    // Navigation
+    [ForeignKey(nameof(RoomId))]
+    public Room Room { get; set; } = null!;
+}
+
+// ============================================================
+// maps to: naval_ships table
+// ============================================================
+public class NavalShip
+{
+    [Key]
+    public Guid Id { get; set; } = Guid.NewGuid();
+
+    public Guid RoomId { get; set; }
+
+    [Required, MaxLength(10)]
+    public string TeamSide { get; set; } = string.Empty; // 'TEAM_A' | 'TEAM_B'
+
+    public int ShipType { get; set; } // Kích thước tàu: 1, 2, 3, 4, 5
+
+    [Required]
+    public string Coordinates { get; set; } = "[]"; // JSON array: [{"r":1,"c":2,"hit":false,"shielded":false}, ...]
+
+    public bool IsSunk { get; set; } = false;
+
+    // Navigation
+    [ForeignKey(nameof(RoomId))]
+    public Room Room { get; set; } = null!;
+}
+
+// ============================================================
+// maps to: naval_actions table
+// ============================================================
+public class NavalAction
+{
+    [Key]
+    public Guid Id { get; set; } = Guid.NewGuid();
+
+    public Guid RoomId { get; set; }
+    public Guid PlayerId { get; set; }
+
+    [Required, MaxLength(10)]
+    public string AttackerTeam { get; set; } = string.Empty; // 'TEAM_A' | 'TEAM_B'
+
+    [Required, MaxLength(10)]
+    public string TargetTeam { get; set; } = string.Empty; // 'TEAM_A' | 'TEAM_B'
+
+    [Required, MaxLength(30)]
+    public string ActionType { get; set; } = "NORMAL_SHOT"; // 'NORMAL_SHOT' | 'PRECISION_SHOT' | 'RADAR_SCAN' | 'SHIELD_ACTIVATE'
+
+    public int TargetRow { get; set; }
+    public int TargetCol { get; set; }
+
+    [Required, MaxLength(30)]
+    public string Result { get; set; } = string.Empty; // 'MISS' | 'HIT' | 'SUNK' | 'BLOCKED_BY_SHIELD' | 'RADAR_DETECTED' | 'RADAR_EMPTY'
+
+    public int? SunkShipType { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    // Navigation
+    [ForeignKey(nameof(RoomId))]
+    public Room Room { get; set; } = null!;
+
+    [ForeignKey(nameof(PlayerId))]
+    public RoomPlayer Player { get; set; } = null!;
+}
+
+/// <summary>
+/// Helper class representing a single cell of a naval ship.
+/// </summary>
+public class ShipCoordinate
+{
+    [JsonPropertyName("r")]
+    public int R { get; set; }
+
+    [JsonPropertyName("c")]
+    public int C { get; set; }
+
+    [JsonPropertyName("hit")]
+    public bool Hit { get; set; } = false;
+
+    [JsonPropertyName("shielded")]
+    public bool Shielded { get; set; } = false;
+}
+

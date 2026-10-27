@@ -208,6 +208,52 @@ public class QuizService : IQuizService
         if (request.Topic != null) quiz.Topic = request.Topic;
         if (request.IsPublic.HasValue) quiz.IsPublic = request.IsPublic.Value;
 
+        if (request.Slides != null)
+        {
+            var existingSlides = await _db.Slides
+                .Include(s => s.Options)
+                .Where(s => s.QuizId == quizId)
+                .ToListAsync();
+            _db.Slides.RemoveRange(existingSlides);
+
+            int orderIdx = 0;
+            foreach (var req in request.Slides)
+            {
+                var slide = new Slide
+                {
+                    Id            = Guid.NewGuid(),
+                    QuizId        = quiz.Id,
+                    Type          = req.Type,
+                    QuestionText  = req.QuestionText?.Trim() ?? "",
+                    TimeLimit     = req.TimeLimit > 0 ? req.TimeLimit : 30,
+                    Points        = req.Points > 0 ? req.Points : 1000,
+                    Status        = req.Status ?? "PUBLISHED",
+                    OrderIndex    = req.OrderIndex ?? orderIdx++,
+                    IsAIGenerated = req.IsAIGenerated,
+                    CreatedAt     = DateTime.UtcNow,
+                };
+
+                if (req.Options != null)
+                {
+                    int optIdx = 0;
+                    foreach (var opt in req.Options)
+                    {
+                        slide.Options.Add(new SlideOption
+                        {
+                            Id            = Guid.NewGuid(),
+                            SlideId       = slide.Id,
+                            Content       = opt.Content?.Trim() ?? "",
+                            IsCorrect     = opt.IsCorrect,
+                            MatchingPair  = opt.MatchingPair?.Trim(),
+                            BlankKeywords = opt.BlankKeywords?.Trim(),
+                            OrderIndex    = optIdx++
+                        });
+                    }
+                }
+                _db.Slides.Add(slide);
+            }
+        }
+
         quiz.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
 
@@ -225,7 +271,9 @@ public class QuizService : IQuizService
         var quiz = await _db.Quizzes.FindAsync(quizId)
             ?? throw new KeyNotFoundException("Không tìm thấy bộ đề.");
 
-        if (quiz.CreatorId != creatorId) throw new UnauthorizedAccessException("Bạn không có quyền xóa bộ đề này.");
+        var user = await _db.Users.FindAsync(creatorId);
+        bool isAdmin = user?.IsAdmin ?? false;
+        if (!isAdmin && quiz.CreatorId != creatorId) throw new UnauthorizedAccessException("Bạn không có quyền xóa bộ đề này.");
 
         quiz.IsDeleted = true;
         _db.Quizzes.Update(quiz);

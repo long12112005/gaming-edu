@@ -167,29 +167,62 @@ public class FuzzyMatchingService
     /// </param>
     /// <param name="overrideTolerance">Nếu null, dùng dung sai tự động theo độ dài.</param>
     /// <returns>
-    ///   (isFullyCorrect, scoreRatio, correctCount, totalBlanks)
-    /// </returns>
-    public (bool IsFullyCorrect, double ScoreRatio, int CorrectCount, int TotalBlanks)
-        GradeFillInBlank(
+    public record BlankGradingItem(
+        int Index,
+        bool IsCorrect,
+        string UserAnswer,
+        List<string> AcceptedKeywords,
+        string PrimaryKeyword,
+        string NormalizedKeyword
+    );
+
+    /// <summary>
+    /// Chấm điểm chi tiết từng blank cho câu hỏi FILL_IN_BLANK / DEFUSE_BOMB.
+    /// </summary>
+    public (bool IsFullyCorrect, double ScoreRatio, int CorrectCount, int TotalBlanks, List<BlankGradingItem> Details)
+        GradeFillInBlankDetailed(
             IList<string> userAnswers,
             IList<IList<string>> blankKeywordSets,
             int? overrideTolerance = null)
     {
         int totalBlanks  = blankKeywordSets.Count;
         int correctCount = 0;
+        var details = new List<BlankGradingItem>(totalBlanks);
 
         for (int i = 0; i < totalBlanks; i++)
         {
-            // Nếu người dùng không điền đủ → blank i sai
-            if (i >= userAnswers.Count) continue;
+            string userAns = i < userAnswers.Count ? (userAnswers[i] ?? string.Empty).Trim() : string.Empty;
+            var acceptedKws = blankKeywordSets[i].ToList();
+            string primaryKw = acceptedKws.FirstOrDefault() ?? string.Empty;
+            string normKw = Normalize(primaryKw);
 
-            bool blankCorrect = IsMatchAny(userAnswers[i], blankKeywordSets[i], overrideTolerance);
+            bool blankCorrect = !string.IsNullOrWhiteSpace(userAns) && IsMatchAny(userAns, acceptedKws, overrideTolerance);
             if (blankCorrect) correctCount++;
+
+            details.Add(new BlankGradingItem(
+                Index: i,
+                IsCorrect: blankCorrect,
+                UserAnswer: userAns,
+                AcceptedKeywords: acceptedKws,
+                PrimaryKeyword: primaryKw,
+                NormalizedKeyword: normKw
+            ));
         }
 
         double scoreRatio     = totalBlanks == 0 ? 0 : (double)correctCount / totalBlanks;
         bool   isFullyCorrect = correctCount == totalBlanks && totalBlanks > 0;
 
+        return (isFullyCorrect, scoreRatio, correctCount, totalBlanks, details);
+    }
+
+    public (bool IsFullyCorrect, double ScoreRatio, int CorrectCount, int TotalBlanks)
+        GradeFillInBlank(
+            IList<string> userAnswers,
+            IList<IList<string>> blankKeywordSets,
+            int? overrideTolerance = null)
+    {
+        var (isFullyCorrect, scoreRatio, correctCount, totalBlanks, _) =
+            GradeFillInBlankDetailed(userAnswers, blankKeywordSets, overrideTolerance);
         return (isFullyCorrect, scoreRatio, correctCount, totalBlanks);
     }
 
@@ -208,3 +241,4 @@ public class FuzzyMatchingService
             .ToList();
     }
 }
+

@@ -22,10 +22,12 @@ import {
   MoreVertical,
   Layers,
   Sparkles,
+  Gamepad2,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAuthStore } from "@/store/useAuthStore";
 import SiteHeader from "@/components/layout/SiteHeader";
+import CreateRoomModal from "@/components/modals/CreateRoomModal";
 
 export interface QuizItem {
   id: string;
@@ -151,25 +153,17 @@ export default function MyQuizzesPage() {
     }
   };
 
-  // Mở phòng thi ngay
-  const handleCreateRoom = async (quiz: QuizItem) => {
-    try {
-      setActionLoadingId(quiz.id);
-      const res = await api.post("/rooms", {
-        quizId: quiz.id,
-        mode: "HOST_PACED",
-      });
-      if (res.data?.success) {
-        router.push(`/host/${res.data.data.id}`);
-      }
-    } catch (err: unknown) {
-      const errorObj = err as { response?: { data?: { message?: string } } };
-      setToastMsg({
-        text: errorObj.response?.data?.message || "Tạo phòng thi đấu thất bại.",
-        type: "error",
-      });
-      setActionLoadingId(null);
-    }
+  const [createRoomModal, setCreateRoomModal] = useState<{
+    isOpen: boolean;
+    quizId?: string;
+  }>({ isOpen: false });
+
+  // Mở modal tạo phòng thi với đề được chọn
+  const handleCreateRoom = (quiz?: QuizItem) => {
+    setCreateRoomModal({
+      isOpen: true,
+      quizId: quiz?.id,
+    });
   };
 
   // Xóa bộ đề (xóa mềm)
@@ -191,42 +185,41 @@ export default function MyQuizzesPage() {
   };
 
   return (
-    <div className="min-h-screen text-[#1B2A2E] font-serif flex flex-col relative">
-      {/* Background Tiên môn huyền ảo */}
-      <div
-        className="fixed inset-0 z-0"
-        style={{
-          backgroundImage: "url('/bg-misty-white.jpg')",
-          backgroundSize: "cover",
-          backgroundPosition: "center top",
-        }}
-      />
-      <div className="fixed inset-0 z-0 bg-[#f4f9f7]/70 backdrop-blur-[2px]" />
-
+    <div className="min-h-screen bg-[#F8FAFC] text-[#0F172A] flex flex-col font-sans">
       <SiteHeader />
 
-      <main className="flex-1 pt-24 pb-16 px-4 md:px-8 max-w-6xl mx-auto w-full relative z-10 space-y-8 font-sans">
+      <main className="flex-1 pt-24 pb-16 px-4 md:px-8 max-w-7xl mx-auto w-full space-y-8">
         {/* Header Section */}
-        <div className="bg-white/70 backdrop-blur-xl border border-white/90 rounded-[32px] p-6 md:p-8 shadow-[0_16px_40px_rgba(8,38,42,0.1)] flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+        <div className="bg-white border border-[#E2E8F0] rounded-[24px] p-6 md:p-8 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
           <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/15 border border-cyan-400/30 text-xs font-bold text-teal-900 uppercase tracking-wider mb-2">
-              <BookOpen size={14} className="text-teal-700" /> Thư Viện Đề Thi
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 border border-indigo-200 text-xs font-bold text-indigo-600 uppercase tracking-wider mb-2 font-heading">
+              <BookOpen size={14} className="text-indigo-600" /> Thư Viện Đề Thi
             </div>
-            <h1 className="text-3xl md:text-4xl font-bold font-serif text-[#08282e] tracking-tight">
+            <h1 className="text-3xl md:text-4xl font-extrabold text-[#0F172A] font-heading tracking-tight">
               Kho Bộ Đề Của Bạn
             </h1>
-            <p className="text-teal-800/80 text-sm md:text-base mt-1 max-w-xl">
+            <p className="text-slate-500 text-sm md:text-base mt-1 max-w-xl">
               Quản lý toàn bộ câu hỏi và bộ đề trắc nghiệm, điền khuyết, ghép nối. Sẵn sàng mở phòng thi đấu mọi lúc.
             </p>
           </div>
 
-          <Link
-            href="/quiz/create"
-            className="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-amber-400 via-amber-300 to-yellow-400 hover:from-amber-300 hover:to-amber-400 text-teal-950 font-black text-sm shadow-[0_6px_20px_rgba(251,191,36,0.35)] transition-all hover:scale-105 active:scale-95 flex items-center gap-2 shrink-0"
-          >
-            <Plus size={18} className="stroke-[3px]" />
-            <span>Tạo Bộ Đề Mới</span>
-          </Link>
+          <div className="flex items-center gap-3 shrink-0">
+            <button
+              type="button"
+              onClick={() => handleCreateRoom()}
+              className="px-5 py-3 rounded-[12px] bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm shadow-sm transition-all hover:scale-105 active:scale-95 flex items-center gap-2 font-heading"
+            >
+              <Gamepad2 size={18} />
+              <span>Tạo Phòng Thi Đấu</span>
+            </button>
+            <Link
+              href="/quiz/create"
+              className="px-6 py-3 rounded-[12px] bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500 hover:opacity-90 text-white font-bold text-sm shadow-md shadow-indigo-500/20 transition-all hover:scale-105 active:scale-95 flex items-center gap-2 font-heading"
+            >
+              <Plus size={18} className="stroke-[3px]" />
+              <span>Tạo Bộ Đề Mới</span>
+            </Link>
+          </div>
         </div>
 
         {/* Toast thông báo */}
@@ -252,27 +245,27 @@ export default function MyQuizzesPage() {
           </div>
         )}
 
-        {/* Thanh Tìm Kiếm & Bộ Lọc Đa Chiều */}
-        <div className="bg-white/60 backdrop-blur-xl border border-white/80 rounded-[24px] p-4 shadow-sm flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+        {/* Thanh Tìm Kiếm & Bộ Lọc */}
+        <div className="bg-white border border-[#E2E8F0] rounded-[18px] p-4 shadow-sm flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
           {/* Ô Tìm Kiếm */}
           <div className="relative flex-1">
-            <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-teal-700/50" />
+            <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
               placeholder="Tìm kiếm theo tiêu đề hoặc chủ đề..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-11 pr-4 py-2.5 bg-white/80 border border-teal-200/60 rounded-xl text-teal-950 text-sm font-medium outline-none focus:border-teal-500 transition-colors placeholder-teal-600/40"
+              className="w-full pl-11 pr-4 py-2.5 bg-slate-50 border border-[#E2E8F0] rounded-[12px] text-slate-900 text-sm font-medium outline-none focus:border-indigo-500 focus:bg-white transition-all placeholder-slate-400"
             />
           </div>
 
-          {/* Lọc Theo Chủ Đề */}
+          {/* Lọc Theo Chủ Đề & Privacy */}
           <div className="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0">
             <select
               value={selectedTopic}
               onChange={(e) => setSelectedTopic(e.target.value)}
               aria-label="Chọn chủ đề"
-              className="px-3 py-2.5 bg-white/80 border border-teal-200/60 rounded-xl text-xs md:text-sm font-bold text-teal-900 outline-none focus:border-teal-500 cursor-pointer"
+              className="px-3 py-2 bg-slate-50 border border-[#E2E8F0] rounded-[10px] text-xs md:text-sm font-bold text-slate-700 outline-none focus:border-indigo-500 cursor-pointer"
             >
               {TOPIC_OPTIONS.map((topic) => (
                 <option key={topic} value={topic}>
@@ -282,27 +275,27 @@ export default function MyQuizzesPage() {
             </select>
 
             {/* Lọc Công Khai / Riêng Tư */}
-            <div className="flex items-center bg-white/80 border border-teal-200/60 rounded-xl p-1 text-xs font-bold text-teal-900">
+            <div className="flex items-center bg-slate-100 rounded-[10px] p-1 text-xs font-bold text-slate-700">
               <button
                 onClick={() => setPrivacyFilter("all")}
-                className={`px-3 py-1.5 rounded-lg transition-colors ${
-                  privacyFilter === "all" ? "bg-teal-600 text-white" : "hover:bg-teal-50"
+                className={`px-3 py-1.5 rounded-[8px] transition-colors ${
+                  privacyFilter === "all" ? "bg-white text-indigo-600 shadow-sm" : "hover:text-slate-900"
                 }`}
               >
                 Tất cả
               </button>
               <button
                 onClick={() => setPrivacyFilter("public")}
-                className={`px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 ${
-                  privacyFilter === "public" ? "bg-teal-600 text-white" : "hover:bg-teal-50"
+                className={`px-3 py-1.5 rounded-[8px] transition-colors flex items-center gap-1 ${
+                  privacyFilter === "public" ? "bg-white text-indigo-600 shadow-sm" : "hover:text-slate-900"
                 }`}
               >
                 <Globe size={12} /> Công khai
               </button>
               <button
                 onClick={() => setPrivacyFilter("private")}
-                className={`px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 ${
-                  privacyFilter === "private" ? "bg-teal-600 text-white" : "hover:bg-teal-50"
+                className={`px-3 py-1.5 rounded-[8px] transition-colors flex items-center gap-1 ${
+                  privacyFilter === "private" ? "bg-white text-indigo-600 shadow-sm" : "hover:text-slate-900"
                 }`}
               >
                 <Lock size={12} /> Riêng tư
@@ -311,7 +304,7 @@ export default function MyQuizzesPage() {
 
             <button
               onClick={fetchMyQuizzes}
-              className="p-2.5 rounded-xl bg-white hover:bg-teal-50 border border-teal-200/60 text-teal-800 transition-colors shrink-0"
+              className="p-2.5 rounded-[10px] bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors shrink-0"
               title="Làm mới danh sách"
             >
               <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
@@ -325,24 +318,24 @@ export default function MyQuizzesPage() {
             {[1, 2, 3, 4, 5, 6].map((i) => (
               <div
                 key={i}
-                className="h-60 bg-white/60 backdrop-blur-xl rounded-[28px] border border-white/80 animate-pulse p-6"
+                className="h-60 bg-white border border-[#E2E8F0] rounded-[20px] animate-pulse p-6"
               />
             ))}
           </div>
         ) : filteredQuizzes.length === 0 ? (
-          <div className="bg-white/65 backdrop-blur-xl rounded-[32px] border-2 border-dashed border-teal-300/50 p-12 text-center max-w-xl mx-auto shadow-sm">
-            <div className="w-20 h-20 bg-teal-500/10 rounded-3xl flex items-center justify-center mx-auto mb-4 border border-teal-300/40">
-              <BookOpen size={36} className="text-teal-700" />
+          <div className="bg-white rounded-[24px] border-2 border-dashed border-[#E2E8F0] p-12 text-center max-w-xl mx-auto shadow-sm">
+            <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center mx-auto mb-4 text-indigo-600">
+              <BookOpen size={30} />
             </div>
-            <h3 className="text-xl font-bold font-serif text-[#08282e] mb-2">Không tìm thấy bộ đề nào</h3>
-            <p className="text-teal-800/80 text-sm mb-6">
+            <h3 className="text-xl font-bold font-heading text-[#0F172A] mb-2">Không tìm thấy bộ đề nào</h3>
+            <p className="text-slate-500 text-sm mb-6">
               {searchQuery || selectedTopic !== "Tất cả" || privacyFilter !== "all"
                 ? "Không có bộ đề nào khớp với tiêu chí tìm kiếm. Hãy thử xóa bộ lọc!"
                 : "Bạn chưa tạo bộ đề nào. Hãy khởi tạo bài kiểm tra đầu tiên ngay bây giờ!"}
             </p>
             <Link
               href="/quiz/create"
-              className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white font-bold text-sm shadow-md transition-all hover:scale-105 active:scale-95"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-[12px] bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm shadow-sm transition-all"
             >
               <Plus size={18} />
               <span>Tạo Bộ Đề Mới</span>
@@ -353,22 +346,21 @@ export default function MyQuizzesPage() {
             {filteredQuizzes.map((quiz) => (
               <div
                 key={quiz.id}
-                className="bg-white/70 backdrop-blur-xl rounded-[28px] border border-white/90 p-6 shadow-[0_10px_30px_rgba(8,38,42,0.06)] hover:shadow-[0_16px_40px_rgba(8,38,42,0.12)] hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between group"
+                className="bg-white border border-[#E2E8F0] hover:border-indigo-300 rounded-[20px] p-6 shadow-sm hover:shadow-md transition-all duration-200 flex flex-col justify-between group"
               >
                 <div>
-                  {/* Badge Hàng Đầu: Chủ Đề & Chế Độ Riêng Tư */}
+                  {/* Badge Hàng Đầu */}
                   <div className="flex items-center justify-between gap-2 mb-3">
-                    <span className="px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-400/30 text-emerald-900 text-xs font-bold uppercase tracking-wider">
+                    <span className="px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-bold">
                       {quiz.topic || "Tổng Hợp"}
                     </span>
 
                     <span
                       className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold border ${
                         quiz.isPublic
-                          ? "bg-cyan-50 text-cyan-800 border-cyan-200"
-                          : "bg-gray-100 text-gray-700 border-gray-200"
+                          ? "bg-indigo-50 text-indigo-600 border-indigo-200"
+                          : "bg-slate-100 text-slate-600 border-slate-200"
                       }`}
-                      title={quiz.isPublic ? "Bất kỳ ai cũng có thể tìm thấy" : "Chỉ mình bạn thấy"}
                     >
                       {quiz.isPublic ? <Globe size={11} /> : <Lock size={11} />}
                       {quiz.isPublic ? "Công khai" : "Riêng tư"}
@@ -376,29 +368,29 @@ export default function MyQuizzesPage() {
                   </div>
 
                   {/* Tiêu Đề */}
-                  <h3 className="text-xl font-bold font-serif text-[#08282e] group-hover:text-teal-800 transition-colors line-clamp-2 mb-3 min-h-[56px]">
+                  <h3 className="text-lg font-bold font-heading text-[#0F172A] group-hover:text-indigo-600 transition-colors line-clamp-2 mb-3 min-h-[56px]">
                     {quiz.title}
                   </h3>
 
                   {/* Thông Số Số Câu / Lượt Chơi */}
-                  <div className="flex items-center gap-4 text-xs font-bold text-teal-800/70 mb-5">
+                  <div className="flex items-center gap-4 text-xs font-medium text-slate-500 mb-5">
                     <span className="flex items-center gap-1.5">
-                      <Layers size={14} className="text-teal-600" />
+                      <Layers size={14} className="text-indigo-600" />
                       {quiz.slideCount ?? 0} câu hỏi
                     </span>
                     <span className="flex items-center gap-1.5">
-                      <Play size={14} className="text-teal-600" />
+                      <Play size={14} className="text-indigo-600" />
                       {quiz.playCount ?? 0} lượt chơi
                     </span>
                   </div>
                 </div>
 
                 {/* Hàng Nút Thao Tác */}
-                <div className="pt-4 border-t border-teal-200/50 flex items-center justify-between gap-2">
+                <div className="pt-4 border-t border-slate-100 flex items-center justify-between gap-2">
                   <button
                     onClick={() => handleCreateRoom(quiz)}
                     disabled={actionLoadingId === quiz.id}
-                    className="flex-1 py-2.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white font-bold text-xs shadow-sm transition-all flex items-center justify-center gap-1.5 active:scale-95 disabled:opacity-60"
+                    className="flex-1 py-2.5 px-3 rounded-[12px] bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs shadow-sm transition-all flex items-center justify-center gap-1.5 active:scale-95 disabled:opacity-60 font-heading"
                   >
                     <Play size={14} fill="currentColor" />
                     <span>{actionLoadingId === quiz.id ? "Đang mở..." : "Mở Phòng Chơi"}</span>
@@ -406,7 +398,7 @@ export default function MyQuizzesPage() {
 
                   <Link
                     href={`/quiz/${quiz.id}/edit`}
-                    className="p-2.5 rounded-xl bg-white hover:bg-teal-50 border border-teal-200/60 text-teal-800 transition-colors shadow-sm"
+                    className="p-2.5 rounded-[12px] bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors shadow-sm"
                     title="Chỉnh sửa bộ đề"
                   >
                     <Pencil size={15} />
@@ -415,7 +407,7 @@ export default function MyQuizzesPage() {
                   <button
                     onClick={() => handleCloneQuiz(quiz)}
                     disabled={actionLoadingId === quiz.id}
-                    className="p-2.5 rounded-xl bg-white hover:bg-teal-50 border border-teal-200/60 text-teal-800 transition-colors shadow-sm disabled:opacity-60"
+                    className="p-2.5 rounded-[12px] bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors shadow-sm disabled:opacity-60"
                     title="Nhân bản bộ đề"
                   >
                     <Copy size={15} />
@@ -423,7 +415,7 @@ export default function MyQuizzesPage() {
 
                   <button
                     onClick={() => setDeleteConfirm({ isOpen: true, quiz })}
-                    className="p-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 transition-colors shadow-sm"
+                    className="p-2.5 rounded-[12px] bg-rose-50 hover:bg-rose-100 text-rose-600 transition-colors shadow-sm"
                     title="Xóa bộ đề"
                   >
                     <Trash2 size={15} />
@@ -443,8 +435,8 @@ export default function MyQuizzesPage() {
               <AlertTriangle size={28} />
             </div>
 
-            <h3 className="text-2xl font-bold font-serif text-[#08282e] mb-2">Xóa Bộ Đề?</h3>
-            <p className="text-teal-900/80 text-sm mb-6 leading-relaxed">
+            <h3 className="text-2xl font-black font-heading text-slate-900 mb-2">Xóa Bộ Đề?</h3>
+            <p className="text-slate-600 text-sm mb-6 leading-relaxed">
               Bạn có chắc chắn muốn xóa bộ đề <b>&ldquo;{deleteConfirm.quiz.title}&rdquo;</b>? Toàn bộ câu hỏi bên trong sẽ bị loại bỏ.
             </p>
 
@@ -467,6 +459,13 @@ export default function MyQuizzesPage() {
           </div>
         </div>
       )}
+
+      {/* Modal Khởi Tạo Phòng Chơi (Chọn Đề & Chọn Kiểu Chơi) */}
+      <CreateRoomModal
+        isOpen={createRoomModal.isOpen}
+        onClose={() => setCreateRoomModal({ isOpen: false })}
+        initialQuizId={createRoomModal.quizId}
+      />
     </div>
   );
 }

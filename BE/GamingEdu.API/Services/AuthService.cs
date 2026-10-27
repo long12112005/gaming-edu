@@ -12,10 +12,10 @@ namespace GamingEdu.API.Services;
 
 public interface IAuthService
 {
-    Task SendRegisterOtpAsync(SendRegisterOtpRequest request);
+    Task<string> SendRegisterOtpAsync(SendRegisterOtpRequest request);
     Task<AuthResponse> RegisterAsync(RegisterRequest request);
     Task<AuthResponse> LoginAsync(LoginRequest request);
-    Task SendForgotPasswordOtpAsync(ForgotPasswordRequest request);
+    Task<string?> SendForgotPasswordOtpAsync(ForgotPasswordRequest request);
     Task ResetPasswordAsync(ResetPasswordRequest request);
     Task LogoutAsync(Guid userId);
 }
@@ -86,7 +86,7 @@ public class AuthService : IAuthService
     }
 
     // ── SEND OTP ──────────────────────────────────────────────────────
-    public async Task SendRegisterOtpAsync(SendRegisterOtpRequest request)
+    public async Task<string> SendRegisterOtpAsync(SendRegisterOtpRequest request)
     {
         var email = request.Email.ToLower().Trim();
         bool emailExists = await _db.Users.AnyAsync(u => u.Email == email);
@@ -99,6 +99,7 @@ public class AuthService : IAuthService
 
         var body = $"<h3>Mã xác thực đăng ký Gaming Edu</h3><p>Mã OTP của bạn là: <b>{otp}</b></p><p>Mã này có hiệu lực trong 5 phút.</p>";
         await _email.SendEmailAsync(email, "Mã xác thực Đăng ký", body);
+        return otp;
     }
 
     // ── REGISTER ──────────────────────────────────────────────────────
@@ -197,16 +198,16 @@ public class AuthService : IAuthService
     }
 
     // ── FORGOT PASSWORD ────────────────────────────────────────────────
-    public async Task SendForgotPasswordOtpAsync(ForgotPasswordRequest request)
+    public async Task<string?> SendForgotPasswordOtpAsync(ForgotPasswordRequest request)
     {
         var email = request.Email.ToLower().Trim();
         var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == email);
         if (user == null || user.Status == "DELETED")
-            return; // Không ném lỗi để tránh lộ email (security)
+            return null; // Không ném lỗi để tránh lộ email (security)
 
         // Cooldown vẫn áp dụng ngầm (không lộ email tồn tại hay không)
         var cooldownKey = $"otp:cooldown:reset:{email}";
-        if (await _cache.ExistsAsync(cooldownKey)) return;
+        if (await _cache.ExistsAsync(cooldownKey)) return null;
         await _cache.SetStringAsync(cooldownKey, "1", TimeSpan.FromSeconds(OtpResendCooldownSeconds));
 
         var otp = GenerateOtp();
@@ -215,6 +216,7 @@ public class AuthService : IAuthService
 
         var body = $"<h3>Đặt lại mật khẩu Gaming Edu</h3><p>Mã OTP của bạn là: <b>{otp}</b></p><p>Mã này có hiệu lực trong 5 phút.</p>";
         await _email.SendEmailAsync(email, "Mã xác thực Quên mật khẩu", body);
+        return otp;
     }
 
     public async Task ResetPasswordAsync(ResetPasswordRequest request)
@@ -235,7 +237,7 @@ public class AuthService : IAuthService
 
     public async Task LogoutAsync(Guid userId)
     {
-        await _cache.RemoveAsync($"session:{userId}");
+        await _cache.SetStringAsync($"session:{userId}", "LOGGED_OUT", TimeSpan.FromDays(1));
     }
 
     // ── JWT TOKEN GENERATION ───────────────────────────────────────────
@@ -289,7 +291,9 @@ public class AuthService : IAuthService
             user.AvatarUrl,
             user.IsAdmin,
             user.Status,
-            quotaDto
+            quotaDto,
+            null,
+            user.AvatarFrame ?? "default"
         );
 
         return new AuthResponse(token, "Bearer", 86400, profile);

@@ -25,6 +25,9 @@ public class ApplicationDbContext : DbContext
     public DbSet<RoomPlayer>     RoomPlayers     => Set<RoomPlayer>();
     public DbSet<PlayerResponse> PlayerResponses => Set<PlayerResponse>();
     public DbSet<QuestionQA>     QuestionsQA     => Set<QuestionQA>();
+    public DbSet<NavalTeam>      NavalTeams      => Set<NavalTeam>();
+    public DbSet<NavalShip>      NavalShips      => Set<NavalShip>();
+    public DbSet<NavalAction>    NavalActions    => Set<NavalAction>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -194,6 +197,8 @@ public class ApplicationDbContext : DbContext
             e.Property(r => r.PinCode).HasMaxLength(20).IsRequired();
             e.Property(r => r.Mode).HasMaxLength(50).IsRequired();
             e.Property(r => r.Status).HasMaxLength(50).HasDefaultValue("WAITING");
+            e.Property(r => r.MapSize).HasDefaultValue(15);
+            e.Property(r => r.GameSettings);
             e.Property(r => r.StartTime).HasColumnType("datetime2");
             e.Property(r => r.EndTime).HasColumnType("datetime2");
             e.Property(r => r.CreatedAt).HasColumnType("datetime2").HasDefaultValueSql("GETUTCDATE()");
@@ -219,6 +224,15 @@ public class ApplicationDbContext : DbContext
             e.Property(rp => rp.Nickname).HasMaxLength(100).IsRequired();
             e.Property(rp => rp.AvatarUrl).HasMaxLength(500);
             e.Property(rp => rp.TotalScore).HasDefaultValue(0);
+            e.Property(rp => rp.TeamSide).HasMaxLength(10);
+            e.Property(rp => rp.CurrentCombo).HasDefaultValue(0);
+            e.Property(rp => rp.MaxCombo).HasDefaultValue(0);
+            e.Property(rp => rp.EnergyPoints).HasDefaultValue(0);
+            e.Property(rp => rp.ShotsEarned).HasDefaultValue(0);
+            e.Property(rp => rp.ValidShotsCount).HasDefaultValue(0);
+            e.Property(rp => rp.HitsCount).HasDefaultValue(0);
+            e.Property(rp => rp.ShipsSunkContribution).HasDefaultValue(0);
+            e.Property(rp => rp.SkillsUsedCount).HasDefaultValue(0);
             e.Property(rp => rp.JoinedAt).HasColumnType("datetime2").HasDefaultValueSql("GETUTCDATE()");
 
             e.HasOne(rp => rp.Room)
@@ -276,6 +290,71 @@ public class ApplicationDbContext : DbContext
                 .OnDelete(DeleteBehavior.NoAction);
         });
 
+        // ── naval_teams ────────────────────────────────────────────────
+        modelBuilder.Entity<NavalTeam>(e =>
+        {
+            e.ToTable("naval_teams");
+            e.HasKey(t => t.Id);
+            e.Property(t => t.Id).ValueGeneratedNever();
+            e.Property(t => t.TeamSide).HasMaxLength(10).IsRequired();
+            e.Property(t => t.RadarRemaining).HasDefaultValue(2);
+            e.Property(t => t.ShieldRemaining).HasDefaultValue(2);
+            e.Property(t => t.PrecisionShotRemaining).HasDefaultValue(1);
+            e.Property(t => t.TeamCombo).HasDefaultValue(0);
+            e.Property(t => t.ShipsRemaining).HasDefaultValue(5);
+
+            e.HasIndex(t => new { t.RoomId, t.TeamSide }).IsUnique();
+
+            e.HasOne(t => t.Room)
+                .WithMany(r => r.NavalTeams)
+                .HasForeignKey(t => t.RoomId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ── naval_ships ────────────────────────────────────────────────
+        modelBuilder.Entity<NavalShip>(e =>
+        {
+            e.ToTable("naval_ships");
+            e.HasKey(s => s.Id);
+            e.Property(s => s.Id).ValueGeneratedNever();
+            e.Property(s => s.TeamSide).HasMaxLength(10).IsRequired();
+            e.Property(s => s.ShipType).IsRequired();
+            e.Property(s => s.Coordinates).IsRequired();
+            e.Property(s => s.IsSunk).HasDefaultValue(false);
+
+            e.HasIndex(s => new { s.RoomId, s.TeamSide }).HasDatabaseName("idx_naval_ships_room");
+
+            e.HasOne(s => s.Room)
+                .WithMany(r => r.NavalShips)
+                .HasForeignKey(s => s.RoomId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ── naval_actions ──────────────────────────────────────────────
+        modelBuilder.Entity<NavalAction>(e =>
+        {
+            e.ToTable("naval_actions");
+            e.HasKey(a => a.Id);
+            e.Property(a => a.Id).ValueGeneratedNever();
+            e.Property(a => a.AttackerTeam).HasMaxLength(10).IsRequired();
+            e.Property(a => a.TargetTeam).HasMaxLength(10).IsRequired();
+            e.Property(a => a.ActionType).HasMaxLength(30).IsRequired();
+            e.Property(a => a.Result).HasMaxLength(30).IsRequired();
+            e.Property(a => a.CreatedAt).HasColumnType("datetime2").HasDefaultValueSql("GETUTCDATE()");
+
+            e.HasIndex(a => new { a.RoomId, a.TargetTeam, a.TargetRow, a.TargetCol }).HasDatabaseName("idx_naval_actions_room");
+
+            e.HasOne(a => a.Room)
+                .WithMany(r => r.NavalActions)
+                .HasForeignKey(a => a.RoomId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(a => a.Player)
+                .WithMany(rp => rp.NavalActions)
+                .HasForeignKey(a => a.PlayerId)
+                .OnDelete(DeleteBehavior.NoAction);
+        });
+
         // ── Indexes from SQL schema ────────────────────────────────────
         // idx_users_email — covered by HasIndex above
         // idx_groups_code — covered by HasIndex above
@@ -306,3 +385,4 @@ public class ApplicationDbContext : DbContext
             .HasDatabaseName("idx_player_responses_slide");
     }
 }
+

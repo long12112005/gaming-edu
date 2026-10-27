@@ -23,9 +23,11 @@ import {
   Share2,
   Copy,
   RefreshCw,
+  Link2,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import SiteHeader from "@/components/layout/SiteHeader";
+import CreateRoomModal from "@/components/modals/CreateRoomModal";
 
 // ─── Component Nút Bấm Tiên Môn ───────────────────────────
 function ActionButton({
@@ -87,29 +89,30 @@ function SlidePreviewCard({ slide, index }: { slide: any; index: number }) {
   ];
 
   return (
-    <div className="bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-md rounded-2xl border border-cyan-400/25 p-5 hover:border-cyan-300/50 transition-all font-sans">
+    <div className="bg-white rounded-2xl border border-slate-200/90 p-5 hover:border-indigo-400 hover:shadow-md transition-all font-sans shadow-xs">
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 bg-cyan-400/20 border border-cyan-300/30 rounded-xl flex items-center justify-center text-sm font-black text-cyan-200">
+          <div className="w-8 h-8 bg-indigo-50 border border-indigo-200 rounded-xl flex items-center justify-center text-sm font-black text-indigo-700">
             {index + 1}
           </div>
-          <span className="text-xs font-bold px-2.5 py-1 rounded-lg border border-cyan-300/20 bg-white/5 text-cyan-200">
+          <span className="text-xs font-bold px-2.5 py-1 rounded-lg border border-slate-200 bg-slate-50 text-slate-700 font-heading">
             {typeIcon[slide.type]} {typeLabel[slide.type] ?? slide.type}
           </span>
         </div>
-        <div className="flex items-center gap-3 text-xs font-semibold text-cyan-200/70 bg-white/5 px-2.5 py-1 rounded-lg border border-cyan-300/10">
+        <div className="flex items-center gap-3 text-xs font-semibold text-slate-500 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200">
           <span className="flex items-center gap-1"><Clock size={13} /> {slide.timeLimit ?? 30}s</span>
-          <span className="flex items-center gap-1"><Zap size={13} className="text-amber-300" /> {slide.points ?? 1000}</span>
+          <span className="flex items-center gap-1"><Zap size={13} className="text-amber-500" /> {slide.points ?? 1000}</span>
         </div>
       </div>
 
-      <p className="font-bold text-white text-base mb-4 line-clamp-2">
+      <p className="font-bold text-slate-900 text-base mb-4 line-clamp-2">
         {slide.questionText}
       </p>
 
-      {slide.type === "QUIZ" && slide.options && slide.options.length > 0 && (
+      {/* QUIZ & POLL Options */}
+      {(slide.type === "QUIZ" || slide.type === "POLL") && slide.options && slide.options.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-          {slide.options.slice(0, 4).map((opt: any, idx: number) => (
+          {slide.options.slice(0, 6).map((opt: any, idx: number) => (
             <div
               key={opt.id}
               className={`flex items-center gap-2.5 p-2.5 rounded-xl border text-sm font-semibold transition-all ${
@@ -129,44 +132,66 @@ function SlidePreviewCard({ slide, index }: { slide: any; index: number }) {
           ))}
         </div>
       )}
+
+      {/* MATCHING Pairs Preview */}
+      {slide.type === "MATCHING" && slide.options && slide.options.length > 0 && (
+        <div className="space-y-2">
+          <div className="text-xs font-bold text-cyan-300 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+            <Link2 size={13} /> Các cặp ghép nối ({slide.options.length} cặp):
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {slide.options.map((opt: any, idx: number) => (
+              <div
+                key={opt.id}
+                className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-cyan-950/40 border border-cyan-400/30 text-xs font-bold"
+              >
+                <span className="text-white truncate max-w-[45%]">{opt.content}</span>
+                <span className="text-cyan-400 shrink-0 font-black">🔗</span>
+                <span className="text-amber-300 truncate max-w-[45%] text-right">{opt.matchingPair || "–"}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* FILL_IN_BLANK Blanks Preview */}
+      {slide.type === "FILL_IN_BLANK" && slide.options && slide.options.length > 0 && (
+        <div className="space-y-2">
+          <div className="text-xs font-bold text-amber-300 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+            <span>✏️</span> Vị trí từ khóa ({slide.options.length} ô trống):
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {slide.options.map((opt: any, idx: number) => (
+              <div
+                key={opt.id}
+                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-950/40 border border-amber-400/30 text-xs font-bold text-amber-200"
+              >
+                <span className="w-5 h-5 rounded-md bg-amber-500/20 text-amber-300 flex items-center justify-center text-[10px] font-black shrink-0">
+                  #{idx + 1}
+                </span>
+                <span className="text-white font-extrabold">{opt.content}</span>
+                {opt.blankKeywords && opt.blankKeywords !== opt.content && (
+                  <span className="text-amber-300/60 text-[11px] font-medium truncate max-w-[150px]">
+                    ({opt.blankKeywords})
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* WORD_CLOUD Preview */}
+      {slide.type === "WORD_CLOUD" && (
+        <div className="p-3 rounded-xl bg-sky-950/40 border border-sky-400/20 text-xs text-sky-200/80 italic text-center">
+          ☁️ Khảo sát và tổng hợp đám mây từ trực tiếp từ người chơi
+        </div>
+      )}
     </div>
   );
 }
 
-// ─── Mode Selector ─────────────────────────────────────────────────────────────
-function ModeOption({
-  label,
-  icon,
-  desc,
-  selected,
-  onClick,
-}: any) {
-  return (
-    <button
-      onClick={onClick}
-      className={`w-full text-left p-4 rounded-2xl border-2 transition-all duration-200 ${
-        selected
-          ? "border-amber-300 bg-amber-400/20 text-white shadow-[0_0_20px_rgba(251,191,36,0.25)] scale-[1.01]"
-          : "border-cyan-400/20 bg-white/5 text-cyan-100 hover:bg-white/10 hover:border-cyan-300/30"
-      }`}
-    >
-      <div className="flex items-center gap-4">
-        <div className="w-12 h-12 bg-white/10 rounded-xl border border-white/20 flex items-center justify-center text-2xl shrink-0">
-          {icon}
-        </div>
-        <div>
-          <div className="font-bold text-base text-white">{label}</div>
-          <div className="text-xs text-cyan-200/70 mt-0.5">{desc}</div>
-        </div>
-        {selected && (
-          <div className="ml-auto w-7 h-7 bg-amber-400 text-teal-950 rounded-full flex items-center justify-center font-black shrink-0">
-            <Check size={16} />
-          </div>
-        )}
-      </div>
-    </button>
-  );
-}
+
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function QuizDetailPage() {
@@ -177,9 +202,7 @@ export default function QuizDetailPage() {
   const [quiz, setQuiz] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
-  const [creating, setCreating] = useState(false);
   const [showModeModal, setShowModeModal] = useState(false);
-  const [selectedMode, setSelectedMode] = useState<string>("HOST_PACED");
   const [cloning, setCloning] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
 
@@ -208,29 +231,6 @@ export default function QuizDetailPage() {
       isMounted = false;
     };
   }, [quizId]);
-
-  const handleStartGame = async () => {
-    if (!isLoggedIn) {
-      router.push("/login");
-      return;
-    }
-    setCreating(true);
-    try {
-      const res = await api.post("/rooms", {
-        quizId,
-        mode: selectedMode,
-      });
-      if (res.data.success) {
-        const room = res.data.data;
-        router.push(`/host/${room.id}?pin=${room.pinCode}`);
-      }
-    } catch {
-      alert("Lỗi khi tạo phòng. Vui lòng thử lại.");
-    } finally {
-      setCreating(false);
-      setShowModeModal(false);
-    }
-  };
 
   // 3.4 Nhân bản bộ đề vào thư viện cá nhân
   const handleCloneQuiz = async () => {
@@ -266,13 +266,12 @@ export default function QuizDetailPage() {
       setTimeout(() => setCopiedLink(false), 2500);
     }
   };
-
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#10434b] text-white flex items-center justify-center font-serif">
+      <div className="min-h-screen bg-[#F4F6FB] text-slate-900 flex items-center justify-center font-sans">
         <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-cyan-400 border-t-amber-300 rounded-full animate-spin" />
-          <p className="text-cyan-200 text-lg tracking-wider animate-pulse">Đang thẩm duyệt bảo điển...</p>
+          <div className="w-12 h-12 border-4 border-indigo-600 border-t-amber-400 rounded-full animate-spin" />
+          <p className="text-slate-600 text-lg font-bold animate-pulse">Đang tải thông tin bộ đề...</p>
         </div>
       </div>
     );
@@ -280,13 +279,13 @@ export default function QuizDetailPage() {
 
   if (notFound || !quiz) {
     return (
-      <div className="min-h-screen bg-[#10434b] text-white flex flex-col items-center justify-center gap-6 p-4 text-center font-serif">
-        <div className="w-24 h-24 bg-white/10 rounded-3xl border border-red-400/30 flex items-center justify-center text-red-300">
+      <div className="min-h-screen bg-[#F4F6FB] text-slate-900 flex flex-col items-center justify-center gap-6 p-4 text-center font-sans">
+        <div className="w-24 h-24 bg-white rounded-3xl border border-rose-200 shadow-sm flex items-center justify-center text-rose-500">
           <X size={48} />
         </div>
         <div>
-          <h1 className="text-3xl font-bold tracking-tight mb-2">Không Tìm Thấy Bộ Đề</h1>
-          <p className="text-base text-cyan-200/70 font-sans mb-6">Bộ đề này không tồn tại hoặc đã được ẩn giấu.</p>
+          <h1 className="text-3xl font-black font-heading text-slate-900 mb-2">Không Tìm Thấy Bộ Đề</h1>
+          <p className="text-base text-slate-500 font-sans mb-6">Bộ đề này không tồn tại hoặc đã được ẩn giấu.</p>
         </div>
         <ActionButton label="Quay Về Khám Phá" onClick={() => router.push("/explore")} icon={ArrowLeft} />
       </div>
@@ -297,10 +296,10 @@ export default function QuizDetailPage() {
   const publishedSlides = slides.filter((s: any) => s.status === "PUBLISHED");
 
   return (
-    <div className="min-h-screen bg-[#10434b] text-[#E6F2F5] font-serif flex flex-col relative overflow-hidden pb-16">
-      {/* Background celestial glow */}
-      <div className="absolute top-10 left-10 w-96 h-96 bg-cyan-400/15 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-10 right-10 w-96 h-96 bg-emerald-400/15 rounded-full blur-3xl pointer-events-none" />
+    <div className="min-h-screen bg-[#F4F6FB] text-slate-900 font-sans flex flex-col relative overflow-hidden pb-16">
+      {/* Subtle modern ambient background glows */}
+      <div className="fixed top-0 left-1/4 w-96 h-96 bg-indigo-500/5 rounded-full blur-3xl pointer-events-none" />
+      <div className="fixed bottom-0 right-1/4 w-96 h-96 bg-purple-500/5 rounded-full blur-3xl pointer-events-none" />
 
       <SiteHeader />
 
@@ -309,12 +308,12 @@ export default function QuizDetailPage() {
           
           {/* CỘT TRÁI: THÔNG TIN BỘ ĐỀ */}
           <div className="lg:col-span-5 space-y-6">
-            <div className="bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-xl rounded-[32px] border border-cyan-400/30 overflow-hidden shadow-[0_16px_40px_rgba(8,38,42,0.4)]">
-              <div className="relative h-60 bg-black/20 p-4">
+            <div className="bg-white rounded-[32px] border border-slate-200/90 overflow-hidden shadow-sm">
+              <div className="relative h-60 bg-slate-100 p-4">
                 <img
                   src={quiz.coverImageUrl ?? "https://images.unsplash.com/photo-1497633762265-9d179a990aa6?w=600&h=350&fit=crop"}
                   alt={quiz.title}
-                  className="w-full h-full object-cover rounded-2xl border border-white/20 shadow-md"
+                  className="w-full h-full object-cover rounded-2xl border border-slate-200 shadow-sm"
                 />
                 
                 {/* Tags */}
@@ -331,48 +330,48 @@ export default function QuizDetailPage() {
               </div>
 
               <div className="p-6">
-                <h1 className="font-bold text-2xl text-white tracking-tight leading-snug mb-5 font-serif">
+                <h1 className="font-black text-2xl text-slate-900 tracking-tight leading-snug mb-5 font-heading">
                   {quiz.title}
                 </h1>
 
                 {/* Stats */}
                 <div className="grid grid-cols-3 gap-3 mb-6 font-sans">
                   {[
-                    { icon: BookOpen, value: slides.length, label: "Câu hỏi", color: "text-cyan-300" },
-                    { icon: Play, value: quiz.playCount ?? 0, label: "Lượt chơi", color: "text-emerald-300" },
-                    { icon: Star, value: "4.8", label: "Đánh giá", color: "text-amber-300" },
+                    { icon: BookOpen, value: slides.length, label: "Câu hỏi", color: "text-indigo-600" },
+                    { icon: Play, value: quiz.playCount ?? 0, label: "Lượt chơi", color: "text-emerald-600" },
+                    { icon: Star, value: "4.8", label: "Đánh giá", color: "text-amber-500" },
                   ].map(({ icon: Icon, value, label, color }) => (
-                    <div key={label} className="rounded-2xl p-3 text-center border border-cyan-400/20 bg-white/5">
+                    <div key={label} className="rounded-2xl p-3 text-center border border-slate-200 bg-slate-50 shadow-xs">
                       <Icon size={20} className={`${color} mx-auto mb-1.5`} />
-                      <div className="font-bold text-white text-base">{value}</div>
-                      <div className="text-[11px] font-semibold text-cyan-200/60 uppercase">{label}</div>
+                      <div className="font-black text-slate-900 text-base">{value}</div>
+                      <div className="text-[11px] font-bold text-slate-500 uppercase">{label}</div>
                     </div>
                   ))}
                 </div>
 
                 {/* Tác giả */}
-                <div className="flex items-center gap-3.5 p-3.5 bg-white/5 rounded-2xl border border-cyan-400/20 font-sans">
+                <div className="flex items-center gap-3.5 p-3.5 bg-slate-50 rounded-2xl border border-slate-200 font-sans">
                   <img
-                    src={quiz.creatorAvatar ?? `https://ui-avatars.com/api/?name=${quiz.creatorNickname}&background=072428&color=38bdf8&size=48`}
+                    src={quiz.creatorAvatar ?? `https://ui-avatars.com/api/?name=${quiz.creatorNickname}&background=6366f1&color=fff&size=48`}
                     alt={quiz.creatorNickname}
-                    className="w-10 h-10 rounded-xl border border-cyan-400/30"
+                    className="w-10 h-10 rounded-xl border border-slate-200"
                   />
                   <div>
-                    <div className="text-[11px] font-semibold text-cyan-200/60 uppercase">Tạo bởi</div>
-                    <div className="font-bold text-white text-sm">{quiz.creatorNickname || "Người Dùng Ẩn Danh"}</div>
+                    <div className="text-[11px] font-bold text-slate-500 uppercase">Tạo bởi</div>
+                    <div className="font-bold text-slate-900 text-sm">{quiz.creatorNickname || "Người Dùng Ẩn Danh"}</div>
                   </div>
                 </div>
               </div>
             </div>
 
             {/* Hành Động Mở Phòng */}
-            <div className="bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-xl p-6 rounded-[32px] border border-cyan-400/30 space-y-3 font-sans">
+            <div className="bg-white p-6 rounded-[32px] border border-slate-200/90 shadow-sm space-y-3 font-sans">
               <ActionButton
                 variant="primary"
                 fullWidth
                 icon={Play}
                 label="MỞ PHÒNG THI ĐẤU"
-                disabled={publishedSlides.length === 0 || creating}
+                disabled={publishedSlides.length === 0}
                 onClick={() => isLoggedIn ? setShowModeModal(true) : router.push("/login")}
               />
               <ActionButton
@@ -409,8 +408,8 @@ export default function QuizDetailPage() {
                 onClick={handleCopyShareLink}
               />
               {publishedSlides.length === 0 && (
-                <div className="p-3 bg-amber-500/20 border border-amber-400/40 rounded-xl text-center">
-                  <span className="font-semibold text-amber-200 text-xs">⚠️ Bộ đề chưa có câu hỏi nào được Publish. Hãy nhấn Chỉnh Sửa để hoàn thiện.</span>
+                <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl text-center">
+                  <span className="font-semibold text-amber-800 text-xs">⚠️ Bộ đề chưa có câu hỏi nào được Publish. Hãy nhấn Chỉnh Sửa để hoàn thiện.</span>
                 </div>
               )}
             </div>
@@ -418,10 +417,10 @@ export default function QuizDetailPage() {
 
           {/* CỘT PHẢI: DANH SÁCH CÂU HỎI */}
           <div className="lg:col-span-7 space-y-5">
-            <div className="bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-xl p-5 rounded-2xl border border-cyan-400/30 flex items-center justify-between sticky top-24 z-20">
+            <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-xs flex items-center justify-between sticky top-24 z-20">
               <div>
-                <h2 className="font-bold text-xl text-white font-serif">Danh Sách Câu Hỏi</h2>
-                <p className="text-cyan-200/70 text-xs font-sans mt-0.5">Tổng cộng {slides.length} câu đã soạn</p>
+                <h2 className="font-black text-xl text-slate-900 font-heading">Danh Sách Câu Hỏi</h2>
+                <p className="text-slate-500 text-xs font-sans mt-0.5">Tổng cộng {slides.length} câu đã soạn</p>
               </div>
               {isLoggedIn && (
                 <ActionButton 
@@ -460,62 +459,12 @@ export default function QuizDetailPage() {
         </div>
       </main>
 
-      {/* MODAL CHỌN CHẾ ĐỘ CHƠI */}
-      {showModeModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="bg-[#08282e] border-2 border-cyan-400/40 rounded-[32px] p-6 md:p-8 w-full max-w-lg shadow-[0_20px_60px_rgba(0,0,0,0.6)] font-sans space-y-6">
-            <div className="text-center">
-              <h3 className="font-bold text-2xl text-white font-serif mb-1">Chọn Chế Độ Thi Đấu</h3>
-              <p className="text-sm text-cyan-200/70">Thiết lập quy luật và cách thức thi đấu cho phòng chơi</p>
-            </div>
-
-            <div className="space-y-3">
-              <ModeOption
-                mode="HOST_PACED"
-                label="Chế Độ Lớp Học (Classic Host)"
-                icon="👑"
-                desc="Người dẫn (Host) kiểm soát tiến độ từng câu hỏi, người chơi thi đua tốc độ và độ chính xác!"
-                selected={selectedMode === "HOST_PACED"}
-                onClick={() => setSelectedMode("HOST_PACED")}
-              />
-              <ModeOption
-                mode="PLAYER_PACED"
-                label="Tự Luyện Tập (Player-Paced)"
-                icon="🚀"
-                desc="Người tham gia tự làm bài theo tốc độ cá nhân, tự do bứt phá kiến thức"
-                selected={selectedMode === "PLAYER_PACED"}
-                onClick={() => setSelectedMode("PLAYER_PACED")}
-              />
-              <ModeOption
-                mode="ASYNC_TOURNAMENT"
-                label="Giải Đấu Mở (Bảng Xếp Hạng)"
-                icon="🏆"
-                desc="Mở phòng làm bài dài hạn, thi đua vị trí dẫn đầu trên bảng xếp hạng"
-                selected={selectedMode === "ASYNC_TOURNAMENT"}
-                onClick={() => setSelectedMode("ASYNC_TOURNAMENT")}
-              />
-            </div>
-
-            <div className="flex gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setShowModeModal(false)}
-                className="flex-1 py-3.5 rounded-2xl bg-white/10 hover:bg-white/15 text-cyan-100 font-bold border border-cyan-300/30 transition-colors"
-              >
-                Hủy Bỏ
-              </button>
-              <button
-                type="button"
-                disabled={creating}
-                onClick={handleStartGame}
-                className="flex-1 py-3.5 rounded-2xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-teal-950 font-black shadow-[0_0_20px_rgba(251,191,36,0.35)] transition-all disabled:opacity-50"
-              >
-                {creating ? "Đang Mở Phòng..." : "Khởi Tạo Phòng"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* MODAL KHỞI TẠO PHÒNG CHƠI (CHỌN ĐỀ & CHỌN KIỂU CHƠI) */}
+      <CreateRoomModal
+        isOpen={showModeModal}
+        onClose={() => setShowModeModal(false)}
+        initialQuizId={quizId}
+      />
     </div>
   );
 }

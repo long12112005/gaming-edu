@@ -48,6 +48,17 @@ public class GroupsController : ControllerBase
         }
     }
 
+    [HttpGet("{id:guid}")]
+    [ProducesResponseType(typeof(ApiResponse<GroupDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetGroupById(Guid id)
+    {
+        var group = await _groupService.GetGroupByIdAsync(GetCurrentUserId(), id);
+        if (group == null)
+            return NotFound(new ApiResponse<string>(false, "Không tìm thấy nhóm.", null));
+        return Ok(new ApiResponse<GroupDto>(true, "Success", group));
+    }
+
     [HttpGet("{groupId}/members")]
     public async Task<IActionResult> GetGroupMembers(Guid groupId)
     {
@@ -62,6 +73,34 @@ public class GroupsController : ControllerBase
         {
             await _groupService.ApproveOrRejectJoinRequestAsync(GetCurrentUserId(), groupId, memberId, request.IsApproved);
             return Ok(new ApiResponse<string>(true, "Đã xử lý yêu cầu gia nhập.", null));
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new ApiResponse<string>(false, ex.Message, null));
+        }
+    }
+
+    [HttpPut("{groupId}/members/{memberId}/approve")]
+    public async Task<IActionResult> ApproveMember(Guid groupId, Guid memberId)
+    {
+        try
+        {
+            await _groupService.ApproveOrRejectJoinRequestAsync(GetCurrentUserId(), groupId, memberId, true);
+            return Ok(new ApiResponse<string>(true, "Đã duyệt thành viên thành công.", null));
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new ApiResponse<string>(false, ex.Message, null));
+        }
+    }
+
+    [HttpPut("{groupId}/members/{memberId}/reject")]
+    public async Task<IActionResult> RejectMember(Guid groupId, Guid memberId)
+    {
+        try
+        {
+            await _groupService.ApproveOrRejectJoinRequestAsync(GetCurrentUserId(), groupId, memberId, false);
+            return Ok(new ApiResponse<string>(true, "Đã từ chối yêu cầu gia nhập.", null));
         }
         catch (Exception ex)
         {

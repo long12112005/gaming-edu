@@ -1,98 +1,87 @@
 "use client";
 
 import Link from "next/link";
-import { Trophy, Share2, MessageCircle, PlayCircle, Mail } from "lucide-react";
-
-const footerLinks = {
-  "Sản Phẩm": [
-    { label: "Tạo Phòng", href: "#" },
-    { label: "Chế Độ Chơi", href: "#" },
-    { label: "Xem Tất Cả", href: "#" },
-  ],
-  "Tài Nguyên": [
-    { label: "Hỗ Trợ", href: "#" },
-    { label: "Hướng Dẫn", href: "#" },
-    { label: "Tài nguyên Tự", href: "#" },
-  ],
-};
+import { Gamepad2 } from "lucide-react";
 
 export default function Footer() {
   return (
-    <footer className="footer-bg text-white">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Main footer content */}
-        <div className="py-12 grid grid-cols-1 md:grid-cols-3 gap-10">
-          {/* Brand */}
-          <div className="col-span-1">
-            <div className="flex items-center gap-2.5 mb-4">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center shadow-md">
-                <Trophy size={18} className="text-white" />
+    <footer className="bg-[#13182E] text-slate-300 border-t border-slate-800/80">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 lg:py-16">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-8 lg:gap-12 mb-12">
+          {/* Brand Info (Left) */}
+          <div className="md:col-span-6 lg:col-span-7">
+            <Link href="/" className="inline-flex items-center gap-2.5 mb-4 group">
+              <div className="w-10 h-10 rounded-xl bg-[#F59E0B] flex items-center justify-center text-slate-950 shadow-md group-hover:scale-105 transition-transform">
+                <Gamepad2 size={22} className="stroke-[2.5]" />
               </div>
-              <span className="font-800 text-lg">
-                <span className="text-violet-400">Gaming</span> Edu
+              <span className="font-heading font-black text-2xl text-white tracking-tight">
+                Gaming <span className="text-amber-400">Edu</span>
               </span>
-            </div>
-            <p className="text-gray-400 text-sm leading-relaxed max-w-xs">
-              Gaming Edu biến việc học thành những giờ game vui vẻ và thú vị. Phù hợp cho cả giáo viên và học sinh trên toàn thế giới.
+            </Link>
+            <p className="text-sm text-slate-400 max-w-md leading-relaxed">
+              Gaming Edu biến lớp học thành không gian chơi thú vị, trực quan và dễ theo dõi cho cả giáo viên lẫn học sinh.
             </p>
-
-            {/* Social Links */}
-            <div className="flex gap-3 mt-6">
-              {[
-                { icon: MessageCircle, href: "#", label: "Facebook" },
-                { icon: Share2, href: "#", label: "Twitter" },
-                { icon: PlayCircle, href: "#", label: "YouTube" },
-                { icon: Mail, href: "#", label: "Email" },
-              ].map(({ icon: Icon, href, label }) => (
-                <a
-                  key={label}
-                  href={href}
-                  aria-label={label}
-                  className="w-9 h-9 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 hover:text-white hover:bg-violet-600/30 hover:border-violet-500/50 transition-all duration-200"
-                >
-                  <Icon size={15} />
-                </a>
-              ))}
-            </div>
           </div>
 
-          {/* Links */}
-          {Object.entries(footerLinks).map(([title, links]) => (
-            <div key={title}>
-              <h4 className="font-700 text-sm text-white mb-4 uppercase tracking-wider">
-                {title}
-              </h4>
-              <ul className="space-y-3">
-                {links.map(({ label, href }) => (
-                  <li key={label}>
-                    <Link
-                      href={href}
-                      className="text-gray-400 hover:text-violet-400 text-sm transition-colors duration-200"
-                    >
-                      {label}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
+          {/* SẢN PHẨM (Right Column 1) */}
+          <div className="md:col-span-3 lg:col-span-2 lg:col-start-9">
+            <h4 className="font-heading font-bold text-xs uppercase tracking-wider text-white mb-4">
+              SẢN PHẨM
+            </h4>
+            <ul className="space-y-2.5 text-sm">
+              <li>
+                <Link href="/" className="text-slate-400 hover:text-amber-400 transition-colors">
+                  Tạo Phòng
+                </Link>
+              </li>
+              <li>
+                <Link href="/library" className="text-slate-400 hover:text-amber-400 transition-colors">
+                  Chế Độ Chơi
+                </Link>
+              </li>
+              <li>
+                <Link href="#pricing" className="text-slate-400 hover:text-amber-400 transition-colors">
+                  Giá Cả
+                </Link>
+              </li>
+            </ul>
+          </div>
+
+          {/* TÀI NGUYÊN (Right Column 2) */}
+          <div className="md:col-span-3 lg:col-span-2">
+            <h4 className="font-heading font-bold text-xs uppercase tracking-wider text-white mb-4">
+              TÀI NGUYÊN
+            </h4>
+            <ul className="space-y-2.5 text-sm">
+              <li>
+                <Link href="#blog" className="text-slate-400 hover:text-amber-400 transition-colors">
+                  Blog
+                </Link>
+              </li>
+              <li>
+                <Link href="#support" className="text-slate-400 hover:text-amber-400 transition-colors">
+                  Hỗ Trợ
+                </Link>
+              </li>
+              <li>
+                <Link href="#privacy" className="text-slate-400 hover:text-amber-400 transition-colors">
+                  Quyền Riêng Tư
+                </Link>
+              </li>
+            </ul>
+          </div>
         </div>
 
-        {/* Bottom bar */}
-        <div className="border-t border-white/10 py-6 flex flex-col sm:flex-row justify-between items-center gap-4">
-          <p className="text-gray-500 text-xs">
-            © 2024 Gaming Edu. Tất cả quyền được bảo lưu.
-          </p>
-          <div className="flex gap-6">
-            {["Điều Khoản Dịch Vụ", "Chính Sách Quyền Riêng Tư"].map((item) => (
-              <Link
-                key={item}
-                href="#"
-                className="text-gray-500 hover:text-gray-300 text-xs transition-colors"
-              >
-                {item}
-              </Link>
-            ))}
+        {/* Bottom copyright & terms */}
+        <div className="pt-8 border-t border-slate-800/80 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
+          <p>© 2024 Gaming Edu. Tất cả quyền được bảo lưu.</p>
+          <div className="flex items-center gap-6">
+            <Link href="#terms" className="hover:text-slate-300 transition-colors">
+              Điều Khoản Dịch Vụ
+            </Link>
+            <Link href="#privacy-policy" className="hover:text-slate-300 transition-colors">
+              Chính Sách Quyền Riêng Tư
+            </Link>
           </div>
         </div>
       </div>

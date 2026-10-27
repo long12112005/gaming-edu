@@ -105,16 +105,51 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             },
             OnTokenValidated = async ctx =>
             {
-                var userId = ctx.Principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                var jti = ctx.Principal?.FindFirst(JwtRegisteredClaimNames.Jti)?.Value;
+                var userId = ctx.Principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                    ?? ctx.Principal?.FindFirst(JwtRegisteredClaimNames.Sub)?.Value
+                    ?? ctx.Principal?.FindFirst("sub")?.Value;
+                var jti = ctx.Principal?.FindFirst(JwtRegisteredClaimNames.Jti)?.Value
+                    ?? ctx.Principal?.FindFirst("jti")?.Value;
                 if (userId != null && jti != null)
                 {
                     var store = ctx.HttpContext.RequestServices.GetRequiredService<ICacheStore>();
                     var activeSession = await store.GetStringAsync($"session:{userId}");
-                    if (activeSession != jti)
+                    if (activeSession == null)
+                    {
+                        // Cache was reset or server restarted: re-populate session from cryptographically valid token
+                        await store.SetStringAsync($"session:{userId}", jti, TimeSpan.FromDays(1));
+                    }
+                    else if (activeSession != jti)
                     {
                         ctx.Fail("Phiên đăng nhập không hợp lệ hoặc bạn đã đăng nhập ở nơi khác.");
                     }
+                }
+            },
+            OnChallenge = async ctx =>
+            {
+                if (!ctx.Response.HasStarted)
+                {
+                    ctx.HandleResponse();
+                    ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                    ctx.Response.ContentType = "application/json";
+                    
+                    var message = "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.";
+                    if (ctx.AuthenticateFailure is SecurityTokenExpiredException || ctx.AuthenticateFailure?.Message?.Contains("IDX10223") == true || ctx.AuthenticateFailure?.Message?.Contains("expired") == true)
+                    {
+                        message = "Phiên đăng nhập của bạn đã hết hạn. Vui lòng đăng nhập lại để tiếp tục.";
+                    }
+                    else if (ctx.AuthenticateFailure != null && !string.IsNullOrWhiteSpace(ctx.AuthenticateFailure.Message) && !ctx.AuthenticateFailure.Message.StartsWith("IDX"))
+                    {
+                        message = ctx.AuthenticateFailure.Message;
+                    }
+
+                    var result = System.Text.Json.JsonSerializer.Serialize(new
+                    {
+                        success = false,
+                        message = message,
+                        data = (object?)null
+                    });
+                    await ctx.Response.WriteAsync(result);
                 }
             }
         };
@@ -129,9 +164,11 @@ var redisConn = builder.Configuration.GetConnectionString("Redis");
 var useRedis = !string.IsNullOrWhiteSpace(redisConn);
 
 // ─── SIGNALR ──────────────────────────────────────────────────────────────
+// 1. Đăng ký dịch vụ SignalR và các Service xử lý logic Hải Chiến
 var signalRBuilder = builder.Services.AddSignalR(options =>
 {
-    options.EnableDetailedErrors = builder.Environment.IsDevelopment();
+    options.EnableDetailedErrors = true;
+    options.KeepAliveInterval = TimeSpan.FromSeconds(15);
     options.MaximumReceiveMessageSize = 32 * 1024; // 32 KB
 });
 
@@ -186,9 +223,11 @@ builder.Services.AddRateLimiter(options =>
 });
 
 // ─── CORS ─────────────────────────────────────────────────────────────────
+// 2. Cấu hình CORS cho phép Frontend kết nối WebSockets / SignalR
+// (Lưu ý: SignalR bắt buộc phải có .AllowCredentials() và chỉ định rõ URL của FE)
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("GamingEduFrontend", policy =>
+    options.AddPolicy("AllowFrontend", policy =>
     {
         policy
             .WithOrigins(
@@ -197,7 +236,20 @@ builder.Services.AddCors(options =>
             )
             .AllowAnyHeader()
             .AllowAnyMethod()
-            .AllowCredentials() // Required for SignalR
+            .AllowCredentials() // Bắt buộc cho SignalR
+            .WithExposedHeaders("Content-Disposition");
+    });
+
+    options.AddPolicy("GamingEduFrontend", policy =>
+    {
+        policy
+            .WithOrigins(
+                "http://localhost:3000",
+                "http://localhost:5173"
+            )
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials()
             .WithExposedHeaders("Content-Disposition");
     });
 });
@@ -205,11 +257,13 @@ builder.Services.AddCors(options =>
 // ─── APPLICATION SERVICES ─────────────────────────────────────────────────
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddHttpClient<IGeminiApiService, GeminiApiService>();
-builder.Services.AddScoped<IAuthService,  AuthService>();
-builder.Services.AddScoped<IQuizService,  QuizService>();
-builder.Services.AddScoped<IRoomService,  RoomService>();
-builder.Services.AddScoped<IGroupService, GroupService>();
-builder.Services.AddScoped<IQAService,    QAService>();
+builder.Services.AddScoped<IAuthService,        AuthService>();
+builder.Services.AddScoped<IQuizService,        QuizService>();
+builder.Services.AddScoped<IRoomService,        RoomService>();
+builder.Services.AddScoped<IGroupService,       GroupService>();
+builder.Services.AddScoped<IQAService,          QAService>();
+builder.Services.AddScoped<INavalMapService,    NavalMapService>();
+builder.Services.AddScoped<INavalCombatService, NavalCombatService>();
 
 // FuzzyMatchingService: stateless, dùng Singleton để tránh allocation mỗi request
 builder.Services.AddSingleton<FuzzyMatchingService>();
@@ -272,7 +326,7 @@ if (!Directory.Exists(uploadsPath))
 app.UseStaticFiles();
 
 // CORS must be before Auth
-app.UseCors("GamingEduFrontend");
+app.UseCors("AllowFrontend");
 
 app.UseRateLimiter();
 
@@ -282,8 +336,11 @@ app.UseAuthorization();
 app.MapControllers();
 
 // ─── SIGNALR HUB ──────────────────────────────────────────────────────────
+// 3. Mở endpoint cho NavalWarHub
 app.MapHub<GameHub>("/hubs/game");
 app.MapHub<NotificationHub>("/hubs/notifications");
 app.MapHub<QAHub>("/hubs/qa");
+app.MapHub<NavalWarHub>("/hubs/naval-war");
+app.MapHub<NavalWarHub>("/hubs/naval");
 
 app.Run();

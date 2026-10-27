@@ -41,7 +41,13 @@ function PlayJoinForm() {
           setLoading(false);
           return;
         }
-        router.push(`/play/${pin}`);
+
+        const roomTheme = res.data.data?.theme || res.data.data?.gameModeTheme;
+        if (roomTheme === "NAVAL_WAR") {
+          router.push(`/rooms/${pin}/naval`);
+        } else {
+          router.push(`/play/${pin}`);
+        }
       }
     } catch (err: any) {
       setError(err.response?.data?.message || "Không tìm thấy phòng chơi với mã PIN này");
@@ -51,18 +57,10 @@ function PlayJoinForm() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col text-[#1B2A2E] relative overflow-hidden font-serif">
-      {/* Landscape background */}
-      <div
-        className="fixed inset-0 z-0"
-        style={{
-          backgroundImage: "url('/bg-cloud-valley.jpg')",
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-        }}
-      />
-      {/* White fog overlay */}
-      <div className="fixed inset-0 z-0" style={{ background: "rgba(238,248,250,0.5)" }} />
+    <div className="min-h-screen bg-[#F4F6FB] text-slate-900 flex flex-col font-sans relative overflow-hidden">
+      {/* Subtle modern ambient background glows */}
+      <div className="fixed top-0 left-1/4 w-96 h-96 bg-indigo-500/5 rounded-full blur-3xl pointer-events-none" />
+      <div className="fixed bottom-0 right-1/4 w-96 h-96 bg-purple-500/5 rounded-full blur-3xl pointer-events-none" />
 
       <SiteHeader />
 
@@ -70,47 +68,47 @@ function PlayJoinForm() {
         <div className="w-full max-w-md">
           {/* Header Title */}
           <div className="flex flex-col items-center justify-center mb-8 gap-3 text-center">
-            <div className="w-16 h-16 rounded-2xl bg-amber-400/20 border-2 border-amber-500/40 flex items-center justify-center text-amber-600 shadow-[0_0_25px_rgba(251,191,36,0.2)]">
+            <div className="w-16 h-16 rounded-2xl bg-indigo-50 border-2 border-indigo-200 flex items-center justify-center text-indigo-600 shadow-sm">
               <Compass size={32} />
             </div>
-            <h1 className="text-3xl font-bold font-serif text-[#08282e] tracking-wide drop-shadow-sm">Tham Gia Phòng Chơi</h1>
-            <p className="text-sm text-teal-700/70 max-w-xs">Nhập mã PIN phòng để bắt đầu làm bài trắc nghiệm cùng bạn bè</p>
+            <h1 className="text-3xl font-black font-heading text-slate-900 tracking-tight">Tham Gia Phòng Chơi</h1>
+            <p className="text-sm text-slate-500 max-w-xs">Nhập mã PIN phòng để bắt đầu làm bài trắc nghiệm cùng bạn bè</p>
           </div>
 
           {/* Pin Entry Card */}
-          <div className="bg-white/65 backdrop-blur-xl rounded-[32px] p-8 border border-white/85 shadow-[0_20px_50px_rgba(8,38,42,0.18)]">
+          <div className="bg-white rounded-[32px] p-8 border border-slate-200/90 shadow-2xl">
             <form onSubmit={handleJoin} className="space-y-5">
               {error && (
-                <div className="p-3.5 bg-red-500/20 text-red-200 text-sm font-bold rounded-2xl text-center border border-red-400/40">
+                <div className="p-3.5 bg-rose-50 text-rose-700 text-sm font-bold rounded-2xl text-center border border-rose-200">
                   {error}
                 </div>
               )}
               
               <div className="space-y-2">
-                <label className="text-xs font-bold text-teal-800 uppercase tracking-wider flex items-center gap-1.5">
-                  <Key size={14} className="text-amber-600" /> Mã PIN Phòng
+                <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                  <Key size={14} className="text-amber-500" /> Mã PIN Phòng
                 </label>
                 <input 
                   type="text" 
                   placeholder="VD: 123456" 
                   value={pin}
                   onChange={(e) => setPin(e.target.value.toUpperCase())}
-                  className="w-full text-center font-black text-2xl uppercase tracking-[0.25em] h-16 bg-white/70 backdrop-blur-md border-2 border-teal-300/40 rounded-2xl text-[#08282e] placeholder-teal-500/40 outline-none focus:border-amber-500 focus:bg-white/90 focus:shadow-[0_0_24px_rgba(20,120,100,0.2)] transition-all"
+                  className="w-full text-center font-black text-2xl uppercase tracking-[0.25em] h-16 bg-slate-50 border-2 border-slate-200 rounded-2xl text-slate-900 placeholder-slate-400 outline-none focus:border-indigo-500 focus:bg-white focus:shadow-md transition-all"
                   autoFocus
                 />
               </div>
 
               {isGuest && (
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-teal-800 uppercase tracking-wider flex items-center gap-1.5">
-                    <User size={14} className="text-amber-600" /> Tên Hoặc Biệt Danh Của Bạn
+                  <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                    <User size={14} className="text-amber-500" /> Tên Hoặc Biệt Danh Của Bạn
                   </label>
                   <input 
                     type="text" 
                     placeholder="Nhập tên của bạn..." 
                     value={nickname}
                     onChange={(e) => setNickname(e.target.value)}
-                    className="w-full text-center font-bold text-lg h-14 bg-white/70 backdrop-blur-md border-2 border-teal-300/40 rounded-2xl text-[#08282e] placeholder-teal-500/40 outline-none focus:border-amber-500 focus:bg-white/90 transition-all"
+                    className="w-full text-center font-bold text-lg h-14 bg-slate-50 border-2 border-slate-200 rounded-2xl text-slate-900 placeholder-slate-400 outline-none focus:border-indigo-500 focus:bg-white transition-all"
                   />
                 </div>
               )}
@@ -118,7 +116,7 @@ function PlayJoinForm() {
               <button 
                 type="submit" 
                 disabled={loading}
-                className="w-full h-14 mt-3 bg-gradient-to-r from-amber-400 via-amber-300 to-yellow-400 hover:from-amber-300 hover:to-amber-400 text-teal-950 font-black text-lg rounded-2xl shadow-[0_0_25px_rgba(251,191,36,0.4)] active:scale-95 transition-all disabled:opacity-60 disabled:cursor-not-allowed uppercase tracking-wider flex items-center justify-center gap-2"
+                className="w-full h-14 mt-3 bg-gradient-to-r from-amber-400 via-amber-300 to-yellow-400 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-black text-lg rounded-2xl shadow-md active:scale-95 transition-all disabled:opacity-60 disabled:cursor-not-allowed uppercase tracking-wider flex items-center justify-center gap-2 font-heading"
               >
                 {loading ? "Đang Kết Nối..." : "Tham Gia Ngay"}
               </button>
@@ -132,7 +130,7 @@ function PlayJoinForm() {
 
 export default function PlayJoinPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-[#10434b] flex items-center justify-center text-cyan-200 font-serif text-2xl animate-pulse">Đang kết nối phòng chơi...</div>}>
+    <Suspense fallback={<div className="min-h-screen bg-[#F4F6FB] flex items-center justify-center text-indigo-600 font-sans text-xl animate-pulse">Đang kết nối phòng chơi...</div>}>
       <PlayJoinForm />
     </Suspense>
   );
