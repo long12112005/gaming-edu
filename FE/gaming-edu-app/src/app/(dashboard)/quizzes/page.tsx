@@ -435,8 +435,8 @@ export default function MyQuizzesPage() {
               <AlertTriangle size={28} />
             </div>
 
-            <h3 className="text-2xl font-bold font-serif text-[#08282e] mb-2">Xóa Bộ Đề?</h3>
-            <p className="text-teal-900/80 text-sm mb-6 leading-relaxed">
+            <h3 className="text-2xl font-black font-heading text-slate-900 mb-2">Xóa Bộ Đề?</h3>
+            <p className="text-slate-600 text-sm mb-6 leading-relaxed">
               Bạn có chắc chắn muốn xóa bộ đề <b>&ldquo;{deleteConfirm.quiz.title}&rdquo;</b>? Toàn bộ câu hỏi bên trong sẽ bị loại bỏ.
             </p>
 

@@ -52,6 +52,7 @@ export interface Quiz {
   id: string;
   creator_id: string; // FK -> users.id
   title: string; // NVARCHAR(255)
+  description?: string | null;
   cover_image_url?: string | null; // NVARCHAR(500)
   topic?: string | null; // NVARCHAR(100)
   is_public: boolean; // BIT
@@ -111,7 +112,8 @@ export interface AIJob {
 }
 
 // --- rooms table ---
-export type RoomMode = "HOST_PACED" | "PLAYER_PACED" | "ASYNC_TOURNAMENT";
+// 2 Chế độ chính thức: HOST_PACED (Phòng Thường tự động) | ASYNC_TOURNAMENT (Phòng Giải Đấu)
+export type RoomMode = "HOST_PACED" | "ASYNC_TOURNAMENT" | "PLAYER_PACED";
 export type RoomStatus = "WAITING" | "PLAYING" | "FINISHED";
 
 export interface Room {

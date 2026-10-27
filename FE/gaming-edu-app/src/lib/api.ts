@@ -18,3 +18,25 @@ api.interceptors.request.use((config) => {
   }
   return config;
 });
+
+// Interceptor to handle expired session (401 Unauthorized)
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      const url = error.config?.url || '';
+      const isAuthEndpoint = url.includes('/auth/login') || url.includes('/auth/register');
+      
+      if (!isAuthEndpoint && typeof window !== 'undefined') {
+        Cookies.remove('token');
+        Cookies.remove('user');
+        
+        // Redirect to login if on a protected route
+        if (!window.location.pathname.startsWith('/auth')) {
+          window.location.href = '/auth?mode=login&expired=true';
+        }
+      }
+    }
+    return Promise.reject(error);
+  }
+);

@@ -29,6 +29,7 @@ export interface SlideStartedPayload {
   points: number;
   options: SlideOptionPublic[];
   totalSlides?: number;
+  imageUrl?: string;
 }
 
 export interface PlayerSurvivalStatus {
@@ -207,6 +208,21 @@ export interface CircuitConnectState {
   recentSubmissions: CircuitConnectPlayerResult[];
 }
 
+export interface PlayerArenaProgress {
+  playerId: string;
+  nickname: string;
+  avatarUrl?: string;
+  score: number;
+  rank: number;
+  progressRatio: number; // 0.0 to 1.0 (toàn chặng trên minimap & arena)
+  streak: number;
+  isAnswered: boolean;
+  isJustBoosted: boolean;
+  lastScoreAwarded: number;
+  isCurrentUser?: boolean;
+  isGhost?: boolean;
+}
+
 export interface AnswerRejectedPayload {
   slideId: string;
   reason: string;
@@ -223,6 +239,12 @@ export interface RoomInfoPayload {
   playerNickname?: string;
   status?: string;
   isLocked?: boolean;
+  mode?: string;
+  quizId?: string;
+  theme?: any;
+  endTime?: string;
+  questionTimeLimit?: number;
+  isEarlyFinished?: boolean;
 }
 
 export function useGameHub() {
@@ -255,21 +277,28 @@ export function useGameHub() {
   const [battleRoyaleState, setBattleRoyaleState] = useState<BattleRoyaleState | null>(null);
   const [wagerPool, setWagerPool] = useState<WagerPoolState | null>(null);
   const [bombDefusalState, setBombDefusalState] = useState<BombDefusalState | null>(null);
+  const [isRoomClosed, setIsRoomClosed] = useState(false);
+  const [roomClosedMessage, setRoomClosedMessage] = useState<string>("");
   const [wordHunterState, setWordHunterState] = useState<WordHunterState | null>(null);
   const [bridgeBuilderState, setBridgeBuilderState] = useState<BridgeBuilderState | null>(null);
   const [circuitConnectState, setCircuitConnectState] = useState<CircuitConnectState | null>(null);
   const [answerRejected, setAnswerRejected] = useState<AnswerRejectedPayload | null>(null);
   const [wordCloudData, setWordCloudData] = useState<Record<string, number>>({});
+  const [isKicked, setIsKicked] = useState(false);
+  const [readyPlayers, setReadyPlayers] = useState<Record<string, boolean>>({});
+  const [playerProgress, setPlayerProgress] = useState<Record<string, { currentQuestionIndex: number; totalQuestions: number; score: number }>>({});
+  const [playersProgress, setPlayersProgress] = useState<PlayerArenaProgress[]>([]);
 
-  // Keep a ref to the connection to avoid closure issues
+  // Keep a ref to the connection and roomInfo to avoid closure issues
   const connectionRef = useRef<signalR.HubConnection | null>(null);
+  const roomInfoRef = useRef<any>(null);
+  roomInfoRef.current = roomInfo;
 
   useEffect(() => {
     const token = Cookies.get("token");
     const newConnection = new signalR.HubConnectionBuilder()
       .withUrl(HUB_URL, {
         accessTokenFactory: () => token || "",
-        transport: signalR.HttpTransportType.WebSockets,
       })
       .withAutomaticReconnect()
       .configureLogging(signalR.LogLevel.Information)
@@ -303,9 +332,15 @@ export function useGameHub() {
       setRoomInfo((prev: any) => ({ ...prev, ...info }));
     });
 
-    // Tải danh sách người chơi ban đầu cho Host
-    newConnection.on("LoadPlayers", (loadedPlayers: PlayerInfo[]) => {
-      setPlayers(loadedPlayers || []);
+    // Tải danh sách người chơi ban đầu
+    newConnection.on("LoadPlayers", (loadedPlayers: any[]) => {
+      const normalized: PlayerInfo[] = (loadedPlayers || []).map((p) => ({
+        playerId: p.playerId || p.id || p.PlayerId,
+        nickname: p.nickname || p.Nickname || "Thí sinh",
+        avatarUrl: p.avatarUrl || p.AvatarUrl,
+        joinedAt: p.joinedAt || p.JoinedAt || new Date().toISOString(),
+      }));
+      setPlayers(normalized);
     });
 
     newConnection.on("RejoinedRoom", (data: any) => {
@@ -323,16 +358,58 @@ export function useGameHub() {
         setGameState("WAITING");
       }
     });
-    newConnection.on("PlayerJoined", (player: PlayerInfo) => {
+
+    newConnection.on("PlayerJoined", (player: any) => {
+      const normalized: PlayerInfo = {
+        playerId: player.playerId || player.id || player.PlayerId,
+        nickname: player.nickname || player.Nickname || "Thí sinh",
+        avatarUrl: player.avatarUrl || player.AvatarUrl,
+        joinedAt: player.joinedAt || player.JoinedAt || new Date().toISOString(),
+      };
       setPlayers((prev) => {
-        if (prev.find((p) => p.playerId === player.playerId)) return prev;
-        return [...prev, player];
+        if (prev.find((p) => p.playerId === normalized.playerId)) return prev;
+        return [...prev, normalized];
       });
     });
 
     // Người chơi bị kick
-    newConnection.on("PlayerKicked", (playerId: string) => {
-      setPlayers((prev) => prev.filter((p) => p.playerId !== playerId));
+    newConnection.on("PlayerKicked", (kickedPlayerId: string) => {
+      setPlayers((prev) => prev.filter((p) => p.playerId !== kickedPlayerId && (p as any).id !== kickedPlayerId));
+      const currentPid = roomInfoRef.current?.playerId;
+      if (currentPid && (String(currentPid).toLowerCase() === String(kickedPlayerId).toLowerCase())) {
+        setIsKicked(true);
+      }
+    });
+
+    // Trạng thái sẵn sàng của người chơi
+    newConnection.on("PlayerReadyChanged", (data: { playerId: string; isReady: boolean }) => {
+      setReadyPlayers((prev) => ({ ...prev, [data.playerId]: data.isReady }));
+    });
+
+    // Tiến độ người chơi trong chế độ tự do (PLAYER_PACED / TOURNAMENT)
+    newConnection.on("PlayerProgressUpdated", (data: { playerId: string; nickname: string; currentQuestionIndex: number; totalQuestions: number; score: number }) => {
+      setPlayerProgress((prev) => ({ ...prev, [data.playerId]: data }));
+    });
+
+    // ── 60 FPS Arena Multiplayer Progress Update (All Players) ──
+    newConnection.on("PlayersProgressUpdated", (rawProgress: any[]) => {
+      if (!Array.isArray(rawProgress)) return;
+      const currentPid = roomInfoRef.current?.playerId;
+      const normalized: PlayerArenaProgress[] = rawProgress.map((p) => ({
+        playerId: p.playerId || p.PlayerId,
+        nickname: p.nickname || p.Nickname || "Thí sinh",
+        avatarUrl: p.avatarUrl || p.AvatarUrl,
+        score: p.score ?? p.Score ?? 0,
+        rank: p.rank ?? p.Rank ?? 1,
+        progressRatio: typeof p.progressRatio === "number" ? p.progressRatio : (p.ProgressRatio ?? 0),
+        streak: p.streak ?? p.Streak ?? 0,
+        isAnswered: Boolean(p.isAnswered ?? p.IsAnswered),
+        isJustBoosted: Boolean(p.isJustBoosted ?? p.IsJustBoosted),
+        lastScoreAwarded: p.lastScoreAwarded ?? p.LastScoreAwarded ?? 0,
+        isCurrentUser: currentPid ? String(currentPid).toLowerCase() === String(p.playerId || p.PlayerId).toLowerCase() : false,
+        isGhost: Boolean(p.isGhost ?? p.IsGhost),
+      }));
+      setPlayersProgress(normalized);
     });
 
     // Trạng thái khóa phòng
@@ -341,8 +418,11 @@ export function useGameHub() {
     });
 
     // Bắt đầu game
-    newConnection.on("GameStarted", () => {
+    newConnection.on("GameStarted", (payload?: any) => {
       setGameState("STARTING");
+      if (payload?.mode) {
+        setRoomInfo((prev: any) => prev ? { ...prev, mode: payload.mode } : { mode: payload.mode });
+      }
     });
 
     // Bắt đầu slide câu hỏi
@@ -479,6 +559,12 @@ export function useGameHub() {
       setLeaderboard(data.leaderboard || []);
     });
 
+    newConnection.on("RoomClosed", (data: any) => {
+      setIsRoomClosed(true);
+      setRoomClosedMessage(data?.message || "Chủ phòng đã đóng phòng thi đấu. Cảm ơn bạn đã tham gia!");
+      setGameState("FINISHED");
+    });
+
     return () => {
       newConnection.stop();
     };
@@ -522,9 +608,9 @@ export function useGameHub() {
 
   // ── Actions ──
   // Tham gia phòng với tư cách Thí sinh
-  const joinRoom = useCallback(async (pinCode: string, nickname?: string) => {
+  const joinRoom = useCallback(async (pinCode: string, nickname?: string, avatarUrl?: string, userId?: string) => {
     if (connectionRef.current?.state === signalR.HubConnectionState.Connected) {
-      await connectionRef.current.invoke("JoinRoom", { pinCode, nickname });
+      await connectionRef.current.invoke("JoinRoom", { pinCode, nickname, avatarUrl, userId });
     }
   }, []);
 
@@ -646,12 +732,43 @@ export function useGameHub() {
     }
   }, []);
 
+  const toggleReady = useCallback(async (isReady: boolean) => {
+    if (connectionRef.current?.state === signalR.HubConnectionState.Connected) {
+      await connectionRef.current.invoke("TogglePlayerReady", isReady);
+    }
+  }, []);
+
+  const updateProgress = useCallback(async (currentQuestionIndex: number, totalQuestions: number, score: number) => {
+    if (connectionRef.current?.state === signalR.HubConnectionState.Connected) {
+      await connectionRef.current.invoke("UpdatePlayerProgress", currentQuestionIndex, totalQuestions, score);
+    }
+  }, []);
+
+  const closeRoom = useCallback(async (roomId: string) => {
+    if (connectionRef.current?.state === signalR.HubConnectionState.Connected) {
+      await connectionRef.current.invoke("CloseRoom", roomId);
+    }
+  }, []);
+
+  const requestPlayersProgress = useCallback(async () => {
+    if (connectionRef.current) {
+      try {
+        await connectionRef.current.invoke("RequestPlayersProgress");
+      } catch (err) {
+        console.error("Failed to invoke RequestPlayersProgress:", err);
+      }
+    }
+  }, []);
+
   return {
     connection,
     isConnected,
     error,
     roomInfo,
     players,
+    isKicked,
+    readyPlayers,
+    playerProgress,
     gameState,
     currentSlide,
     countdown,
@@ -687,7 +804,14 @@ export function useGameHub() {
     requestLeaderboard,
     lockRoom,
     kickPlayer,
+    isRoomClosed,
+    roomClosedMessage,
+    closeRoom,
     endGame,
+    toggleReady,
+    updateProgress,
+    playersProgress,
+    requestPlayersProgress,
   };
 }
 

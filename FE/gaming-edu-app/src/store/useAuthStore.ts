@@ -14,6 +14,8 @@ export interface User {
   nickname: string;
   avatar_url?: string;
   avatarUrl?: string;
+  avatar_frame?: string;
+  avatarFrame?: string;
   is_admin?: boolean;
   isAdmin?: boolean;
   status?: string;

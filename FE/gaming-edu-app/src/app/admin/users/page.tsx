@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import Cookies from "js-cookie";
 import {
   Shield,
@@ -22,6 +23,7 @@ import {
 import { api } from "@/lib/api";
 import { useAuthStore } from "@/store/useAuthStore";
 import SiteHeader from "@/components/layout/SiteHeader";
+import AdminNavHeader from "@/components/admin/AdminNavHeader";
 
 export interface AdminUserItem {
   id: string;
@@ -67,60 +69,28 @@ export default function AdminUsersPage() {
 
   const [submitting, setSubmitting] = useState(false);
 
-  // 1. Kiểm tra quyền Admin
+  const [isAdminUser, setIsAdminUser] = useState(false);
+
   useEffect(() => {
     const token = Cookies.get("token");
-    if (!token && !isAuthenticated) {
-      router.push("/login");
-      return;
-    }
-
-    // Nếu đã đăng nhập nhưng không phải Admin -> đá về dashboard
-    if (user && !user.is_admin) {
-      router.push("/dashboard");
-    }
-  }, [user, isAuthenticated, router]);
+    const hasAdminRole = !!(user?.isAdmin || (user as any)?.is_admin);
+    setIsAdminUser(!!token && hasAdminRole);
+  }, [user, isAuthenticated]);
 
   // 2. Tải danh sách người dùng
   const fetchUsers = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await api.get("/admin/users");
-      if (res.data?.success && Array.isArray(res.data.data)) {
-        setUsers(res.data.data);
-      } else if (Array.isArray(res.data)) {
-        setUsers(res.data);
+      const res = await api.get("/admin/users?pageSize=100");
+      const list = res.data?.data?.items || res.data?.data || res.data;
+      if (Array.isArray(list)) {
+        setUsers(list);
+      } else {
+        setUsers([]);
       }
     } catch (err: unknown) {
-      console.warn("Backend endpoint GET /api/admin/users chưa có hoặc lỗi, fallback dữ liệu:", err);
-      // Fallback graceful hiển thị tài khoản mẫu để admin kiểm tra UI
-      setUsers([
-        {
-          id: "11111111-2222-3333-4444-555555555555",
-          email: "admin@gamingedu.com",
-          nickname: "Admin Tối Cao",
-          isAdmin: true,
-          status: "ACTIVE",
-          createdAt: new Date().toISOString(),
-        },
-        {
-          id: "22222222-3333-4444-5555-666666666666",
-          email: "student01@gmail.com",
-          nickname: "Nguyễn Văn An",
-          isAdmin: false,
-          status: "ACTIVE",
-          createdAt: new Date(Date.now() - 86400000 * 3).toISOString(),
-        },
-        {
-          id: "33333333-4444-5555-6666-777777777777",
-          email: "spammer_cheat@yahoo.com",
-          nickname: "CheatMaster99",
-          isAdmin: false,
-          status: "LOCKED",
-          lockedUntil: new Date(Date.now() + 86400000).toISOString(),
-          createdAt: new Date(Date.now() - 86400000 * 10).toISOString(),
-        },
-      ]);
+      console.warn("Lỗi khi tải danh sách người dùng:", err);
+      setUsers([]);
     } finally {
       setLoading(false);
     }
@@ -238,31 +208,36 @@ export default function AdminUsersPage() {
     <div className="min-h-screen bg-[#F8FAFC] text-[#0F172A] flex flex-col font-sans">
       <SiteHeader />
 
-      <main className="flex-1 pt-24 pb-16 px-4 md:px-8 max-w-7xl mx-auto w-full space-y-8">
-        {/* Header Admin */}
-        <div className="bg-white border border-[#E2E8F0] rounded-[24px] p-6 md:p-8 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-          <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-50 border border-rose-200 text-xs font-bold text-rose-600 uppercase tracking-wider mb-2 font-heading">
-              <ShieldAlert size={14} className="text-rose-600" /> Khu Vực Quản Trị Hệ Thống
+      <main className="flex-1 pt-24 pb-16 px-4 md:px-8 max-w-7xl mx-auto w-full space-y-6">
+        {!isAdminUser && (
+          <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-bold flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+            <div className="flex items-center gap-2">
+              <ShieldAlert size={16} className="text-amber-600 shrink-0" />
+              <span>
+                Chế độ xem trước giao diện Quản Trị (Admin Preview Mode). Hãy đăng nhập tài khoản có quyền Quản trị viên để thực hiện các thao tác mở/khóa hoặc xóa tài khoản.
+              </span>
             </div>
-            <h1 className="text-3xl md:text-4xl font-extrabold text-[#0F172A] tracking-tight font-heading">
-              Quản Trị Người Dùng & Phân Quyền
-            </h1>
-            <p className="text-slate-500 text-sm md:text-base mt-1 max-w-xl">
-              Giám sát tài khoản toàn hệ thống, xử lý vi phạm bằng cơ chế mở/khóa phiên làm việc (Brute-force, 30 phút, 1 ngày, vĩnh viễn) hoặc vô hiệu hóa tài khoản.
-            </p>
+            <Link
+              href="/login"
+              className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs whitespace-nowrap shadow-xs transition-colors shrink-0"
+            >
+              Đăng Nhập Admin
+            </Link>
           </div>
+        )}
 
-          <div className="flex items-center gap-3">
-            <div className="p-4 bg-slate-50 rounded-[16px] border border-[#E2E8F0] shadow-sm flex items-center gap-3">
-              <Users size={22} className="text-indigo-600" />
-              <div>
-                <p className="text-[10px] uppercase font-bold text-slate-400 font-heading">Tổng người dùng</p>
-                <p className="text-xl font-extrabold text-[#0F172A] font-heading">{users.length}</p>
-              </div>
+        {/* Navigation & Header */}
+        <AdminNavHeader
+          title="Quản Trị Người Dùng & Phân Quyền"
+          subtitle="Giám sát tài khoản toàn hệ thống, xử lý vi phạm bằng cơ chế mở/khóa phiên làm việc (Brute-force, 30 phút, 1 ngày, vĩnh viễn) hoặc vô hiệu hóa tài khoản."
+          badge="Quản Lý Tài Khoản"
+          actionButton={
+            <div className="px-4 py-2 bg-indigo-50 rounded-xl border border-indigo-200 text-indigo-700 font-bold text-xs flex items-center gap-2">
+              <Users size={16} />
+              <span>Tổng: {users.length} tài khoản</span>
             </div>
-          </div>
-        </div>
+          }
+        />
 
         {/* Toast thông báo */}
         {toastMsg && (
@@ -467,8 +442,8 @@ export default function AdminUsersPage() {
               <Lock size={28} />
             </div>
 
-            <h2 className="text-2xl font-bold font-serif text-[#08282e] mb-1">Khóa Phiên Tài Khoản</h2>
-            <p className="text-teal-800/70 text-sm mb-6">
+            <h2 className="text-2xl font-bold font-heading text-[#0F172A] mb-1">Khóa Phiên Tài Khoản</h2>
+            <p className="text-slate-600 text-sm mb-6 font-medium">
               Tài khoản <b>{lockModal.user.email}</b> sẽ bị ngắt kết nối và không thể đăng nhập trong thời gian chỉ định.
             </p>
 
@@ -529,8 +504,8 @@ export default function AdminUsersPage() {
               <AlertTriangle size={28} />
             </div>
 
-            <h3 className="text-2xl font-bold font-serif text-[#08282e] mb-2">Xóa Tài Khoản?</h3>
-            <p className="text-teal-900/80 text-sm mb-6 leading-relaxed">
+            <h3 className="text-2xl font-bold font-heading text-[#0F172A] mb-2">Xóa Tài Khoản?</h3>
+            <p className="text-slate-600 text-sm mb-6 leading-relaxed font-medium">
               Bạn có chắc chắn muốn xóa tài khoản <b>{deleteConfirm.user.email}</b> ({deleteConfirm.user.nickname})? Tài khoản sẽ chuyển sang trạng thái DELETED và phiên đăng nhập sẽ bị hủy ngay lập tức.
             </p>
 

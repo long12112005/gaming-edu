@@ -23,6 +23,7 @@ import {
 import { api } from "@/lib/api";
 import { useAuthStore } from "@/store/useAuthStore";
 import SiteHeader from "@/components/layout/SiteHeader";
+import AdminNavHeader from "@/components/admin/AdminNavHeader";
 
 interface LockedUserItem {
   id: string;
@@ -40,41 +41,72 @@ export default function AdminDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [toastMsg, setToastMsg] = useState<{ text: string; type: "success" | "error" } | null>(null);
 
-  const [lockedUsers, setLockedUsers] = useState<LockedUserItem[]>([
-    {
-      id: "u-locked-1",
-      email: "intruder_attempt@gmail.com",
-      nickname: "Anonymous_102",
-      lockedUntil: "15 phút còn lại",
-      failedAttempts: 5,
-      reason: "Brute-force sai mật khẩu 5 lần liên tiếp",
-    },
-    {
-      id: "u-locked-2",
-      email: "suspicious_bot@yahoo.com",
-      nickname: "Bot_Tester",
-      lockedUntil: "12 phút còn lại",
-      failedAttempts: 7,
-      reason: "Gửi OTP vượt ngưỡng giới hạn",
-    },
-  ]);
+  const [lockedUsers, setLockedUsers] = useState<LockedUserItem[]>([]);
+  const [totalUsers, setTotalUsers] = useState(0);
+  const [activeRooms, setActiveRooms] = useState(0);
+
+  const [isAdminUser, setIsAdminUser] = useState(false);
+
+  useEffect(() => {
+    const token = Cookies.get("token");
+    const hasAdminRole = !!(user?.isAdmin || (user as any)?.is_admin);
+    setIsAdminUser(!!token && hasAdminRole);
+  }, [user, isAuthenticated]);
+
+  const fetchAdminData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await api.get("/admin/users?pageSize=100");
+      const list = res.data?.data?.items || res.data?.data || res.data || [];
+      if (Array.isArray(list)) {
+        const total = res.data?.data?.total || list.length;
+        setTotalUsers(total);
+        const locked = list
+          .filter((u: any) => u.status === "LOCKED")
+          .map((u: any) => ({
+            id: u.id,
+            email: u.email,
+            nickname: u.nickname || u.email.split("@")[0],
+            lockedUntil: u.lockedUntil ? new Date(u.lockedUntil).toLocaleTimeString("vi-VN") : "Bị khóa",
+            failedAttempts: u.failedLoginAttempts || 5,
+            reason: "Tài khoản bị khóa do bảo mật hoặc brute-force",
+          }));
+        setLockedUsers(locked);
+      } else {
+        setLockedUsers([]);
+        setTotalUsers(0);
+      }
+    } catch (err: unknown) {
+      console.warn("Lỗi tải dữ liệu quản trị:", err);
+      setLockedUsers([]);
+      setTotalUsers(0);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchAdminData();
+  }, [fetchAdminData]);
 
   const stats = {
-    totalUsers: 1420,
+    totalUsers,
     lockedCount: lockedUsers.length,
-    activeRooms: 18,
-    systemHealth: "99.98%",
+    activeRooms,
+    systemHealth: "100%",
   };
 
   const handleUnlockUser = async (userId: string, email: string) => {
     try {
-      await api.post(`/admin/users/${userId}/unlock`);
+      await api.put(`/admin/users/${userId}/lock?lockMinutes=0`);
       setLockedUsers((prev) => prev.filter((u) => u.id !== userId));
       setToastMsg({ text: `Đã mở khóa tài khoản ${email} thành công!`, type: "success" });
-    } catch {
-      // Mock unlock
-      setLockedUsers((prev) => prev.filter((u) => u.id !== userId));
-      setToastMsg({ text: `Đã mở khóa tài khoản ${email} thành công!`, type: "success" });
+    } catch (err: unknown) {
+      const errorObj = err as { response?: { data?: { message?: string } } };
+      setToastMsg({
+        text: errorObj.response?.data?.message || `Không thể mở khóa tài khoản ${email}.`,
+        type: "error",
+      });
     }
   };
 
@@ -82,31 +114,30 @@ export default function AdminDashboardPage() {
     <div className="min-h-screen bg-[#F8FAFC] text-[#0F172A] flex flex-col font-sans">
       <SiteHeader />
 
-      <main className="flex-1 pt-24 pb-16 px-4 md:px-8 max-w-7xl mx-auto w-full space-y-8">
-        {/* Header Section */}
-        <div className="bg-white border border-[#E2E8F0] rounded-[24px] p-6 md:p-8 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-          <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-50 border border-rose-200 text-xs font-bold text-rose-600 uppercase tracking-wider mb-2 font-heading">
-              <ShieldAlert size={14} className="text-rose-600" /> Bảng Điều Khiển Quản Trị
+      <main className="flex-1 pt-24 pb-16 px-4 md:px-8 max-w-7xl mx-auto w-full space-y-6">
+        {!isAdminUser && (
+          <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-bold flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+            <div className="flex items-center gap-2">
+              <ShieldAlert size={16} className="text-amber-600 shrink-0" />
+              <span>
+                Chế độ xem trước giao diện Quản Trị (Admin Preview Mode). Hãy đăng nhập tài khoản có quyền Quản trị viên để thực hiện các thao tác mở khóa hoặc thay đổi hệ thống.
+              </span>
             </div>
-            <h1 className="text-3xl md:text-4xl font-extrabold text-[#0F172A] font-heading tracking-tight">
-              Trung Tâm Quản Trị Hệ Thống
-            </h1>
-            <p className="text-slate-500 text-sm md:text-base mt-1 max-w-xl">
-              Giám sát bảo mật, kiểm soát các tài khoản bị khóa Brute-force và quản lý người dùng toàn hệ thống GameEdu.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-3 shrink-0">
             <Link
-              href="/admin/users"
-              className="px-5 py-3 rounded-[12px] bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-sm transition-all flex items-center gap-2 font-heading"
+              href="/login"
+              className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs whitespace-nowrap shadow-xs transition-colors shrink-0"
             >
-              <Users size={16} />
-              <span>Quản Lý Toàn Bộ Người Dùng</span>
+              Đăng Nhập Admin
             </Link>
           </div>
-        </div>
+        )}
+
+        {/* Navigation & Header */}
+        <AdminNavHeader
+          title="Trung Tâm Quản Trị Hệ Thống"
+          subtitle="Giám sát bảo mật, kiểm soát các tài khoản bị khóa Brute-force và quản lý người dùng toàn hệ thống GameEdu."
+          badge="Bảng Điều Khiển Quản Trị"
+        />
 
         {/* Toast */}
         {toastMsg && (

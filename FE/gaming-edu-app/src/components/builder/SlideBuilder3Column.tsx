@@ -35,6 +35,8 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { api } from "@/lib/api";
+import BulkImportModal from "@/components/modals/BulkImportModal";
+import { ParsedSlide } from "@/lib/quizParser";
 
 export type SlideType = "QUIZ" | "FILL_IN_BLANK" | "MATCHING" | "POLL" | "WORD_CLOUD";
 export type SlideStatus = "DRAFT" | "PUBLISHED";
@@ -73,34 +75,32 @@ const createDefaultSlide = (type: SlideType = "QUIZ"): SlideDraft => {
   let defaultQuestion = "";
 
   if (type === "MATCHING") {
-    defaultQuestion = "Ghép nối các quốc gia ở Cột A với thủ đô tương ứng ở Cột B:";
+    defaultQuestion = "";
     defaultOptions = [
-      { id: tempId(), content: "Việt Nam", isCorrect: true, matchingPair: "Hà Nội" },
-      { id: tempId(), content: "Pháp", isCorrect: true, matchingPair: "Paris" },
-      { id: tempId(), content: "Nhật Bản", isCorrect: true, matchingPair: "Tokyo" },
+      { id: tempId(), content: "", isCorrect: true, matchingPair: "" },
+      { id: tempId(), content: "", isCorrect: true, matchingPair: "" },
     ];
   } else if (type === "FILL_IN_BLANK") {
-    defaultQuestion = "Thủ đô của nước Cộng hòa Xã hội Chủ nghĩa Việt Nam là [...]";
+    defaultQuestion = "";
     defaultOptions = [
-      { id: tempId(), content: "Hà Nội", isCorrect: true, blankKeywords: "Hà Nội, Ha Noi, hanoi" },
+      { id: tempId(), content: "", isCorrect: true, blankKeywords: "" },
     ];
   } else if (type === "WORD_CLOUD") {
-    defaultQuestion = "Gõ 1 từ mô tả cảm xúc của bạn về buổi học hôm nay:";
+    defaultQuestion = "";
     defaultOptions = [];
   } else if (type === "POLL") {
-    defaultQuestion = "Bạn thích chủ đề nào nhất trong chương này?";
+    defaultQuestion = "";
     defaultOptions = [
-      { id: tempId(), content: "Phương án 1: Trắc nghiệm kiến thức", isCorrect: false },
-      { id: tempId(), content: "Phương án 2: Thảo luận nhóm", isCorrect: false },
-      { id: tempId(), content: "Phương án 3: Thực hành dự án", isCorrect: false },
+      { id: tempId(), content: "", isCorrect: false },
+      { id: tempId(), content: "", isCorrect: false },
     ];
   } else {
-    defaultQuestion = "Câu hỏi trắc nghiệm mới:";
+    defaultQuestion = "";
     defaultOptions = [
-      { id: tempId(), content: "Phương án A", isCorrect: true },
-      { id: tempId(), content: "Phương án B", isCorrect: false },
-      { id: tempId(), content: "Phương án C", isCorrect: false },
-      { id: tempId(), content: "Phương án D", isCorrect: false },
+      { id: tempId(), content: "", isCorrect: true },
+      { id: tempId(), content: "", isCorrect: false },
+      { id: tempId(), content: "", isCorrect: false },
+      { id: tempId(), content: "", isCorrect: false },
     ];
   }
 
@@ -133,6 +133,9 @@ export default function SlideBuilder3Column({ quizId }: { quizId: string }) {
   const [aiProgress, setAiProgress] = useState(0);
   const [aiStep, setAiStep] = useState(1);
 
+  // Bulk Import Modal
+  const [bulkImportOpen, setBulkImportOpen] = useState(false);
+
   const activeSlide = slides[activeSlideIndex] || slides[0];
 
   // Fetch dữ liệu quiz nếu có trên server
@@ -164,9 +167,21 @@ export default function SlideBuilder3Column({ quizId }: { quizId: string }) {
                 : [],
             }))
           );
+        } else {
+          // Kiểm tra xem có slide vừa import từ trang quiz/create không
+          const pendingStr = sessionStorage.getItem("pending_import_slides");
+          if (pendingStr) {
+            try {
+              const pending = JSON.parse(pendingStr);
+              if (Array.isArray(pending) && pending.length > 0) {
+                setSlides(pending);
+                sessionStorage.removeItem("pending_import_slides");
+              }
+            } catch {}
+          }
         }
       } catch (err) {
-        console.warn("Dùng mock slides cho builder:", err);
+        console.warn("Không tải được slides từ server:", err);
       } finally {
         setLoading(false);
       }
@@ -242,22 +257,33 @@ export default function SlideBuilder3Column({ quizId }: { quizId: string }) {
   const handleSaveAll = async () => {
     try {
       setSaveStatus("saving");
-      // Gửi PUT/POST đến BE
       await api.put(`/quizzes/${quizId}`, {
         title: quizTitle,
-        slides: slides.map((s) => ({
-          ...s,
+        slides: slides.map((s, idx) => ({
+          type: s.type,
+          questionText: s.questionText,
+          timeLimit: s.timeLimit || 30,
+          points: s.points || 1000,
           status: "PUBLISHED",
+          orderIndex: idx,
+          isAIGenerated: s.isAIGenerated || false,
+          options: (s.options || []).map((opt, oIdx) => ({
+            content: opt.content || "",
+            isCorrect: opt.isCorrect ?? false,
+            orderIndex: oIdx,
+            matchingPair: opt.matchingPair || null,
+            blankKeywords: opt.blankKeywords || null,
+          })),
         })),
       });
       setSaveStatus("saved");
       setToastMsg({ text: "Đã lưu bộ đề và xuất bản thành công!", type: "success" });
-    } catch {
-      // Offline fallback
-      setTimeout(() => {
-        setSaveStatus("saved");
-        setToastMsg({ text: "Đã lưu bộ đề vào hệ thống!", type: "success" });
-      }, 500);
+    } catch (err: any) {
+      setSaveStatus("unsaved");
+      setToastMsg({
+        text: err?.response?.data?.message || "Không thể lưu bộ đề lên máy chủ. Vui lòng thử lại!",
+        type: "error",
+      });
     }
   };
 
@@ -337,6 +363,37 @@ export default function SlideBuilder3Column({ quizId }: { quizId: string }) {
     }, 3200);
   };
 
+  // Nhập hàng loạt câu hỏi từ Modal (Text/Word/PDF/Excel)
+  const handleBulkImportQuestions = (importedList: ParsedSlide[]) => {
+    if (!importedList || importedList.length === 0) return;
+
+    const newSlides: SlideDraft[] = importedList.map((p) => ({
+      id: tempId(),
+      type: p.type,
+      questionText: p.questionText,
+      timeLimit: p.timeLimit,
+      points: p.points,
+      status: "PUBLISHED",
+      isAIGenerated: false,
+      options: p.options.map((opt) => ({
+        id: tempId(),
+        content: opt.content,
+        isCorrect: opt.isCorrect,
+        matchingPair: opt.matchingPair,
+        blankKeywords: opt.blankKeywords,
+      })),
+    }));
+
+    const startIdx = slides.length;
+    setSlides((prev) => [...prev, ...newSlides]);
+    setActiveSlideIndex(startIdx);
+    setSaveStatus("unsaved");
+    setToastMsg({
+      text: `🎉 Đã nhập thành công ${newSlides.length} câu hỏi vào bộ đề!`,
+      type: "success",
+    });
+  };
+
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-[#0F172A] flex flex-col font-sans h-screen overflow-hidden">
       {/* ── TOP HEADER ── */}
@@ -384,6 +441,15 @@ export default function SlideBuilder3Column({ quizId }: { quizId: string }) {
           </div>
 
           <button
+            onClick={() => setBulkImportOpen(true)}
+            className="px-3.5 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 font-heading font-bold text-xs flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer shadow-2xs"
+            title="Nhập hàng loạt từ Word/PDF/Excel"
+          >
+            <Layers size={14} className="text-amber-600" />
+            <span>📥 Nhập Hàng Loạt</span>
+          </button>
+
+          <button
             onClick={() => setAiModalOpen(true)}
             className="px-3.5 py-2 rounded-[10px] bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 hover:opacity-90 text-white font-bold text-xs shadow-sm shadow-indigo-500/20 flex items-center gap-1.5 font-heading active:scale-95 transition-all"
           >
@@ -427,15 +493,25 @@ export default function SlideBuilder3Column({ quizId }: { quizId: string }) {
               Slides ({slides.length})
             </span>
 
-            {/* Nút thêm slide */}
-            <div className="relative group">
+            {/* Nút thêm slide & Nhập nhanh */}
+            <div className="flex items-center gap-1.5">
               <button
-                className="px-2.5 py-1 rounded-[8px] bg-indigo-50 text-indigo-600 hover:bg-indigo-100 text-xs font-bold flex items-center gap-1 transition-all"
-                title="Thêm slide câu hỏi"
+                onClick={() => setBulkImportOpen(true)}
+                className="px-2 py-1 rounded-[8px] bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-bold flex items-center gap-1 transition-all border border-amber-200 cursor-pointer"
+                title="Nhập nhanh từ Word/PDF/Excel"
               >
-                <Plus size={14} />
-                <span>Thêm</span>
+                <Layers size={12} />
+                <span>Nhập file</span>
               </button>
+
+              <div className="relative group">
+                <button
+                  className="px-2.5 py-1 rounded-[8px] bg-indigo-50 text-indigo-600 hover:bg-indigo-100 text-xs font-bold flex items-center gap-1 transition-all"
+                  title="Thêm slide câu hỏi"
+                >
+                  <Plus size={14} />
+                  <span>Thêm</span>
+                </button>
 
               {/* Menu chọn loại câu hỏi khi hover/click */}
               <div className="absolute left-0 top-full mt-1 w-52 bg-white border border-[#E2E8F0] rounded-[14px] shadow-lg p-1.5 hidden group-hover:block z-40 animate-in fade-in">
@@ -452,6 +528,7 @@ export default function SlideBuilder3Column({ quizId }: { quizId: string }) {
               </div>
             </div>
           </div>
+        </div>
 
           {/* List thumbnails */}
           <div className="flex-1 overflow-y-auto p-3 space-y-2.5">
@@ -1003,6 +1080,13 @@ export default function SlideBuilder3Column({ quizId }: { quizId: string }) {
           </div>
         </div>
       )}
+
+      {/* ── MODAL NHẬP HÀNG LOẠT (BULK IMPORT) ── */}
+      <BulkImportModal
+        isOpen={bulkImportOpen}
+        onClose={() => setBulkImportOpen(false)}
+        onImport={handleBulkImportQuestions}
+      />
     </div>
   );
 }

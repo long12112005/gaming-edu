@@ -18,6 +18,7 @@ public interface IGroupService
     Task<IEnumerable<GroupMemberDto>> GetGroupMembersAsync(Guid groupId);
     Task LeaveGroupAsync(Guid userId, Guid groupId);
     Task<GroupDto> UpdateGroupAsync(Guid hostId, Guid groupId, UpdateGroupRequest request);
+    Task<GroupDto?> GetGroupByIdAsync(Guid userId, Guid groupId);
 }
 
 public class GroupService : IGroupService
@@ -240,6 +241,35 @@ public class GroupService : IGroupService
             group.Name,
             group.Description,
             group.GroupCode,
+            group.Status,
+            group.Host.Nickname,
+            activeMemberCount,
+            group.CreatedAt
+        );
+    }
+
+    public async Task<GroupDto?> GetGroupByIdAsync(Guid userId, Guid groupId)
+    {
+        var group = await _db.Groups
+            .AsNoTracking()
+            .Include(g => g.Host)
+            .Include(g => g.Members)
+            .FirstOrDefaultAsync(g => g.Id == groupId && g.Status != "DISBANDED");
+
+        if (group == null) return null;
+
+        bool isHost = group.HostId == userId;
+        bool isMember = group.Members.Any(m => m.UserId == userId && m.Status == "ACTIVE");
+
+        // Cho phép xem nếu là host, thành viên active, hoặc nếu chưa join nhưng có link
+        int activeMemberCount = group.Members.Count(m => m.Status == "ACTIVE");
+        string displayCode = (isHost || isMember) ? group.GroupCode : "HIDDEN";
+
+        return new GroupDto(
+            group.Id,
+            group.Name,
+            group.Description,
+            displayCode,
             group.Status,
             group.Host.Nickname,
             activeMemberCount,

@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.IdentityModel.Tokens.Jwt;
 using GamingEdu.API.DTOs;
 using GamingEdu.API.Models;
 using GamingEdu.API.Services;
@@ -62,14 +63,20 @@ public class GameHub : Hub
     // ── JOIN ROOM ──────────────────────────────────────────────────────
     // Maps to rooms.pin_code lookup + room_players insert
     // ═══════════════════════════════════════════════════════════════════
+    private static Guid? GetUserId(HubCallerContext context)
+    {
+        var claim = context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value
+            ?? context.User?.FindFirst(JwtRegisteredClaimNames.Sub)?.Value
+            ?? context.User?.FindFirst("sub")?.Value;
+        return Guid.TryParse(claim, out var id) ? id : null;
+    }
+
     public async Task JoinRoom(JoinRoomRequest request)
     {
         try
         {
-            // Get userId from JWT claim (null = guest player)
-            Guid? userId = null;
-            var userIdClaim = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            if (Guid.TryParse(userIdClaim, out var parsed)) userId = parsed;
+            // Get userId from JWT claim or request payload (null = guest player)
+            Guid? userId = GetUserId(Context) ?? request.UserId;
 
             if (LockedRooms.Contains(request.PinCode))
             {
@@ -89,10 +96,26 @@ public class GameHub : Hub
             Context.Items["GroupName"]   = groupName;
             Context.Items["PinCode"]     = room.PinCode;
 
+            Context.Items["PlayerNickname"] = player.Nickname;
+
             _logger.LogInformation(
                 "Player '{Nickname}' joined room {PinCode}", player.Nickname, room.PinCode);
 
             var theme = await _roomService.GetRoomThemeAsync(room.Id);
+
+            int? questionTimeLimit = null;
+            if (!string.IsNullOrEmpty(room.GameSettings))
+            {
+                try
+                {
+                    using var doc = System.Text.Json.JsonDocument.Parse(room.GameSettings);
+                    if (doc.RootElement.TryGetProperty("questionTimeLimit", out var qtlProp))
+                    {
+                        questionTimeLimit = qtlProp.GetInt32();
+                    }
+                }
+                catch {}
+            }
 
             // Confirm to the joining player
             await Clients.Caller.SendAsync("JoinedRoom", new
@@ -101,10 +124,22 @@ public class GameHub : Hub
                 PlayerId   = player.Id,
                 PinCode    = room.PinCode,
                 Mode       = room.Mode,
+                Status     = room.Status,
                 QuizId     = room.QuizId,
                 PlayerNickname = player.Nickname,
                 Theme      = theme,
+                EndTime    = room.EndTime,
+                QuestionTimeLimit = questionTimeLimit,
+                IsEarlyFinished = room.IsEarlyFinished
             });
+
+            // Gửi danh sách toàn bộ người chơi hiện tại cho người mới vào thấy được mọi người trong phòng
+            var currentPlayers = await _roomService.GetRoomActivePlayersAsync(room.Id);
+            await Clients.Caller.SendAsync("LoadPlayers", currentPlayers);
+
+            // Gửi tiến độ đường đua đấu trường 60 FPS hiện tại cho người mới vào
+            var initialProgress = await _roomService.GetRoomPlayersArenaProgressAsync(room.Id);
+            await Clients.Caller.SendAsync("PlayersProgressUpdated", initialProgress);
 
             // Broadcast to all players in the room (including host)
             await Clients.Group(groupName).SendAsync("PlayerJoined", new
@@ -129,11 +164,12 @@ public class GameHub : Hub
     {
         try
         {
-            var playerData = await _roomService.RejoinRoomPlayerAsync(pinCode, playerId, nickname);
+            Guid? userId = GetUserId(Context);
+            var playerData = await _roomService.RejoinRoomPlayerAsync(pinCode, playerId, nickname, userId);
             if (playerData is null)
             {
                 // Fallback: nếu phòng vẫn WAITING thì gọi JoinRoom thông thường
-                await JoinRoom(new JoinRoomRequest(pinCode, nickname ?? "Player", null));
+                await JoinRoom(new JoinRoomRequest(pinCode, nickname ?? "Player", null, userId));
                 return;
             }
 
@@ -189,6 +225,15 @@ public class GameHub : Hub
                 PreviousResult = previousResult,
             });
 
+            Context.Items["PlayerNickname"] = playerData.PlayerNickname;
+
+            var currentPlayers = await _roomService.GetRoomActivePlayersAsync(playerData.RoomId);
+            await Clients.Caller.SendAsync("LoadPlayers", currentPlayers);
+
+            // Đồng bộ tiến độ đấu trường thời gian thực khi kết nối lại
+            var rejoinProgress = await _roomService.GetRoomPlayersArenaProgressAsync(playerData.RoomId, null, 0, currentSlideDto?.SlideId);
+            await Clients.Caller.SendAsync("PlayersProgressUpdated", rejoinProgress);
+
             _logger.LogInformation("Player '{Nickname}' successfully rejoined room {PinCode}", playerData.PlayerNickname, playerData.PinCode);
         }
         catch (Exception ex)
@@ -219,8 +264,8 @@ public class GameHub : Hub
     {
         try
         {
-            var userIdClaim = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            if (!Guid.TryParse(userIdClaim, out var hostId))
+            var hostId = GetUserId(Context);
+            if (!hostId.HasValue)
             {
                 await SendErrorAsync("Không xác định được chủ phòng.");
                 return;
@@ -248,9 +293,7 @@ public class GameHub : Hub
             var hostTheme = await _roomService.GetRoomThemeAsync(room.Id);
 
             // Gửi danh sách người chơi hiện có (phòng hợp lệ khi host F5 trang)
-            var players = room.Players
-                .OrderBy(p => p.JoinedAt)
-                .Select(p => new { PlayerId = p.Id, p.Nickname, p.AvatarUrl, p.JoinedAt });
+            var players = await _roomService.GetRoomActivePlayersAsync(room.Id);
             await Clients.Caller.SendAsync("LoadPlayers", players);
             await Clients.Caller.SendAsync("HostJoined", new
             {
@@ -298,9 +341,6 @@ public class GameHub : Hub
             Context.Items["RoomId"]    = room.Id;
             Context.Items["GroupName"] = groupName;
 
-            // Update rooms.status = 'PLAYING', rooms.start_time = NOW
-            await _roomService.UpdateRoomStatusAsync(roomId, "PLAYING");
-
             // Initialize slide index for this room
             RoomSlideIndex[pinCode] = 0;
             LastSlideTransitionTime[pinCode] = DateTime.UtcNow;
@@ -309,9 +349,12 @@ public class GameHub : Hub
             var slideDto = await GetCurrentSlideAsync(roomId, pinCode);
             if (slideDto is null)
             {
-                await SendErrorAsync("Bộ đề không có câu hỏi nào.");
+                await SendErrorAsync("Bộ đề không có câu hỏi nào. Vui lòng thêm câu hỏi vào bộ đề trước khi bắt đầu.");
                 return;
             }
+
+            // Update rooms.status = 'PLAYING', rooms.start_time = NOW
+            await _roomService.UpdateRoomStatusAsync(roomId, "PLAYING");
 
             _logger.LogInformation("Game started in room {PinCode}", pinCode);
 
@@ -319,7 +362,7 @@ public class GameHub : Hub
             await Clients.Group(groupName).SendAsync("GameStarted", new
             {
                 RoomId  = roomId,
-                Mode    = "HOST_PACED",
+                Mode    = room.Mode,
                 Message = "Trò chơi bắt đầu!",
             });
 
@@ -327,6 +370,10 @@ public class GameHub : Hub
             // Ghi mốc thời gian server cho câu hỏi đầu (chống gian lận)
             await _timer.StartRoomSlideAsync(roomId, slideDto.SlideId, slideDto.TimeLimit);
             await Clients.Group(groupName).SendAsync("SlideStarted", slideDto);
+
+            // Đồng bộ tiến độ đấu trường toàn phòng khi bắt đầu câu hỏi đầu tiên
+            var arenaProgress = await _roomService.GetRoomPlayersArenaProgressAsync(roomId, null, 0, slideDto.SlideId);
+            await Clients.Group(groupName).SendAsync("PlayersProgressUpdated", arenaProgress);
 
             var roomTheme = await _roomService.GetRoomThemeAsync(roomId);
             if (roomTheme == "DEFUSE_BOMB")
@@ -399,6 +446,44 @@ public class GameHub : Hub
         if (!string.IsNullOrEmpty(groupName))
         {
             await Clients.Group(groupName).SendAsync("PlayerKicked", playerIdToKick);
+        }
+    }
+
+    public async Task TogglePlayerReady(bool isReady)
+    {
+        var playerId = Context.Items["PlayerId"] as Guid?;
+        var groupName = Context.Items["GroupName"] as string;
+        if (playerId != null && !string.IsNullOrEmpty(groupName))
+        {
+            await Clients.Group(groupName).SendAsync("PlayerReadyChanged", new { PlayerId = playerId.Value, IsReady = isReady });
+        }
+    }
+
+    public async Task UpdatePlayerProgress(int currentQuestionIndex, int totalQuestions, int score)
+    {
+        var playerId = Context.Items["PlayerId"] as Guid?;
+        var nickname = Context.Items["PlayerNickname"] as string ?? "Thí sinh";
+        var groupName = Context.Items["GroupName"] as string;
+        if (playerId != null && !string.IsNullOrEmpty(groupName))
+        {
+            await Clients.Group(groupName).SendAsync("PlayerProgressUpdated", new
+            {
+                PlayerId = playerId.Value,
+                Nickname = nickname,
+                CurrentQuestionIndex = currentQuestionIndex,
+                TotalQuestions = totalQuestions,
+                Score = score
+            });
+        }
+    }
+
+    public async Task RequestPlayersProgress()
+    {
+        var roomId = Context.Items["RoomId"] as Guid?;
+        if (roomId.HasValue)
+        {
+            var progress = await _roomService.GetRoomPlayersArenaProgressAsync(roomId.Value);
+            await Clients.Caller.SendAsync("PlayersProgressUpdated", progress);
         }
     }
 
@@ -486,6 +571,10 @@ public class GameHub : Hub
             await _timer.StartRoomSlideAsync(roomId, slideDto.SlideId, slideDto.TimeLimit);
             await Clients.Group(groupName).SendAsync("SlideStarted", slideDto);
 
+            // Đồng bộ tiến độ đấu trường toàn phòng khi chuyển sang câu hỏi tiếp theo
+            var nextSlideProgress = await _roomService.GetRoomPlayersArenaProgressAsync(roomId, null, 0, slideDto.SlideId);
+            await Clients.Group(groupName).SendAsync("PlayersProgressUpdated", nextSlideProgress);
+
             var roomTheme = await _roomService.GetRoomThemeAsync(roomId);
             if (roomTheme == "DEFUSE_BOMB")
             {
@@ -537,6 +626,33 @@ public class GameHub : Hub
             // CHỐNG GIAN LẬN: thời gian trả lời do SERVER tính từ mốc đã ghi,
             // bỏ qua ResponseTimeMs client gửi lên. Tính tại thời điểm nhận (không tính độ trễ hàng đợi).
             var check = await _timer.CheckAsync(roomId, playerId, request.SlideId);
+            if (check.Status == TimerCheckStatus.NotStarted)
+            {
+                // Fallback cho chế độ tự do (PLAYER_PACED hoặc ASYNC_TOURNAMENT) nếu client nộp mà timer cá nhân chưa kịp ghi
+                var pinCode = Context.Items["PinCode"] as string;
+                var room = !string.IsNullOrEmpty(pinCode) ? await _roomService.GetRoomByPinAsync(pinCode) : await _roomService.GetRoomByIdAsync(roomId);
+                if (room != null && (room.Mode == "PLAYER_PACED" || room.Mode == "ASYNC_TOURNAMENT"))
+                {
+                    var quiz = await _quizService.GetQuizDetailAsync(room.QuizId);
+                    var slide = quiz?.Slides.FirstOrDefault(s => s.Id == request.SlideId);
+                    int timeLimit = slide?.TimeLimit > 0 ? slide.TimeLimit : 30;
+                    if (!string.IsNullOrEmpty(room.GameSettings))
+                    {
+                        try
+                        {
+                            using var doc = System.Text.Json.JsonDocument.Parse(room.GameSettings);
+                            if (doc.RootElement.TryGetProperty("questionTimeLimit", out var limitElem) && limitElem.TryGetInt32(out var customLimit) && customLimit > 0)
+                            {
+                                timeLimit = customLimit;
+                            }
+                        }
+                        catch { }
+                    }
+                    await _timer.StartPlayerSlideAsync(playerId, request.SlideId, timeLimit);
+                    check = await _timer.CheckAsync(roomId, playerId, request.SlideId);
+                }
+            }
+
             if (check.Status == TimerCheckStatus.NotStarted)
             {
                 await Clients.Caller.SendAsync("AnswerRejected", new { request.SlideId, Reason = "NOT_STARTED", Message = "Câu hỏi chưa bắt đầu." });
@@ -594,8 +710,22 @@ public class GameHub : Hub
                 return;
             }
 
-            await _timer.StartPlayerSlideAsync(playerId, slideId, slide.TimeLimit);
-            await Clients.Caller.SendAsync("PlayerSlideTimerStarted", new { SlideId = slideId, slide.TimeLimit });
+            int effectiveTimeLimit = slide.TimeLimit > 0 ? slide.TimeLimit : 30;
+            if (room != null && !string.IsNullOrEmpty(room.GameSettings))
+            {
+                try
+                {
+                    using var doc = System.Text.Json.JsonDocument.Parse(room.GameSettings);
+                    if (doc.RootElement.TryGetProperty("questionTimeLimit", out var limitElem) && limitElem.TryGetInt32(out var customLimit) && customLimit > 0)
+                    {
+                        effectiveTimeLimit = customLimit;
+                    }
+                }
+                catch { }
+            }
+
+            await _timer.StartPlayerSlideAsync(playerId, slideId, effectiveTimeLimit);
+            await Clients.Caller.SendAsync("PlayerSlideTimerStarted", new { SlideId = slideId, TimeLimit = effectiveTimeLimit });
         }
         catch (Exception ex)
         {
@@ -653,6 +783,40 @@ public class GameHub : Hub
             });
 
             _logger.LogInformation("Game ended in room {RoomId}", roomId);
+        }
+        catch (Exception ex)
+        {
+            await SendErrorAsync(ex.Message);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // ── CLOSE ROOM (CHỦ PHÒNG ĐÓNG PHÒNG & GIẢI TÁN) ───────────────────
+    // ═══════════════════════════════════════════════════════════════════
+    [Authorize]
+    public async Task CloseRoom(Guid roomId)
+    {
+        try
+        {
+            var userIdClaim = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!Guid.TryParse(userIdClaim, out var hostId))
+            {
+                await SendErrorAsync("Không xác định được chủ phòng.");
+                return;
+            }
+
+            await _roomService.CloseRoomAsync(roomId, hostId);
+
+            var pinCode = Context.Items["PinCode"] as string ?? "";
+            var groupName = $"room_{pinCode}";
+
+            await Clients.Group(groupName).SendAsync("RoomClosed", new
+            {
+                RoomId  = roomId,
+                Message = "Chủ phòng đã đóng phòng thi đấu. Cảm ơn bạn đã tham gia!"
+            });
+
+            _logger.LogInformation("Room {RoomId} closed by host {HostId}", roomId, hostId);
         }
         catch (Exception ex)
         {

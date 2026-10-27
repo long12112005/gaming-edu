@@ -33,7 +33,7 @@ public interface IRoomService
     Task<string> GetRoomThemeAsync(Guid roomId);
     Task SetRoomThemeAsync(Guid roomId, string theme);
     Task<SlideDistributionDto> GetSlideAnswerDistributionAsync(Guid roomId, Guid slideId);
-    Task<PlayerRejoinDataDto?> RejoinRoomPlayerAsync(string pinCode, Guid? playerId, string? nickname);
+    Task<PlayerRejoinDataDto?> RejoinRoomPlayerAsync(string pinCode, Guid? playerId, string? nickname, Guid? userId = null);
     Task<PlayerResponse?> GetPlayerResponseAsync(Guid roomPlayerId, Guid slideId);
     Task<int> GetPlayerHpAsync(Guid roomId, Guid roomPlayerId);
     Task SetPlayerHpAsync(Guid roomId, Guid roomPlayerId, int hp);
@@ -50,6 +50,11 @@ public interface IRoomService
     Task RecordBridgeBuilderCrossingAsync(Guid roomId, Guid slideId, Guid roomPlayerId, string nickname, string? avatarUrl, bool isFullyCrossed, int builtSpans, int totalSpans, List<bool> spanBridges, int responseTimeMs, int scoreAwarded);
     Task<CircuitConnectStateDto> GetCircuitConnectStateAsync(Guid roomId, Guid slideId);
     Task RecordCircuitConnectResultAsync(Guid roomId, Guid slideId, Guid roomPlayerId, string nickname, string? avatarUrl, bool isFullCircuit, int correctWires, int totalWires, List<bool> wireResults, int responseTimeMs, int scoreAwarded);
+    Task<RoomDetailedReportDto> GetRoomDetailedReportAsync(Guid roomId, Guid hostId);
+    Task<RoomDto> UpdateTournamentSettingsAsync(Guid roomId, Guid hostId, UpdateTournamentSettingsRequest request);
+    Task CloseRoomAsync(Guid roomId, Guid hostId);
+    Task<List<object>> GetRoomActivePlayersAsync(Guid roomId);
+    Task<List<PlayerArenaProgressDto>> GetRoomPlayersArenaProgressAsync(Guid roomId, Guid? boostedPlayerId = null, int boostedScore = 0, Guid? currentSlideId = null);
     string GenerateQrCodeBase64(string pin);
 }
 
@@ -97,6 +102,17 @@ public class RoomService : IRoomService
         do { pin = GeneratePin(); }
         while (await _db.Rooms.AnyAsync(r => r.PinCode == pin && r.Status != "FINISHED"));
 
+        var theme = string.IsNullOrWhiteSpace(request.GameModeTheme) ? "CLASSIC" : request.GameModeTheme.Trim();
+
+        var settingsObj = new Dictionary<string, object>
+        {
+            ["theme"] = theme
+        };
+        if (request.QuestionTimeLimit.HasValue && request.QuestionTimeLimit.Value > 0)
+        {
+            settingsObj["questionTimeLimit"] = request.QuestionTimeLimit.Value;
+        }
+
         var room = new Room
         {
             Id        = Guid.NewGuid(),
@@ -105,22 +121,26 @@ public class RoomService : IRoomService
             PinCode   = pin,
             Mode      = request.Mode,
             Status    = "WAITING",
+            MapSize   = theme == "NAVAL_WAR" ? 15 : 15,
+            EndTime   = request.EndTime,
+            GameSettings = JsonSerializer.Serialize(settingsObj),
             CreatedAt = DateTime.UtcNow,
         };
 
         _db.Rooms.Add(room);
         await _db.SaveChangesAsync();
 
-        var theme = string.IsNullOrWhiteSpace(request.GameModeTheme) ? "CLASSIC" : request.GameModeTheme.Trim();
         await _cacheStore.SetStringAsync($"room_theme:{room.Id}", theme, TimeSpan.FromDays(2));
         await _cacheStore.SetStringAsync($"room_theme:pin:{pin}", theme, TimeSpan.FromDays(2));
 
-        _logger.LogInformation("Room created: PIN={Pin}, Mode={Mode}, Theme={Theme}", pin, request.Mode, theme);
+        _logger.LogInformation("Room created: PIN={Pin}, Mode={Mode}, Theme={Theme}, EndTime={EndTime}, QTL={QTL}", pin, request.Mode, theme, request.EndTime, request.QuestionTimeLimit);
 
         string qrCodeBase64 = GenerateQrCodeBase64(pin);
+        var slideCount = await _db.Slides.CountAsync(s => s.QuizId == room.QuizId && !s.IsDeleted);
 
         return new RoomDto(room.Id, room.PinCode, room.Mode, room.Status,
-            room.QuizId, quiz.Title, room.CreatedAt, qrCodeBase64, theme);
+            room.QuizId, quiz.Title, room.CreatedAt, qrCodeBase64, theme, slideCount, room.HostId,
+            room.EndTime, request.QuestionTimeLimit, room.IsEarlyFinished);
     }
 
     public string GenerateQrCodeBase64(string pin)
@@ -139,18 +159,42 @@ public class RoomService : IRoomService
         Guid? userId, JoinRoomRequest request)
     {
         // Find room by PIN (maps to rooms.pin_code)
+        // Cho phép vào phòng nếu đang WAITING hoặc nếu là ASYNC_TOURNAMENT và chưa FINISHED
         var room = await _db.Rooms
-            .FirstOrDefaultAsync(r => r.PinCode == request.PinCode && r.Status == "WAITING")
+            .FirstOrDefaultAsync(r => r.PinCode == request.PinCode && (r.Status == "WAITING" || (r.Mode == "ASYNC_TOURNAMENT" && r.Status != "FINISHED")))
             ?? throw new KeyNotFoundException(
-                $"Phòng có mã PIN '{request.PinCode}' không tồn tại hoặc đã bắt đầu.");
+                $"Phòng có mã PIN '{request.PinCode}' không tồn tại hoặc đã kết thúc.");
 
-        // Prevent duplicate join (same user in same room)
-        if (userId.HasValue)
+        if (room.Mode == "ASYNC_TOURNAMENT" && room.EndTime.HasValue && room.EndTime.Value < DateTime.UtcNow)
         {
-            bool alreadyJoined = await _db.RoomPlayers
-                .AnyAsync(rp => rp.RoomId == room.Id && rp.UserId == userId);
-            if (alreadyJoined)
-                throw new InvalidOperationException("Bạn đã tham gia phòng này rồi.");
+            throw new InvalidOperationException("Giải đấu này đã hết thời hạn tham gia.");
+        }
+
+        // Resolve user if not provided
+        if (!userId.HasValue && request.UserId.HasValue)
+        {
+            userId = request.UserId.Value;
+        }
+        else if (!userId.HasValue)
+        {
+            var matchedUser = await _db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Nickname == request.Nickname.Trim());
+            if (matchedUser != null)
+            {
+                userId = matchedUser.Id;
+            }
+        }
+
+        // Prevent duplicate join (same user or nickname in same room)
+        var existingPlayer = await _db.RoomPlayers
+            .FirstOrDefaultAsync(rp => rp.RoomId == room.Id && ((userId.HasValue && rp.UserId == userId) || rp.Nickname == request.Nickname.Trim()));
+        if (existingPlayer != null)
+        {
+            if (userId.HasValue && existingPlayer.UserId == null)
+            {
+                existingPlayer.UserId = userId.Value;
+                await _db.SaveChangesAsync();
+            }
+            return (room, existingPlayer);
         }
 
         var player = new RoomPlayer
@@ -739,7 +783,7 @@ public class RoomService : IRoomService
         return await _cacheStore.GetStringAsync(draftKey);
     }
 
-    public async Task<PlayerRejoinDataDto?> RejoinRoomPlayerAsync(string pinCode, Guid? playerId, string? nickname)
+    public async Task<PlayerRejoinDataDto?> RejoinRoomPlayerAsync(string pinCode, Guid? playerId, string? nickname, Guid? userId = null)
     {
         var room = await _db.Rooms.FirstOrDefaultAsync(r => r.PinCode == pinCode);
         if (room is null) return null;
@@ -754,6 +798,12 @@ public class RoomService : IRoomService
             player = await _db.RoomPlayers.FirstOrDefaultAsync(p => p.Nickname == nickname.Trim() && p.RoomId == room.Id);
         }
         if (player is null) return null;
+
+        if (userId.HasValue && player.UserId == null)
+        {
+            player.UserId = userId.Value;
+            await _db.SaveChangesAsync();
+        }
 
         var theme = await GetRoomThemeAsync(room.Id);
         var rank = await _leaderboard.GetRankAsync(room.Id, player.Id) ?? 1;
@@ -786,8 +836,12 @@ public class RoomService : IRoomService
     public async Task<IEnumerable<LeaderboardEntryDto>> FinishRoomAsync(Guid roomId, Guid hostId)
     {
         var room = await _db.Rooms.FindAsync(roomId) ?? throw new KeyNotFoundException("Không tìm thấy phòng.");
-        if (room.HostId != hostId) throw new UnauthorizedAccessException("Bạn không phải chủ phòng.");
+        var user = await _db.Users.FindAsync(hostId);
+        bool isAdmin = user?.IsAdmin ?? false;
+        if (!isAdmin && room.HostId != hostId) throw new UnauthorizedAccessException("Bạn không phải chủ phòng.");
 
+        room.IsEarlyFinished = true;
+        room.EndTime = DateTime.UtcNow;
         await UpdateRoomStatusAsync(roomId, "FINISHED");
 
         // Lấy top 3 từ Leaderboard (Redis hoặc DB)
@@ -795,52 +849,310 @@ public class RoomService : IRoomService
         return fullLeaderboard.Take(3);
     }
 
-    // ── EXPORT REPORT ──────────────────────────────────────────────────
-    public async Task<byte[]> ExportRoomReportAsync(Guid roomId, Guid hostId)
+    // ── DETAILED REPORT ───────────────────────────────────────────────
+    public async Task<RoomDetailedReportDto> GetRoomDetailedReportAsync(Guid roomId, Guid hostId)
     {
         var room = await _db.Rooms
+            .AsNoTracking()
             .Include(r => r.Quiz)
+                .ThenInclude(q => q.Slides)
+                    .ThenInclude(s => s.Options)
             .Include(r => r.Players)
+                .ThenInclude(p => p.Responses)
             .FirstOrDefaultAsync(r => r.Id == roomId) ?? throw new KeyNotFoundException("Không tìm thấy phòng.");
-            
-        if (room.HostId != hostId) throw new UnauthorizedAccessException("Bạn không phải chủ phòng.");
 
+        var user = await _db.Users.FindAsync(hostId);
+        bool isAdmin = user?.IsAdmin ?? false;
+        if (!isAdmin && room.HostId != hostId) throw new UnauthorizedAccessException("Bạn không phải chủ phòng.");
+
+        var slides = room.Quiz.Slides.OrderBy(s => s.OrderIndex).ToList();
         var players = room.Players.OrderByDescending(p => p.TotalScore).ToList();
 
-        using var workbook = new XLWorkbook();
-        var ws = workbook.Worksheets.Add("Kết quả phòng chơi");
-
-        // Header
-        ws.Cell(1, 1).Value = "Room PIN";
-        ws.Cell(1, 2).Value = room.PinCode;
-        ws.Cell(2, 1).Value = "Bộ đề";
-        ws.Cell(2, 2).Value = room.Quiz.Title;
-        ws.Cell(3, 1).Value = "Thời gian tạo";
-        ws.Cell(3, 2).Value = room.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss");
-
-        ws.Cell(5, 1).Value = "Hạng";
-        ws.Cell(5, 2).Value = "Người chơi";
-        ws.Cell(5, 3).Value = "Tổng điểm";
-
-        var headerRange = ws.Range("A5:C5");
-        headerRange.Style.Font.Bold = true;
-        headerRange.Style.Fill.BackgroundColor = XLColor.LightBlue;
-
-        // Data
-        int row = 6;
-        for (int i = 0; i < players.Count; i++)
+        // 1. Tổng kết từng câu hỏi
+        var questionSummaries = new List<QuestionSummaryDto>();
+        for (int i = 0; i < slides.Count; i++)
         {
-            ws.Cell(row, 1).Value = i + 1;
-            ws.Cell(row, 2).Value = players[i].Nickname;
-            ws.Cell(row, 3).Value = players[i].TotalScore;
-            row++;
+            var slide = slides[i];
+            var allSlideResponses = room.Players
+                .SelectMany(p => p.Responses)
+                .Where(r => r.SlideId == slide.Id)
+                .ToList();
+
+            int totalAns = allSlideResponses.Count;
+            int correctAns = allSlideResponses.Count(r => r.IsCorrect);
+            double accuracy = totalAns > 0 ? Math.Round((double)correctAns / totalAns * 100, 1) : 0;
+            string correctAnsStr = GetCorrectAnswer(slide);
+
+            questionSummaries.Add(new QuestionSummaryDto(
+                slide.Id,
+                i + 1,
+                slide.QuestionText,
+                slide.Type,
+                correctAnsStr,
+                totalAns,
+                correctAns,
+                accuracy
+            ));
         }
 
-        ws.Columns().AdjustToContents();
+        // 2. Tổng kết từng thí sinh kèm mảng câu trả lời
+        var playerSummaries = new List<PlayerReportSummaryDto>();
+        for (int pIdx = 0; pIdx < players.Count; pIdx++)
+        {
+            var p = players[pIdx];
+            var pAnswers = new List<PlayerAnswerSummaryDto>();
+            int correctCount = 0;
+            int wrongCount = 0;
+
+            for (int sIdx = 0; sIdx < slides.Count; sIdx++)
+            {
+                var slide = slides[sIdx];
+                var resp = p.Responses.FirstOrDefault(r => r.SlideId == slide.Id);
+                if (resp != null)
+                {
+                    if (resp.IsCorrect) correctCount++;
+                    else wrongCount++;
+
+                    pAnswers.Add(new PlayerAnswerSummaryDto(
+                        slide.Id,
+                        sIdx + 1,
+                        resp.IsCorrect,
+                        resp.ScoreAwarded,
+                        resp.ResponseTimeMs,
+                        resp.AnswerData
+                    ));
+                }
+                else
+                {
+                    wrongCount++;
+                    pAnswers.Add(new PlayerAnswerSummaryDto(
+                        slide.Id,
+                        sIdx + 1,
+                        false,
+                        0,
+                        null,
+                        null
+                    ));
+                }
+            }
+
+            double playerAccuracy = slides.Count > 0 ? Math.Round((double)correctCount / slides.Count * 100, 1) : 0;
+            int answeredCount = p.Responses.Count(r => !string.IsNullOrEmpty(r.AnswerData));
+            bool isCompleted = slides.Count > 0 && answeredCount >= slides.Count;
+
+            playerSummaries.Add(new PlayerReportSummaryDto(
+                p.Id,
+                p.Nickname,
+                p.AvatarUrl,
+                p.TotalScore,
+                pIdx + 1,
+                correctCount,
+                wrongCount,
+                playerAccuracy,
+                pAnswers,
+                answeredCount,
+                slides.Count,
+                isCompleted
+            ));
+        }
+
+        int? questionTimeLimit = null;
+        if (!string.IsNullOrEmpty(room.GameSettings))
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(room.GameSettings);
+                if (doc.RootElement.TryGetProperty("questionTimeLimit", out var qtlProp))
+                {
+                    questionTimeLimit = qtlProp.GetInt32();
+                }
+            }
+            catch {}
+        }
+
+        return new RoomDetailedReportDto(
+            room.Id,
+            room.PinCode,
+            room.Quiz.Title,
+            room.Mode,
+            room.Status,
+            room.CreatedAt,
+            players.Count,
+            questionSummaries,
+            playerSummaries,
+            room.EndTime,
+            room.IsEarlyFinished,
+            questionTimeLimit
+        );
+    }
+
+    // ── EXPORT REPORT (2 SHEETS: MA TRẬN & THỐNG KÊ CÂU HỎI) ─────────────
+    public async Task<byte[]> ExportRoomReportAsync(Guid roomId, Guid hostId)
+    {
+        var report = await GetRoomDetailedReportAsync(roomId, hostId);
+
+        using var workbook = new XLWorkbook();
+        
+        // ── SHEET 1: MA TRẬN BẢNG ĐIỂM CHI TIẾT ──
+        var wsMatrix = workbook.Worksheets.Add("Bảng Điểm Chi Tiết");
+        
+        // Header Thông tin phòng
+        wsMatrix.Cell(1, 1).Value = "Phòng Thi:";
+        wsMatrix.Cell(1, 2).Value = report.QuizTitle;
+        wsMatrix.Cell(1, 1).Style.Font.Bold = true;
+
+        wsMatrix.Cell(2, 1).Value = "Mã PIN:";
+        wsMatrix.Cell(2, 2).Value = report.PinCode;
+        wsMatrix.Cell(2, 1).Style.Font.Bold = true;
+
+        wsMatrix.Cell(3, 1).Value = "Thời gian tạo:";
+        wsMatrix.Cell(3, 2).Value = report.CreatedAt.ToString("dd/MM/yyyy HH:mm:ss");
+        wsMatrix.Cell(3, 1).Style.Font.Bold = true;
+
+        wsMatrix.Cell(4, 1).Value = "Tổng số thí sinh:";
+        wsMatrix.Cell(4, 2).Value = report.TotalPlayers;
+        wsMatrix.Cell(4, 1).Style.Font.Bold = true;
+
+        // Header Bảng Ma Trận
+        int startRow = 6;
+        wsMatrix.Cell(startRow, 1).Value = "Hạng";
+        wsMatrix.Cell(startRow, 2).Value = "Thí sinh";
+        wsMatrix.Cell(startRow, 3).Value = "Tổng điểm";
+        wsMatrix.Cell(startRow, 4).Value = "Số câu đúng";
+        wsMatrix.Cell(startRow, 5).Value = "Số câu sai";
+        wsMatrix.Cell(startRow, 6).Value = "Tỷ lệ chính xác";
+
+        for (int q = 0; q < report.Questions.Count; q++)
+        {
+            wsMatrix.Cell(startRow, 7 + q).Value = $"Câu {q + 1}";
+        }
+
+        int lastCol = Math.Max(6, 6 + report.Questions.Count);
+        var headerRange = wsMatrix.Range(startRow, 1, startRow, lastCol);
+        headerRange.Style.Font.Bold = true;
+        headerRange.Style.Font.FontColor = XLColor.White;
+        headerRange.Style.Fill.BackgroundColor = XLColor.FromArgb(99, 102, 241); // Indigo
+        headerRange.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+        // Dữ liệu từng thí sinh
+        int currentRow = startRow + 1;
+        foreach (var p in report.Players)
+        {
+            wsMatrix.Cell(currentRow, 1).Value = p.Rank ?? (currentRow - startRow);
+            wsMatrix.Cell(currentRow, 2).Value = p.Nickname;
+            wsMatrix.Cell(currentRow, 3).Value = p.TotalScore;
+            wsMatrix.Cell(currentRow, 4).Value = p.CorrectCount;
+            wsMatrix.Cell(currentRow, 5).Value = p.WrongCount;
+            wsMatrix.Cell(currentRow, 6).Value = $"{p.AccuracyRate}%";
+
+            for (int q = 0; q < p.Answers.Count; q++)
+            {
+                var ans = p.Answers[q];
+                var cell = wsMatrix.Cell(currentRow, 7 + q);
+                if (ans.IsCorrect)
+                {
+                    cell.Value = "Đúng (✓)";
+                    cell.Style.Fill.BackgroundColor = XLColor.FromArgb(220, 252, 231); // light green
+                    cell.Style.Font.FontColor = XLColor.FromArgb(22, 101, 52); // dark green
+                    cell.Style.Font.Bold = true;
+                }
+                else
+                {
+                    cell.Value = "Sai (✗)";
+                    cell.Style.Fill.BackgroundColor = XLColor.FromArgb(254, 226, 226); // light red
+                    cell.Style.Font.FontColor = XLColor.FromArgb(153, 27, 27); // dark red
+                }
+                cell.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            }
+            currentRow++;
+        }
+
+        // Dòng tổng kết tỷ lệ đúng từng câu
+        if (report.Players.Count > 0 && report.Questions.Count > 0)
+        {
+            wsMatrix.Cell(currentRow, 2).Value = "Tỷ lệ đúng cả phòng (%)";
+            wsMatrix.Cell(currentRow, 2).Style.Font.Bold = true;
+            for (int q = 0; q < report.Questions.Count; q++)
+            {
+                var cell = wsMatrix.Cell(currentRow, 7 + q);
+                cell.Value = $"{report.Questions[q].AccuracyRate}%";
+                cell.Style.Font.Bold = true;
+                cell.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+                cell.Style.Fill.BackgroundColor = XLColor.FromArgb(241, 245, 249);
+            }
+        }
+
+        wsMatrix.Columns().AdjustToContents();
+
+        // ── SHEET 2: PHÂN TÍCH THỐNG KÊ CÂU HỎI ──
+        var wsQuestions = workbook.Worksheets.Add("Thống Kê Câu Hỏi");
+        wsQuestions.Cell(1, 1).Value = "STT";
+        wsQuestions.Cell(1, 2).Value = "Nội dung câu hỏi";
+        wsQuestions.Cell(1, 3).Value = "Dạng câu hỏi";
+        wsQuestions.Cell(1, 4).Value = "Đáp án đúng";
+        wsQuestions.Cell(1, 5).Value = "Số người trả lời";
+        wsQuestions.Cell(1, 6).Value = "Số người đúng";
+        wsQuestions.Cell(1, 7).Value = "Tỷ lệ đúng (%)";
+
+        var qHeaderRange = wsQuestions.Range(1, 1, 1, 7);
+        qHeaderRange.Style.Font.Bold = true;
+        qHeaderRange.Style.Font.FontColor = XLColor.White;
+        qHeaderRange.Style.Fill.BackgroundColor = XLColor.FromArgb(79, 70, 229);
+        qHeaderRange.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+        int qRow = 2;
+        foreach (var q in report.Questions)
+        {
+            wsQuestions.Cell(qRow, 1).Value = q.OrderIndex;
+            wsQuestions.Cell(qRow, 2).Value = q.QuestionText;
+            wsQuestions.Cell(qRow, 3).Value = q.Type;
+            wsQuestions.Cell(qRow, 4).Value = q.CorrectAnswer;
+            wsQuestions.Cell(qRow, 5).Value = q.TotalAnswers;
+            wsQuestions.Cell(qRow, 6).Value = q.CorrectAnswers;
+            wsQuestions.Cell(qRow, 7).Value = $"{q.AccuracyRate}%";
+            qRow++;
+        }
+
+        wsQuestions.Columns().AdjustToContents();
 
         using var stream = new MemoryStream();
         workbook.SaveAs(stream);
         return stream.ToArray();
+    }
+
+    // ── CLOSE ROOM ─────────────────────────────────────────────────────
+    public async Task CloseRoomAsync(Guid roomId, Guid hostId)
+    {
+        var room = await _db.Rooms.FindAsync(roomId)
+            ?? throw new KeyNotFoundException("Không tìm thấy phòng.");
+
+        var user = await _db.Users.FindAsync(hostId);
+        bool isAdmin = user?.IsAdmin ?? false;
+        if (!isAdmin && room.HostId != hostId)
+            throw new UnauthorizedAccessException("Bạn không phải chủ phòng.");
+
+        room.Status = "CLOSED";
+        room.EndTime = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+    }
+
+    // ── GET ROOM ACTIVE PLAYERS ────────────────────────────────────────
+    public async Task<List<object>> GetRoomActivePlayersAsync(Guid roomId)
+    {
+        var players = await _db.RoomPlayers
+            .AsNoTracking()
+            .Where(p => p.RoomId == roomId)
+            .OrderBy(p => p.JoinedAt)
+            .Select(p => new
+            {
+                PlayerId = p.Id,
+                Nickname = p.Nickname,
+                AvatarUrl = p.AvatarUrl,
+                JoinedAt = p.JoinedAt
+            })
+            .ToListAsync();
+
+        return players.Cast<object>().ToList();
     }
 
     // ── ROOM HISTORY ───────────────────────────────────────────────────
@@ -859,25 +1171,81 @@ public class RoomService : IRoomService
                 r.Mode,
                 r.Status,
                 r.Players.Count,
-                r.CreatedAt
+                r.CreatedAt,
+                r.EndTime,
+                r.IsEarlyFinished
             ))
             .ToListAsync();
 
         return rooms;
     }
 
+    public async Task<RoomDto> UpdateTournamentSettingsAsync(Guid roomId, Guid hostId, UpdateTournamentSettingsRequest request)
+    {
+        var room = await _db.Rooms
+            .Include(r => r.Quiz)
+            .FirstOrDefaultAsync(r => r.Id == roomId)
+            ?? throw new KeyNotFoundException("Không tìm thấy phòng.");
+
+        var user = await _db.Users.FindAsync(hostId);
+        bool isAdmin = user?.IsAdmin ?? false;
+        if (!isAdmin && room.HostId != hostId)
+            throw new UnauthorizedAccessException("Bạn không phải chủ phòng này.");
+
+        room.EndTime = request.EndTime;
+
+        var settings = new Dictionary<string, object>();
+        if (!string.IsNullOrEmpty(room.GameSettings))
+        {
+            try
+            {
+                settings = JsonSerializer.Deserialize<Dictionary<string, object>>(room.GameSettings) ?? new();
+            }
+            catch {}
+        }
+
+        if (request.QuestionTimeLimit.HasValue && request.QuestionTimeLimit.Value > 0)
+        {
+            settings["questionTimeLimit"] = request.QuestionTimeLimit.Value;
+        }
+        else
+        {
+            settings.Remove("questionTimeLimit");
+        }
+
+        room.GameSettings = JsonSerializer.Serialize(settings);
+        await _db.SaveChangesAsync();
+
+        var qrCode = GenerateQrCodeBase64(room.PinCode);
+        var theme = await GetRoomThemeAsync(room.Id);
+        var slideCount = await _db.Slides.CountAsync(s => s.QuizId == room.QuizId && !s.IsDeleted);
+
+        return new RoomDto(
+            room.Id, room.PinCode, room.Mode, room.Status,
+            room.QuizId, room.Quiz?.Title ?? "", room.CreatedAt, qrCode, theme, slideCount, room.HostId,
+            room.EndTime, request.QuestionTimeLimit, room.IsEarlyFinished);
+    }
+
     public async Task<IEnumerable<PlayedRoomHistoryDto>> GetPlayedRoomsHistoryAsync(Guid userId)
     {
+        var user = await _db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId);
+        string? userNickname = user?.Nickname?.Trim();
+
         var playerRecords = await _db.RoomPlayers
             .AsNoTracking()
             .Include(rp => rp.Room)
                 .ThenInclude(r => r.Quiz)
             .Include(rp => rp.Room)
                 .ThenInclude(r => r.Host)
-            .Include(rp => rp.Room)
-                .ThenInclude(r => r.Players)
-            .Where(rp => rp.UserId == userId)
+            .Where(rp => rp.UserId == userId || (rp.UserId == null && userNickname != null && rp.Nickname == userNickname))
             .OrderByDescending(rp => rp.JoinedAt)
+            .ToListAsync();
+
+        var roomIds = playerRecords.Select(rp => rp.RoomId).Distinct().ToList();
+        var allRoomPlayers = await _db.RoomPlayers
+            .AsNoTracking()
+            .Where(p => roomIds.Contains(p.RoomId))
+            .Select(p => new { p.RoomId, p.Id, p.TotalScore, p.JoinedAt })
             .ToListAsync();
 
         var result = new List<PlayedRoomHistoryDto>();
@@ -886,21 +1254,24 @@ public class RoomService : IRoomService
         {
             if (rp.Room == null) continue;
 
-            var sortedPlayers = rp.Room.Players
+            var roomPlayers = allRoomPlayers
+                .Where(p => p.RoomId == rp.RoomId)
                 .OrderByDescending(p => p.TotalScore)
                 .ThenBy(p => p.JoinedAt)
                 .ToList();
 
-            int rank = sortedPlayers.FindIndex(p => p.Id == rp.Id) + 1;
+            int rank = roomPlayers.FindIndex(p => p.Id == rp.Id) + 1;
             if (rank <= 0) rank = 1;
 
             result.Add(new PlayedRoomHistoryDto(
                 rp.Room.Id,
+                rp.Room.PinCode ?? "",
                 rp.Room.Quiz?.Title ?? "Bộ đề không xác định",
                 rp.Room.Host?.Nickname ?? "Chủ phòng",
                 rp.TotalScore,
                 rank,
-                rp.JoinedAt
+                rp.JoinedAt,
+                rp.Room.Status
             ));
         }
 
@@ -1033,7 +1404,23 @@ public class RoomService : IRoomService
     public async Task<string> GetRoomThemeAsync(Guid roomId)
     {
         var theme = await _cacheStore.GetStringAsync($"room_theme:{roomId}");
-        return string.IsNullOrWhiteSpace(theme) ? "CLASSIC" : theme;
+        if (!string.IsNullOrWhiteSpace(theme)) return theme;
+
+        var room = await _db.Rooms.AsNoTracking().FirstOrDefaultAsync(r => r.Id == roomId);
+        if (!string.IsNullOrWhiteSpace(room?.GameSettings))
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(room.GameSettings);
+                if (doc.RootElement.TryGetProperty("theme", out var t))
+                {
+                    var val = t.GetString();
+                    if (!string.IsNullOrWhiteSpace(val)) return val;
+                }
+            }
+            catch {}
+        }
+        return "CLASSIC";
     }
 
     public async Task SetRoomThemeAsync(Guid roomId, string theme)
@@ -1623,6 +2010,192 @@ public class RoomService : IRoomService
             WireStats: wireStats,
             RecentSubmissions: recentSubmissions
         );
+    }
+
+    // ── 60 FPS MULTIPLAYER ARENA REALTIME PROGRESS ───────────────────────
+    public async Task<List<PlayerArenaProgressDto>> GetRoomPlayersArenaProgressAsync(
+        Guid roomId,
+        Guid? boostedPlayerId = null,
+        int boostedScore = 0,
+        Guid? currentSlideId = null)
+    {
+        var room = await _db.Rooms
+            .AsNoTracking()
+            .Include(r => r.Quiz)
+            .FirstOrDefaultAsync(r => r.Id == roomId);
+
+        if (room == null) return [];
+
+        int totalSlides = await _db.Slides.CountAsync(s => s.QuizId == room.QuizId);
+        if (totalSlides <= 0) totalSlides = 1;
+
+        int currentSlideIndex = 0;
+        if (currentSlideId.HasValue)
+        {
+            var slide = await _db.Slides.AsNoTracking().FirstOrDefaultAsync(s => s.Id == currentSlideId.Value);
+            if (slide != null) currentSlideIndex = Math.Max(0, slide.OrderIndex);
+        }
+
+        var players = await _db.RoomPlayers
+            .AsNoTracking()
+            .Where(p => p.RoomId == roomId)
+            .OrderByDescending(p => p.TotalScore)
+            .ThenBy(p => p.JoinedAt)
+            .ToListAsync();
+
+        HashSet<Guid> answeredPlayerIds = [];
+        if (currentSlideId.HasValue)
+        {
+            answeredPlayerIds = (await _db.PlayerResponses
+                .AsNoTracking()
+                .Where(pr => pr.SlideId == currentSlideId.Value && pr.RoomPlayer.RoomId == roomId)
+                .Select(pr => pr.RoomPlayerId)
+                .ToListAsync()).ToHashSet();
+        }
+
+        var result = new List<PlayerArenaProgressDto>();
+
+        for (int i = 0; i < players.Count; i++)
+        {
+            var p = players[i];
+            int rank = i + 1;
+            bool isAnswered = answeredPlayerIds.Contains(p.Id);
+            bool isBoosted = boostedPlayerId.HasValue && p.Id == boostedPlayerId.Value && boostedScore > 0;
+
+            var streakRaw = await _cacheStore.GetStringAsync($"streak:{p.Id}");
+            int.TryParse(streakRaw, out int streak);
+
+            // ProgressRatio: 0.0 -> 1.0 (toàn chặng trên minimap)
+            double baseSlideRatio = (double)currentSlideIndex / totalSlides;
+            if (isAnswered)
+            {
+                baseSlideRatio = (double)(currentSlideIndex + 1) / totalSlides;
+            }
+
+            int topScore = players.Count > 0 ? Math.Max(1, players[0].TotalScore) : 1;
+            double scoreBonusRatio = ((double)p.TotalScore / (topScore * 1.5)) * (0.35 / totalSlides);
+            double progressRatio = Math.Min(1.0, Math.Max(0.0, Math.Round(baseSlideRatio + scoreBonusRatio, 3)));
+
+            result.Add(new PlayerArenaProgressDto(
+                PlayerId: p.Id,
+                Nickname: p.Nickname,
+                AvatarUrl: p.AvatarUrl,
+                Score: p.TotalScore,
+                Rank: rank,
+                ProgressRatio: progressRatio,
+                Streak: streak,
+                IsAnswered: isAnswered,
+                IsJustBoosted: isBoosted,
+                LastScoreAwarded: isBoosted ? boostedScore : 0,
+                IsGhost: false
+            ));
+        }
+
+        // Nếu là phòng giải đấu ASYNC_TOURNAMENT hoặc khi ít hơn 3 người:
+        // Đọc Ghost Rivals từ Redis hoặc DB để tạo đối thủ bóng ma chạy cùng
+        if (room.Mode == "ASYNC_TOURNAMENT")
+        {
+            var ghostRivals = await GetAsyncTournamentGhostRivalsAsync(room.QuizId, totalSlides);
+            result.AddRange(ghostRivals);
+            result = result.OrderByDescending(r => r.Score).Select((r, idx) => r with { Rank = idx + 1 }).ToList();
+        }
+
+        return result;
+    }
+
+    private async Task<List<PlayerArenaProgressDto>> GetAsyncTournamentGhostRivalsAsync(Guid quizId, int totalSlides)
+    {
+        // 1. Kiểm tra cache Ghost Rivals trên Redis
+        var key = $"ghost_rivals:{quizId}";
+        var raw = await _cacheStore.GetStringAsync(key);
+        if (!string.IsNullOrEmpty(raw))
+        {
+            try
+            {
+                var cached = JsonSerializer.Deserialize<List<PlayerArenaProgressDto>>(raw);
+                if (cached != null && cached.Count > 0) return cached;
+            }
+            catch { }
+        }
+
+        // 2. Tìm người chơi điểm cao từ các phiên trước của cùng bộ đề trong DB
+        var pastResponses = await _db.RoomPlayers
+            .AsNoTracking()
+            .Include(rp => rp.Room)
+            .Where(rp => rp.Room.QuizId == quizId && rp.TotalScore > 0)
+            .OrderByDescending(rp => rp.TotalScore)
+            .Take(5)
+            .ToListAsync();
+
+        var ghosts = new List<PlayerArenaProgressDto>();
+
+        if (pastResponses.Count > 0)
+        {
+            for (int i = 0; i < pastResponses.Count; i++)
+            {
+                var past = pastResponses[i];
+                ghosts.Add(new PlayerArenaProgressDto(
+                    PlayerId: Guid.NewGuid(),
+                    Nickname: $"{past.Nickname} (Bóng ma)",
+                    AvatarUrl: past.AvatarUrl,
+                    Score: past.TotalScore,
+                    Rank: i + 1,
+                    ProgressRatio: Math.Min(1.0, 0.70 + (i * 0.05)),
+                    Streak: Math.Max(1, 4 - i),
+                    IsAnswered: true,
+                    IsJustBoosted: false,
+                    LastScoreAwarded: 0,
+                    IsGhost: true
+                ));
+            }
+        }
+        else
+        {
+            // Fallback Ghost Rivals mô phỏng để người chơi thi đấu bất đồng bộ có cảm giác đường đua kịch tính
+            ghosts.Add(new PlayerArenaProgressDto(
+                PlayerId: Guid.NewGuid(),
+                Nickname: "Phantom_Racer ⚡",
+                AvatarUrl: null,
+                Score: 8400,
+                Rank: 1,
+                ProgressRatio: 0.88,
+                Streak: 5,
+                IsAnswered: true,
+                IsJustBoosted: false,
+                LastScoreAwarded: 0,
+                IsGhost: true
+            ));
+            ghosts.Add(new PlayerArenaProgressDto(
+                PlayerId: Guid.NewGuid(),
+                Nickname: "Cyber_Ghost 🤖",
+                AvatarUrl: null,
+                Score: 7150,
+                Rank: 2,
+                ProgressRatio: 0.74,
+                Streak: 3,
+                IsAnswered: true,
+                IsJustBoosted: false,
+                LastScoreAwarded: 0,
+                IsGhost: true
+            ));
+            ghosts.Add(new PlayerArenaProgressDto(
+                PlayerId: Guid.NewGuid(),
+                Nickname: "Shadow_Runner 🌪️",
+                AvatarUrl: null,
+                Score: 5900,
+                Rank: 3,
+                ProgressRatio: 0.62,
+                Streak: 2,
+                IsAnswered: false,
+                IsJustBoosted: false,
+                LastScoreAwarded: 0,
+                IsGhost: true
+            ));
+        }
+
+        // Cache 4 tiếng
+        await _cacheStore.SetStringAsync(key, JsonSerializer.Serialize(ghosts), TimeSpan.FromHours(4));
+        return ghosts;
     }
 }
 

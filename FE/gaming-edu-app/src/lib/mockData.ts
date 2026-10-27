@@ -2,89 +2,13 @@ import {
   Quiz,
   SlideTypeInfo,
   RoomModeInfo,
-  NavbarUser,
 } from "@/types/database";
 
-// ============================================================
-// MOCK USER DATA
-// ============================================================
-export const mockCurrentUser: NavbarUser = {
-  nickname: "Alex_Nhật",
-  avatar_url: "https://api.dicebear.com/7.x/avataaars/svg?seed=Alex",
-  quota: {
-    id: "quota-001",
-    user_id: "user-001",
-    ai_generation_limit: 10,
-    ai_used_today: 3,
-    max_room_capacity: 50,
-    reset_date: "2026-09-26",
-  },
-};
+// Empty quizzes array
+export const mockPublicQuizzes: Quiz[] = [];
 
 // ============================================================
-// MOCK QUIZ DATA (maps to quizzes table)
-// ============================================================
-export const mockPublicQuizzes: Quiz[] = [
-  {
-    id: "quiz-001",
-    creator_id: "user-001",
-    title: "Phương Trình Bậc Hai",
-    cover_image_url: "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=400&h=250&fit=crop",
-    topic: "TOÁN HỌC",
-    is_public: true,
-    created_at: "2026-09-01T00:00:00Z",
-    updated_at: "2026-09-01T00:00:00Z",
-    slide_count: 12,
-    play_count: 3400,
-    creator_nickname: "Thầy Minh",
-    creator_avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=ThayMinh",
-  },
-  {
-    id: "quiz-002",
-    creator_id: "user-002",
-    title: "Hệ Mặt Trời",
-    cover_image_url: "https://images.unsplash.com/photo-1614732414444-096e5f1122d5?w=400&h=250&fit=crop",
-    topic: "KHOA HỌC",
-    is_public: true,
-    created_at: "2026-09-05T00:00:00Z",
-    updated_at: "2026-09-05T00:00:00Z",
-    slide_count: 20,
-    play_count: 2100,
-    creator_nickname: "Cô Lan",
-    creator_avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=CoLan",
-  },
-  {
-    id: "quiz-003",
-    creator_id: "user-003",
-    title: "Thời Kỳ Phục Hưng",
-    cover_image_url: "https://images.unsplash.com/photo-1541534741688-6078c6bfb5c5?w=400&h=250&fit=crop",
-    topic: "LỊCH SỬ",
-    is_public: true,
-    created_at: "2026-09-10T00:00:00Z",
-    updated_at: "2026-09-10T00:00:00Z",
-    slide_count: 15,
-    play_count: 750,
-    creator_nickname: "Thầy Tuấn",
-    creator_avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=ThayTuan",
-  },
-  {
-    id: "quiz-004",
-    creator_id: "user-004",
-    title: "Từ Vựng Mới",
-    cover_image_url: "https://images.unsplash.com/photo-1546410531-bb4caa6b424d?w=400&h=250&fit=crop",
-    topic: "NGỮ VĂN",
-    is_public: true,
-    created_at: "2026-09-15T00:00:00Z",
-    updated_at: "2026-09-15T00:00:00Z",
-    slide_count: 30,
-    play_count: 1600,
-    creator_nickname: "Cô Hoa",
-    creator_avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=CoHoa",
-  },
-];
-
-// ============================================================
-// SLIDE TYPES (maps to slides.type column)
+// SLIDE TYPES METADATA (maps to slides.type column)
 // ============================================================
 export const slideTypes: SlideTypeInfo[] = [
   {
@@ -130,37 +54,27 @@ export const slideTypes: SlideTypeInfo[] = [
 ];
 
 // ============================================================
-// ROOM MODES (maps to rooms.mode column)
+// ROOM MODES METADATA (maps to rooms.mode column)
 // ============================================================
 export const roomModes: RoomModeInfo[] = [
   {
     mode: "HOST_PACED",
-    label: "Host Điều Khiển",
+    label: "Phòng Thường",
     icon: "🎮",
     description:
-      "Điều khiển toàn bộ tốc độ của các câu. Phù hợp cho buổi học trực tiếp và thuyết trình.",
+      "Thi đấu trực tiếp cùng lúc. Hệ thống tự động đếm ngược và chuyển câu hỏi, chủ phòng theo dõi và có quyền kết thúc trò chơi.",
     accentColor: "#7c3aed",
-    buttonLabel: "Khởi Tạo",
+    buttonLabel: "Tạo Phòng Thường",
     buttonStyle: "primary",
   },
   {
-    mode: "PLAYER_PACED",
-    label: "Người Chơi Tự Chơi",
-    icon: "🕹️",
-    description:
-    "Học sinh tự hoàn thành theo tốc độ riêng. Phù hợp để tự học và ôn tập.",
-    accentColor: "#3b82f6",
-    buttonLabel: "Giao Bài",
-    buttonStyle: "blue",
-  },
-  {
     mode: "ASYNC_TOURNAMENT",
-    label: "Giải Đấu",
+    label: "Phòng Giải Đấu",
     icon: "🏆",
     description:
-      "Cho học sinh tham gia bất kỳ lúc nào trong thời gian định. Bảng xếp hạng toàn cầu.",
+      "Mở giải đấu bảng xếp hạng, người tham gia làm bài bất đồng bộ với timer cá nhân, tự động lưu nháp.",
     accentColor: "#f59e0b",
-    buttonLabel: "Khởi Động",
+    buttonLabel: "Tạo Giải Đấu",
     buttonStyle: "yellow",
   },
 ];

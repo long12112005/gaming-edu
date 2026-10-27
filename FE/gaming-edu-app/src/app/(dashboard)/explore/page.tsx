@@ -40,39 +40,31 @@ export default function ExplorePage() {
   });
 
   return (
-    <div className="min-h-screen text-[#1B2A2E] font-serif flex flex-col relative">
-      {/* Landscape background */}
-      <div
-        className="fixed inset-0 z-0"
-        style={{
-          backgroundImage: "url('/bg-cloud-valley.jpg')",
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-        }}
-      />
-      {/* Frosted mist overlay */}
-      <div className="fixed inset-0 z-0" style={{ background: "rgba(235,245,248,0.5)" }} />
+    <div className="min-h-screen bg-[#F4F6FB] text-slate-900 flex flex-col font-sans relative">
+      {/* Subtle modern ambient background glows */}
+      <div className="fixed top-0 left-1/4 w-96 h-96 bg-indigo-500/5 rounded-full blur-3xl pointer-events-none" />
+      <div className="fixed bottom-0 right-1/4 w-96 h-96 bg-purple-500/5 rounded-full blur-3xl pointer-events-none" />
       <SiteHeader />
 
       <main className="flex-1 pt-24 pb-16 px-4 md:px-8 max-w-6xl mx-auto w-full space-y-10 relative z-10 font-sans">
         {/* Header Hero Section */}
-        <div className="relative bg-white/55 backdrop-blur-xl p-8 md:p-12 rounded-[32px] border border-white/80 shadow-[0_16px_40px_rgba(8,38,42,0.12)] overflow-hidden">
+        <div className="relative bg-white p-8 md:p-12 rounded-[32px] border border-slate-200/90 shadow-xs overflow-hidden">
           {/* Subtle decorative glow */}
-          <div className="absolute -top-20 -right-20 w-64 h-64 bg-teal-300/15 rounded-full blur-3xl pointer-events-none" />
-          <div className="absolute -bottom-20 -left-20 w-64 h-64 bg-emerald-300/15 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute -top-20 -right-20 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute -bottom-20 -left-20 w-64 h-64 bg-purple-500/10 rounded-full blur-3xl pointer-events-none" />
 
           <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-8">
             <div className="flex-1 space-y-4">
-              <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-emerald-500/20 border border-emerald-500/40 text-emerald-700 rounded-full font-bold text-xs tracking-wider uppercase">
+              <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-full font-bold text-xs tracking-wider uppercase font-heading">
                 <Compass size={15} /> Thư Viện Đề Thi
               </div>
-              <h1 className="text-3xl md:text-5xl font-bold font-serif text-[#08282e] tracking-tight leading-tight drop-shadow-sm">
+              <h1 className="text-3xl md:text-5xl font-black font-heading text-slate-900 tracking-tight leading-tight">
                 Khám Phá Các Bộ <br />
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-600 via-emerald-600 to-teal-600">
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-500 via-violet-600 to-indigo-600">
                   Câu Hỏi Trắc Nghiệm
                 </span>
               </h1>
-              <p className="text-teal-800/80 text-base md:text-lg max-w-lg leading-relaxed font-sans">
+              <p className="text-slate-500 text-base md:text-lg max-w-lg leading-relaxed font-sans">
                 Hàng ngàn bài trắc nghiệm độc đáo đang chờ bạn thử tài. Rèn luyện mỗi ngày để nâng cao kiến thức và kỹ năng!
               </p>
             </div>
@@ -80,18 +72,18 @@ export default function ExplorePage() {
             {/* Thanh tìm kiếm */}
             <div className="w-full md:w-1/2 relative group">
               <div className="absolute inset-y-0 left-0 pl-5 flex items-center pointer-events-none">
-                <Search size={22} className="text-teal-500/60 group-focus-within:text-amber-600 transition-colors" />
+                <Search size={22} className="text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
               </div>
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Tìm môn học, chủ đề, từ khóa..."
-                className="w-full pl-14 pr-14 py-4 bg-white/70 backdrop-blur-md border-2 border-teal-300/50 rounded-2xl text-lg font-sans font-semibold text-[#08282e] placeholder-teal-600/40 outline-none focus:border-amber-500 focus:bg-white/90 focus:shadow-[0_0_24px_rgba(20,120,100,0.2)] transition-all"
+                className="w-full pl-14 pr-14 py-4 bg-slate-50 border-2 border-slate-200 rounded-2xl text-lg font-sans font-semibold text-slate-900 placeholder-slate-400 outline-none focus:border-indigo-500 focus:bg-white focus:shadow-md transition-all"
               />
               <button
                 type="button"
-                className="absolute right-3 top-1/2 -translate-y-1/2 p-2.5 bg-teal-500/20 hover:bg-teal-500/40 text-teal-700 hover:text-teal-900 rounded-xl border border-teal-400/30 transition-colors"
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl border border-slate-300 transition-colors cursor-pointer"
                 title="Bộ lọc"
               >
                 <Filter size={20} />
@@ -107,12 +99,12 @@ export default function ExplorePage() {
               <div className="w-10 h-10 bg-amber-500/20 border border-amber-500/40 rounded-xl flex items-center justify-center text-amber-600 shadow-sm">
                 <TrendingUp size={22} />
               </div>
-              <h2 className="text-2xl md:text-3xl font-bold font-serif text-[#08282e]">
+              <h2 className="text-2xl md:text-3xl font-bold font-heading text-slate-900">
                 Bộ Đề Công Khai
               </h2>
             </div>
             {quizzes.length > 0 && (
-              <span className="text-sm font-semibold text-teal-800/70">
+              <span className="text-sm font-semibold text-slate-500">
                 Hiển thị {filteredQuizzes.length} bộ đề
               </span>
             )}
@@ -121,25 +113,25 @@ export default function ExplorePage() {
           {loading ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
               {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="bg-white/60 backdrop-blur-xl rounded-2xl p-4 h-64 animate-pulse border border-white/60" />
+                <div key={i} className="bg-white rounded-2xl p-4 h-64 animate-pulse border border-slate-200" />
               ))}
             </div>
           ) : filteredQuizzes.length === 0 ? (
-            <div className="bg-white/60 backdrop-blur-xl rounded-3xl border-2 border-dashed border-teal-400/40 p-12 text-center shadow-sm">
-              <div className="w-20 h-20 bg-teal-500/15 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-teal-400/30">
-                <Compass size={36} className="text-teal-700" />
+            <div className="bg-white rounded-3xl border-2 border-dashed border-slate-300 p-12 text-center shadow-xs">
+              <div className="w-20 h-20 bg-indigo-50 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-indigo-100 text-indigo-600">
+                <Compass size={36} />
               </div>
-              <h3 className="text-xl font-bold font-serif text-[#08282e] mb-2">
+              <h3 className="text-xl font-bold font-heading text-slate-900 mb-2">
                 {searchQuery.trim() ? "Không tìm thấy bộ đề phù hợp" : "Chưa có bộ đề công khai nào"}
               </h3>
-              <p className="text-sm font-sans text-teal-800/70 max-w-md mx-auto mb-6">
+              <p className="text-sm font-sans text-slate-500 max-w-md mx-auto mb-6">
                 {searchQuery.trim()
                   ? `Không tìm thấy kết quả phù hợp với từ khóa "${searchQuery}". Hãy thử tìm kiếm với từ khóa khác.`
                   : "Hiện chưa có bộ đề công khai nào trong hệ thống. Hãy là người đầu tiên tạo bộ đề để chia sẻ cùng mọi người!"}
               </p>
               <Link
                 href="/quiz/create"
-                className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-bold text-sm rounded-xl shadow-md hover:scale-105 active:scale-95 transition-all"
+                className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold text-sm rounded-xl shadow-md hover:scale-105 active:scale-95 transition-all font-heading"
               >
                 <Plus size={18} /> Tạo Bộ Đề Mới
               </Link>
@@ -149,10 +141,10 @@ export default function ExplorePage() {
               {filteredQuizzes.map((quiz) => (
                 <div
                   key={quiz.id}
-                  className="bg-white/65 backdrop-blur-xl rounded-2xl p-4 border border-white/80 hover:border-emerald-400/60 hover:-translate-y-1.5 transition-all duration-300 shadow-md hover:shadow-[0_12px_32px_rgba(6,78,59,0.15)] flex flex-col group"
+                  className="bg-white rounded-2xl p-4 border border-slate-200/90 hover:border-indigo-400 hover:-translate-y-1.5 transition-all duration-300 shadow-xs hover:shadow-md flex flex-col group"
                 >
                   {/* Thumbnail */}
-                  <div className="w-full h-36 bg-gradient-to-br from-cyan-600 to-teal-800 rounded-xl mb-4 relative overflow-hidden flex items-center justify-center border border-white/20">
+                  <div className="w-full h-36 bg-gradient-to-br from-indigo-500 to-purple-700 rounded-xl mb-4 relative overflow-hidden flex items-center justify-center border border-slate-200">
                     {quiz.cover_image_url ? (
                       <img src={quiz.cover_image_url} alt={quiz.title} className="w-full h-full object-cover" />
                     ) : (
@@ -170,10 +162,10 @@ export default function ExplorePage() {
 
                   {/* Info */}
                   <div className="flex-1 flex flex-col">
-                    <h3 className="text-lg font-bold font-serif text-[#08282e] line-clamp-2 leading-snug mb-1.5 group-hover:text-amber-700 transition-colors">
+                    <h3 className="text-lg font-bold font-heading text-slate-900 line-clamp-2 leading-snug mb-1.5 group-hover:text-indigo-600 transition-colors">
                       {quiz.title}
                     </h3>
-                    <p className="text-xs font-sans text-teal-700/70 mb-3">
+                    <p className="text-xs font-sans text-slate-500 mb-3">
                       Tác giả: {quiz.creator_nickname || "Người dùng"}
                     </p>
 

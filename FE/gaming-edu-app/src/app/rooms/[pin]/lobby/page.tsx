@@ -23,8 +23,10 @@ import {
   Lock,
   Unlock,
   Radio,
+  Anchor,
 } from "lucide-react";
 import { useGameHub } from "@/hooks/useGameHub";
+import { api } from "@/lib/api";
 
 interface Player {
   id: string;
@@ -59,13 +61,8 @@ export default function RoomLobbyPage({ params }: { params: Promise<{ pin: strin
     }
   }, [isConnected, hostJoinRoom, pin]);
 
-  // Fallback demo players nếu SignalR chưa có người vào
-  const [localPlayers, setLocalPlayers] = useState<Player[]>([
-    { id: "p1", nickname: "AnhKhoa_Pro", avatarUrl: "https://api.dicebear.com/7.x/bottts/svg?seed=Khoa" },
-    { id: "p2", nickname: "MinhThu_Math", avatarUrl: "https://api.dicebear.com/7.x/bottts/svg?seed=Thu" },
-    { id: "p3", nickname: "QuangHuy_Speed", avatarUrl: "https://api.dicebear.com/7.x/bottts/svg?seed=Huy" },
-    { id: "p4", nickname: "BaoNgoc_IELTS", avatarUrl: "https://api.dicebear.com/7.x/bottts/svg?seed=Ngoc" },
-  ]);
+  // Danh sách người chơi tham gia từ SignalR
+  const [localPlayers, setLocalPlayers] = useState<Player[]>([]);
 
   const activePlayers = useMemo(() => {
     if (hubPlayers && hubPlayers.length > 0) {
@@ -97,13 +94,29 @@ export default function RoomLobbyPage({ params }: { params: Promise<{ pin: strin
   };
 
   useEffect(() => {
+    if (pin) {
+      api.get(`/rooms/pin/${pin}`).then((res) => {
+        const theme = res.data?.data?.theme || res.data?.data?.gameModeTheme;
+        if (theme === "NAVAL_WAR") {
+          router.replace(`/rooms/${pin}/naval`);
+        }
+      }).catch(() => {});
+    }
+  }, [pin, router]);
+
+  useEffect(() => {
     if (countdown === null) return;
     if (countdown > 0) {
       const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
       return () => clearTimeout(timer);
     } else if (countdown === 0) {
       if (triggerStartGame) triggerStartGame(roomInfo?.roomId || pin);
-      router.push(`/rooms/${pin}/host-live`);
+      const isNaval = (roomInfo as any)?.theme === "NAVAL_WAR" || (roomInfo as any)?.gameModeTheme === "NAVAL_WAR";
+      if (isNaval) {
+        router.push(`/rooms/${pin}/naval`);
+      } else {
+        router.push(`/rooms/${pin}/host-live`);
+      }
     }
   }, [countdown, pin, router, triggerStartGame, roomInfo]);
 
@@ -256,10 +269,20 @@ export default function RoomLobbyPage({ params }: { params: Promise<{ pin: strin
             <button
               onClick={handleStartGame}
               disabled={activePlayers.length === 0 || countdown !== null}
-              className="w-full py-3.5 px-6 rounded-[14px] btn-3d btn-3d-emerald font-heading text-sm font-extrabold uppercase tracking-wider flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full py-3.5 px-6 rounded-[14px] btn-3d btn-3d-emerald font-heading text-sm font-extrabold uppercase tracking-wider flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
               <Play size={18} fill="currentColor" />
               <span>{countdown !== null ? `ĐANG KHỞI ĐỘNG (${countdown}s)` : "BẮT ĐẦU TRẬN ĐẤU"}</span>
+            </button>
+
+            {/* Chế độ Hải Chiến Tri Thức Button */}
+            <button
+              type="button"
+              onClick={() => router.push(`/rooms/${pin}/naval`)}
+              className="w-full py-3 px-6 rounded-[14px] bg-gradient-to-r from-cyan-600 via-blue-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 font-heading text-xs font-extrabold uppercase tracking-wider flex items-center justify-center gap-2 text-white shadow-lg shadow-cyan-500/20 transition-all border border-cyan-400/40 cursor-pointer active:scale-95"
+            >
+              <Anchor size={16} className="text-cyan-200 animate-pulse" />
+              <span>Chiến Trận Hải Chiến Tri Thức</span>
             </button>
           </div>
         </div>

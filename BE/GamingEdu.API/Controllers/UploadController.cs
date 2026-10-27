@@ -17,7 +17,12 @@ public class UploadController : ControllerBase
     {
         ".pdf",
         ".docx",
-        ".txt"
+        ".txt",
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".webp",
+        ".gif"
     };
 
     public UploadController(IWebHostEnvironment env, ILogger<UploadController> logger)
@@ -25,6 +30,11 @@ public class UploadController : ControllerBase
         _env = env;
         _logger = logger;
     }
+
+public class UploadFileRequest
+{
+    public IFormFile? File { get; set; }
+}
 
     /// <summary>
     /// Tiếp nhận tải file tài liệu (PDF, DOCX, TXT) với dung lượng tối đa 15MB.
@@ -36,8 +46,9 @@ public class UploadController : ControllerBase
     [ProducesResponseType(typeof(ApiResponse<FileUploadResponseDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status500InternalServerError)]
-    public async Task<IActionResult> Upload([FromForm] IFormFile? file)
+    public async Task<IActionResult> Upload([FromForm] UploadFileRequest request)
     {
+        var file = request?.File ?? (Request.HasFormContentType && Request.Form.Files.Count > 0 ? Request.Form.Files[0] : null);
         if (file == null || file.Length == 0)
         {
             return BadRequest(new ApiResponse<string>(false, "Vui lòng chọn file hợp lệ để tải lên.", null));

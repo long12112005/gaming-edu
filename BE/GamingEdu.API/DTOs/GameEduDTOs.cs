@@ -52,7 +52,8 @@ public record UserProfileDto(
     bool IsAdmin,
     string Status,
     UserQuotaDto? Quota,
-    UserStatsDto? Stats = null
+    UserStatsDto? Stats = null,
+    string? AvatarFrame = "default"
 );
 
 public record UserQuotaDto(
@@ -64,7 +65,8 @@ public record UserQuotaDto(
 
 public record UpdateProfileRequest(
     [MaxLength(100)] string? Nickname,
-    [MaxLength(500)] string? AvatarUrl
+    [MaxLength(500)] string? AvatarUrl,
+    [MaxLength(100)] string? AvatarFrame = null
 );
 
 public record AdminUserItemDto(
@@ -115,7 +117,8 @@ public record UpdateQuizRequest(
     [MaxLength(255)] string? Title,
     string? CoverImageUrl,
     string? Topic,
-    bool? IsPublic
+    bool? IsPublic,
+    List<CreateSlideRequest>? Slides = null
 );
 
 // ─── Slide DTOs ────────────────────────────────────────────────────────────
@@ -185,7 +188,14 @@ public record ApproveAllResult(int ApprovedCount);
 public record CreateRoomRequest(
     [Required] Guid QuizId,
     [Required] string Mode,   // HOST_PACED | PLAYER_PACED | ASYNC_TOURNAMENT
-    string? GameModeTheme = "CLASSIC"
+    string? GameModeTheme = "CLASSIC",
+    DateTime? EndTime = null,
+    int? QuestionTimeLimit = null
+);
+
+public record UpdateTournamentSettingsRequest(
+    DateTime? EndTime,
+    int? QuestionTimeLimit
 );
 
 public record RoomDto(
@@ -197,13 +207,19 @@ public record RoomDto(
     string QuizTitle,
     DateTime CreatedAt,
     string? QrCodeBase64 = null,
-    string? GameModeTheme = "CLASSIC"
+    string? GameModeTheme = "CLASSIC",
+    int SlideCount = 0,
+    Guid? HostId = null,
+    DateTime? EndTime = null,
+    int? QuestionTimeLimit = null,
+    bool IsEarlyFinished = false
 );
 
 public record JoinRoomRequest(
     [Required, MaxLength(20)] string PinCode,
     [Required, MaxLength(100)] string Nickname,
-    string? AvatarUrl
+    string? AvatarUrl = null,
+    Guid? UserId = null
 );
 
 public record HostedRoomHistoryDto(
@@ -213,17 +229,29 @@ public record HostedRoomHistoryDto(
     string Mode,
     string Status,
     int PlayerCount,
-    DateTime CreatedAt
-);
+    DateTime CreatedAt,
+    DateTime? EndTime = null,
+    bool IsEarlyFinished = false
+)
+{
+    public Guid Id => RoomId;
+}
 
 public record PlayedRoomHistoryDto(
     Guid RoomId,
+    string PinCode,
     string QuizTitle,
     string HostNickname,
     int TotalScore,
     int Rank,
-    DateTime PlayedAt
-);
+    DateTime PlayedAt,
+    string? Status = null
+)
+{
+    public Guid Id => RoomId;
+    public int Score => TotalScore;
+    public DateTime CreatedAt => PlayedAt;
+}
 
 // ─── Game (SignalR) DTOs ───────────────────────────────────────────────────
 
@@ -311,6 +339,20 @@ public record BattleRoyaleStateDto(
     int SurvivorsCount,
     int EliminatedCount,
     List<PlayerSurvivalStatusDto> Players
+);
+
+public record PlayerArenaProgressDto(
+    Guid PlayerId,
+    string Nickname,
+    string? AvatarUrl,
+    int Score,
+    int Rank,
+    double ProgressRatio,   // 0.0 -> 1.0 (vạch xuất phát đến đích trên Minimap và Arena)
+    int Streak,
+    bool IsAnswered,        // Đã nộp bài câu hỏi hiện tại hay chưa
+    bool IsJustBoosted,     // Vừa mới nộp đúng & tăng điểm để bật hiệu ứng Boost lướt nhanh
+    int LastScoreAwarded,
+    bool IsGhost = false    // Đối thủ bóng ma trong phòng Async
 );
 
 public record PlayerWagerDto(
@@ -596,4 +638,55 @@ public record FileUploadResponseDto(
 
 public record ApiResponse<T>(bool Success, string? Message, T? Data);
 public record PaginatedResponse<T>(IEnumerable<T> Items, int Total, int Page, int PageSize);
+
+// ─── Room Detailed Report DTOs ─────────────────────────────────────────────
+public record PlayerAnswerSummaryDto(
+    Guid SlideId,
+    int QuestionIndex,
+    bool IsCorrect,
+    int ScoreAwarded,
+    int? ResponseTimeMs,
+    string? UserAnswer
+);
+
+public record PlayerReportSummaryDto(
+    Guid PlayerId,
+    string Nickname,
+    string? AvatarUrl,
+    int TotalScore,
+    int? Rank,
+    int CorrectCount,
+    int WrongCount,
+    double AccuracyRate,
+    List<PlayerAnswerSummaryDto> Answers,
+    int AnsweredCount = 0,
+    int TotalQuestions = 0,
+    bool IsCompleted = false
+);
+
+public record QuestionSummaryDto(
+    Guid SlideId,
+    int OrderIndex,
+    string QuestionText,
+    string Type,
+    string CorrectAnswer,
+    int TotalAnswers,
+    int CorrectAnswers,
+    double AccuracyRate
+);
+
+public record RoomDetailedReportDto(
+    Guid RoomId,
+    string PinCode,
+    string QuizTitle,
+    string Mode,
+    string Status,
+    DateTime CreatedAt,
+    int TotalPlayers,
+    List<QuestionSummaryDto> Questions,
+    List<PlayerReportSummaryDto> Players,
+    DateTime? EndTime = null,
+    bool IsEarlyFinished = false,
+    int? QuestionTimeLimit = null
+);
 

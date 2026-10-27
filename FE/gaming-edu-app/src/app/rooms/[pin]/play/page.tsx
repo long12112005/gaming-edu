@@ -19,18 +19,19 @@ import {
   Trophy,
 } from "lucide-react";
 import { useGameHub } from "@/hooks/useGameHub";
+import { api } from "@/lib/api";
 
 export default function PlayerGamepadPage({ params }: { params: Promise<{ pin: string }> }) {
   const unwrappedParams = use(params);
   const pin = unwrappedParams.pin;
   const router = useRouter();
 
-  const [nickname, setNickname] = useState("Thí Sinh Pro");
+  const [nickname, setNickname] = useState("Bạn");
   const [hasAnswered, setHasAnswered] = useState(false);
   const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
   const [earnedPoints, setEarnedPoints] = useState<number | null>(null);
-  const [streakCount, setStreakCount] = useState(3);
-  const [totalScore, setTotalScore] = useState(3850);
+  const [streakCount, setStreakCount] = useState(0);
+  const [totalScore, setTotalScore] = useState(0);
 
   // States cho các dạng câu hỏi
   const [blankInput, setBlankInput] = useState("");
@@ -41,9 +42,7 @@ export default function PlayerGamepadPage({ params }: { params: Promise<{ pin: s
   // Q&A drawer
   const [showQA, setShowQA] = useState(false);
   const [qaInput, setQaInput] = useState("");
-  const [qaList, setQaList] = useState([
-    { id: "q1", author: "Bảo Ngọc", content: "Thầy ơi, câu này trường hợp ngoại lệ với nhiệt độ cao thì áp dụng công thức nào ạ?", upvotes: 4 },
-  ]);
+  const [qaList, setQaList] = useState<{ id: string; author: string; content: string; upvotes: number }[]>([]);
 
   // Hub hooks
   const { currentSlide, slideTimeLeft, submitAnswer } = useGameHub();
@@ -53,15 +52,27 @@ export default function PlayerGamepadPage({ params }: { params: Promise<{ pin: s
     setNickname(savedName);
   }, []);
 
+  useEffect(() => {
+    if (pin) {
+      api.get(`/rooms/pin/${pin}`).then((res) => {
+        const theme = res.data?.data?.theme || res.data?.data?.gameModeTheme;
+        if (theme === "NAVAL_WAR") {
+          router.replace(`/rooms/${pin}/naval`);
+        }
+      }).catch(() => {});
+    }
+  }, [pin, router]);
+
   // Demo current question fallback nếu hub chưa load
   const questionType = currentSlide?.type || "QUIZ";
   const questionIndex = (currentSlide?.index ?? 0) + 1;
 
-  const mockOptions = [
-    { id: "opt-1", label: "A", content: "Năng lượng không tự nhiên sinh ra", color: "btn-3d-red", shape: "▲" },
-    { id: "opt-2", label: "B", content: "Chỉ chuyển hóa các dạng", color: "btn-3d-blue", shape: "◆" },
-    { id: "opt-3", label: "C", content: "Luôn bảo toàn trong hệ cô lập", color: "btn-3d-amber", shape: "●" },
-    { id: "opt-4", label: "D", content: "Cả A, B và C đều chính xác", color: "btn-3d-emerald", shape: "■" },
+  // Option color & shape styling for 3D buttons
+  const OPTION_STYLES = [
+    { color: "btn-3d-red", shape: "▲" },
+    { color: "btn-3d-blue", shape: "◆" },
+    { color: "btn-3d-amber", shape: "●" },
+    { color: "btn-3d-emerald", shape: "■" },
   ];
 
   const handleSelectQuiz = (optId: string) => {
@@ -173,7 +184,7 @@ export default function PlayerGamepadPage({ params }: { params: Promise<{ pin: s
         {/* Status bar: Question count & Timer */}
         <div className="flex items-center justify-between mb-4 bg-white/[0.06] backdrop-blur-[16px] border border-white/10 px-4 py-2.5 rounded-[16px]">
           <span className="text-xs font-extrabold text-indigo-300 font-heading">
-            CÂU {questionIndex} / 5
+            CÂU {questionIndex} {currentSlide?.totalSlides ? `/ ${currentSlide.totalSlides}` : ""}
           </span>
           <div className="flex items-center gap-1.5 text-xs font-black font-heading text-slate-200">
             <Clock size={14} className="text-amber-400" />
@@ -184,7 +195,7 @@ export default function PlayerGamepadPage({ params }: { params: Promise<{ pin: s
         {/* Question Prompt */}
         <div className="text-center py-4 mb-2">
           <h2 className="text-lg md:text-xl font-black font-heading text-white leading-snug">
-            {currentSlide?.questionText || "Nội dung cốt lõi của Định luật Bảo toàn Năng lượng là gì?"}
+            {currentSlide?.questionText || "Đang chuẩn bị câu hỏi tiếp theo..."}
           </h2>
         </div>
 
@@ -203,21 +214,30 @@ export default function PlayerGamepadPage({ params }: { params: Promise<{ pin: s
           </div>
         ) : (
           <div className="flex-1 flex flex-col justify-center">
-            {/* 1. DẠNG TRẮC NGHIỆM: 4 NÚT 3D ĐA SẮC SIÊU TO TỐI ƯU CẢM ỨNG */}
+            {/* 1. DẠNG TRẮC NGHIỆM: CÁC NÚT 3D TACTILE THEO PHƯƠNG ÁN THỰC TẾ */}
             {questionType === "QUIZ" && (
               <div className="grid grid-cols-2 gap-3.5 sm:gap-4">
-                {mockOptions.map((opt) => (
-                  <button
-                    key={opt.id}
-                    onClick={() => handleSelectQuiz(opt.id)}
-                    className={`btn-3d ${opt.color} p-5 rounded-[20px] text-white flex flex-col items-center justify-center gap-2 min-h-[140px] transition-all`}
-                  >
-                    <span className="text-2xl font-black opacity-80">{opt.shape}</span>
-                    <span className="text-xs sm:text-sm font-bold font-heading text-center leading-snug line-clamp-3">
-                      {opt.content}
-                    </span>
-                  </button>
-                ))}
+                {(currentSlide?.options && currentSlide.options.length > 0) ? (
+                  currentSlide.options.map((opt, idx) => {
+                    const style = OPTION_STYLES[idx % OPTION_STYLES.length];
+                    return (
+                      <button
+                        key={opt.id}
+                        onClick={() => handleSelectQuiz(opt.id)}
+                        className={`btn-3d ${style.color} p-5 rounded-[20px] text-white flex flex-col items-center justify-center gap-2 min-h-[140px] transition-all`}
+                      >
+                        <span className="text-2xl font-black opacity-80">{style.shape}</span>
+                        <span className="text-xs sm:text-sm font-bold font-heading text-center leading-snug line-clamp-3">
+                          {opt.content}
+                        </span>
+                      </button>
+                    );
+                  })
+                ) : (
+                  <div className="col-span-2 py-10 text-center text-slate-400 font-bold text-sm">
+                    Đang tải các phương án trả lời...
+                  </div>
+                )}
               </div>
             )}
 
@@ -249,50 +269,60 @@ export default function PlayerGamepadPage({ params }: { params: Promise<{ pin: s
                 <p className="text-[11px] text-center text-slate-400">
                   Chạm vào 1 ô bên trái rồi chạm vào 1 ô bên phải tương ứng để ghép cặp.
                 </p>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-2">
-                    {["Việt Nam", "Pháp", "Nhật Bản"].map((item) => {
-                      const isPaired = !!pairedMatches[item];
-                      const isSelected = selectedLeft === item;
-                      return (
-                        <button
-                          key={item}
-                          onClick={() => handleMatchingSelect("left", item)}
-                          className={`w-full p-3 rounded-[12px] text-xs font-bold border transition-all text-left ${
-                            isPaired
-                              ? "bg-emerald-500/20 border-emerald-400 text-emerald-300"
-                              : isSelected
-                              ? "bg-amber-400 text-slate-950 border-amber-300 font-extrabold"
-                              : "bg-white/5 border-white/10 text-slate-200"
-                          }`}
-                        >
-                          {item}
-                        </button>
-                      );
-                    })}
+                {Array.isArray(currentSlide?.options) && currentSlide.options.length > 0 ? (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      {currentSlide.options.map((opt: any) => {
+                        const item = opt.content || opt.text || "";
+                        if (!item) return null;
+                        const isPaired = !!pairedMatches[item];
+                        const isSelected = selectedLeft === item;
+                        return (
+                          <button
+                            key={item}
+                            onClick={() => handleMatchingSelect("left", item)}
+                            className={`w-full p-3 rounded-[12px] text-xs font-bold border transition-all text-left ${
+                              isPaired
+                                ? "bg-emerald-500/20 border-emerald-400 text-emerald-300"
+                                : isSelected
+                                ? "bg-amber-400 text-slate-950 border-amber-300 font-extrabold"
+                                : "bg-white/5 border-white/10 text-slate-200"
+                            }`}
+                          >
+                            {item}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div className="space-y-2">
+                      {currentSlide.options.map((opt: any) => {
+                        const item = opt.matchingPair || "";
+                        if (!item) return null;
+                        const isPaired = Object.values(pairedMatches).includes(item);
+                        const isSelected = selectedRight === item;
+                        return (
+                          <button
+                            key={item}
+                            onClick={() => handleMatchingSelect("right", item)}
+                            className={`w-full p-3 rounded-[12px] text-xs font-bold border transition-all text-left ${
+                              isPaired
+                                ? "bg-emerald-500/20 border-emerald-400 text-emerald-300"
+                                : isSelected
+                                ? "bg-amber-400 text-slate-950 border-amber-300 font-extrabold"
+                                : "bg-white/5 border-white/10 text-slate-200"
+                            }`}
+                          >
+                            {item}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    {["Paris", "Hà Nội", "Tokyo"].map((item) => {
-                      const isPaired = Object.values(pairedMatches).includes(item);
-                      const isSelected = selectedRight === item;
-                      return (
-                        <button
-                          key={item}
-                          onClick={() => handleMatchingSelect("right", item)}
-                          className={`w-full p-3 rounded-[12px] text-xs font-bold border transition-all text-left ${
-                            isPaired
-                              ? "bg-emerald-500/20 border-emerald-400 text-emerald-300"
-                              : isSelected
-                              ? "bg-amber-400 text-slate-950 border-amber-300 font-extrabold"
-                              : "bg-white/5 border-white/10 text-slate-200"
-                          }`}
-                        >
-                          {item}
-                        </button>
-                      );
-                    })}
+                ) : (
+                  <div className="py-8 text-center text-slate-400 text-xs font-semibold">
+                    Đang tải các cặp ghép nối...
                   </div>
-                </div>
+                )}
 
                 <button
                   onClick={() => setHasAnswered(true)}
@@ -321,17 +351,23 @@ export default function PlayerGamepadPage({ params }: { params: Promise<{ pin: s
             </div>
 
             <div className="flex-1 overflow-y-auto py-3 space-y-2.5">
-              {qaList.map((item) => (
-                <div key={item.id} className="p-3 rounded-[12px] bg-white/5 border border-white/10 space-y-1">
-                  <div className="flex items-center justify-between text-[11px] text-slate-400 font-bold">
-                    <span>{item.author}</span>
-                    <span className="flex items-center gap-1 text-amber-300">
-                      <ThumbsUp size={11} /> {item.upvotes}
-                    </span>
-                  </div>
-                  <p className="text-xs text-white leading-relaxed">{item.content}</p>
+              {qaList.length === 0 ? (
+                <div className="py-8 text-center text-slate-500 text-xs font-semibold">
+                  Chưa có câu hỏi nào. Hãy gửi câu hỏi đầu tiên của bạn!
                 </div>
-              ))}
+              ) : (
+                qaList.map((item) => (
+                  <div key={item.id} className="p-3 rounded-[12px] bg-white/5 border border-white/10 space-y-1">
+                    <div className="flex items-center justify-between text-[11px] text-slate-400 font-bold">
+                      <span>{item.author}</span>
+                      <span className="flex items-center gap-1 text-amber-300">
+                        <ThumbsUp size={11} /> {item.upvotes}
+                      </span>
+                    </div>
+                    <p className="text-xs text-white leading-relaxed">{item.content}</p>
+                  </div>
+                ))
+              )}
             </div>
 
             <form onSubmit={handleSubmitQA} className="pt-2 flex items-center gap-2">

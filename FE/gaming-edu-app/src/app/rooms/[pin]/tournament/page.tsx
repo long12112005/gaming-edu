@@ -20,6 +20,7 @@ import {
   HelpCircle,
   LogOut,
 } from "lucide-react";
+import { api } from "@/lib/api";
 
 interface AsyncQuestion {
   id: string;
@@ -34,60 +35,50 @@ export default function AsyncTournamentPage({ params }: { params: Promise<{ pin:
   const pin = unwrappedParams.pin;
   const router = useRouter();
 
-  // 15 questions mock
-  const questions: AsyncQuestion[] = useMemo(
-    () => [
-      {
-        id: "q-1",
-        index: 1,
-        questionText: "Định luật I Newton còn được gọi với tên gọi là định luật gì?",
-        type: "QUIZ",
-        options: [
-          { id: "opt-1", label: "A", content: "Định luật Quán tính" },
-          { id: "opt-2", label: "B", content: "Định luật Gia tốc" },
-          { id: "opt-3", label: "C", content: "Định luật Tác dụng và Phản tác dụng" },
-          { id: "opt-4", label: "D", content: "Định luật Vạn vật hấp dẫn" },
-        ],
-      },
-      {
-        id: "q-2",
-        index: 2,
-        questionText: "Trong hệ SI, đơn vị đo của cường độ dòng điện là gì?",
-        type: "QUIZ",
-        options: [
-          { id: "opt-5", label: "A", content: "Volt (V)" },
-          { id: "opt-6", label: "B", content: "Ampe (A)" },
-          { id: "opt-7", label: "C", content: "Ohm (Ω)" },
-          { id: "opt-8", label: "D", content: "Watt (W)" },
-        ],
-      },
-      {
-        id: "q-3",
-        index: 3,
-        questionText: "Hiện tượng khúc xạ ánh sáng xảy ra khi ánh sáng truyền qua mặt phân cách giữa hai môi trường [...] khác nhau.",
-        type: "FILL_IN_BLANK",
-      },
-      {
-        id: "q-4",
-        index: 4,
-        questionText: "Quá trình biến đổi trạng thái trong đó nhiệt độ được giữ không đổi gọi là quá trình gì?",
-        type: "QUIZ",
-        options: [
-          { id: "opt-9", label: "A", content: "Đẳng tích" },
-          { id: "opt-10", label: "B", content: "Đẳng áp" },
-          { id: "opt-11", label: "C", content: "Đẳng nhiệt" },
-          { id: "opt-12", label: "D", content: "Đoạn nhiệt" },
-        ],
-      },
-      {
-        id: "q-5",
-        index: 5,
-        questionText: "Sóng điện từ có thể lan truyền được trong môi trường chân không với vận tốc xấp xỉ [...] km/s.",
-        type: "FILL_IN_BLANK",
-      },
-    ],
-    []
-  );
+  const [questions, setQuestions] = useState<AsyncQuestion[]>([]);
+  const [loadingQuestions, setLoadingQuestions] = useState(true);
+
+  // Tải danh sách câu hỏi thực tế của bộ đề từ phòng thi
+  useEffect(() => {
+    let isMounted = true;
+    const loadRoomQuestions = async () => {
+      try {
+        setLoadingQuestions(true);
+        const resRoom = await api.get(`/rooms/pin/${pin}`);
+        if (resRoom.data?.success && resRoom.data?.data) {
+          const room = resRoom.data.data;
+          if (room.quizId) {
+            const resQuiz = await api.get(`/quizzes/${room.quizId}`);
+            const slides = resQuiz.data?.data?.slides || resQuiz.data?.slides || [];
+            if (Array.isArray(slides) && slides.length > 0) {
+              const mapped: AsyncQuestion[] = slides.map((s: any, idx: number) => ({
+                id: s.id,
+                index: idx + 1,
+                questionText: s.questionText || s.title || `Câu hỏi ${idx + 1}`,
+                type: s.type || "QUIZ",
+                options: Array.isArray(s.options)
+                  ? s.options.map((o: any, oIdx: number) => ({
+                      id: o.id,
+                      label: String.fromCharCode(65 + oIdx),
+                      content: o.content || o.text || "",
+                    }))
+                  : [],
+              }));
+              if (isMounted) setQuestions(mapped);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn("Lỗi tải câu hỏi giải đấu:", e);
+      } finally {
+        if (isMounted) setLoadingQuestions(false);
+      }
+    };
+    loadRoomQuestions();
+    return () => {
+      isMounted = false;
+    };
+  }, [pin]);
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -265,7 +256,32 @@ export default function AsyncTournamentPage({ params }: { params: Promise<{ pin:
             </div>
           </div>
         </main>
-      ) : (
+      ) : loadingQuestions ? (
+        <main className="flex-1 max-w-md w-full mx-auto p-8 flex flex-col items-center justify-center relative z-10 text-center">
+          <div className="w-12 h-12 border-3 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4" />
+          <p className="text-sm font-bold text-slate-300">Đang đồng bộ câu hỏi giải đấu...</p>
+        </main>
+      ) : questions.length === 0 ? (
+        <main className="flex-1 max-w-md w-full mx-auto p-4 md:p-8 flex flex-col items-center justify-center relative z-10 text-center">
+          <div className="rounded-[32px] bg-white/[0.08] backdrop-blur-[20px] border border-white/15 p-8 shadow-2xl space-y-4 w-full">
+            <div className="w-16 h-16 rounded-2xl bg-indigo-500/20 text-indigo-300 flex items-center justify-center mx-auto">
+              <Trophy size={32} />
+            </div>
+            <h2 className="text-xl font-bold font-heading text-white">
+              Chưa có câu hỏi trong giải đấu
+            </h2>
+            <p className="text-xs text-slate-400">
+              Bộ đề của phòng này hiện chưa có nội dung câu hỏi nào để bắt đầu làm bài.
+            </p>
+            <Link
+              href="/"
+              className="inline-block px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs"
+            >
+              Về Trang Chủ
+            </Link>
+          </div>
+        </main>
+      ) : currentQ ? (
         /* ── GIAO DIỆN LÀM BÀI ASYNC ── */
         <main className="flex-1 max-w-5xl w-full mx-auto p-4 md:p-8 flex flex-col md:flex-row gap-6 relative z-10">
           {/* CỘT TRÁI: NỘI DUNG CÂU HỎI VÀ ĐÁP ÁN (FLEX-1) */}
@@ -415,7 +431,7 @@ export default function AsyncTournamentPage({ params }: { params: Promise<{ pin:
             </div>
           </aside>
         </main>
-      )}
+      ) : null}
 
       {/* ── MODAL XÁC NHẬN NỘP BÀI ── */}
       {showSubmitModal && (

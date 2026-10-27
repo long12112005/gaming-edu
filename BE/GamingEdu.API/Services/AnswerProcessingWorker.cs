@@ -131,6 +131,10 @@ public class AnswerProcessingWorker : BackgroundService
 
                     // 4. Phát sóng tiến độ nộp bài và phân bổ đáp án (Answer Distribution) thời gian thực
                     var distribution = await roomService.GetSlideAnswerDistributionAsync(payload.RoomId, payload.Request.SlideId);
+
+                    // 5. Đồng bộ tiến độ 60 FPS Arena cho toàn bộ đấu trường (kích hoạt hiệu ứng Boost)
+                    var playersProgress = await roomService.GetRoomPlayersArenaProgressAsync(payload.RoomId, payload.RoomPlayerId, result.ScoreAwarded, payload.Request.SlideId);
+                    await _hubContext.Clients.Group(payload.GroupName).SendAsync("PlayersProgressUpdated", playersProgress, cancellationToken: stoppingToken);
                     var theme = await roomService.GetRoomThemeAsync(payload.RoomId);
                     BattleRoyaleStateDto? survival = null;
                     if (theme == "BATTLE_ROYALE")

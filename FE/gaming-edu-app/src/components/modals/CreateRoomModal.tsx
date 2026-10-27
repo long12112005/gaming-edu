@@ -16,6 +16,15 @@ import {
   Loader2,
   AlertCircle,
   HelpCircle,
+  Crown,
+  Rocket,
+  Trophy,
+  Flame,
+  Zap,
+  Anchor,
+  Shield,
+  Clock,
+  Calendar,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { Quiz } from "@/types/database";
@@ -24,7 +33,8 @@ interface CreateRoomModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialQuizId?: string;
-  initialMode?: "HOST_PACED" | "PLAYER_PACED" | "ASYNC_TOURNAMENT";
+  initialMode?: "HOST_PACED" | "ASYNC_TOURNAMENT";
+  initialTheme?: string;
 }
 
 // ─── Component Tùy Chọn Chế Độ Chơi ──────────────────────────────────────────
@@ -32,47 +42,56 @@ function ModeOptionCard({
   mode,
   label,
   icon,
+  iconBg,
   desc,
   selected,
+  badge,
   onClick,
 }: {
   mode: string;
   label: string;
-  icon: string;
+  icon: React.ReactNode;
+  iconBg: string;
   desc: string;
   selected: boolean;
+  badge?: string;
   onClick: () => void;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`group relative text-left p-4 rounded-2xl border-2 transition-all duration-300 flex flex-col justify-between overflow-hidden active:scale-[0.98] ${
+      className={`group relative text-left p-4 sm:p-5 rounded-2xl border-2 transition-all duration-200 flex flex-col justify-between overflow-hidden active:scale-[0.99] cursor-pointer ${
         selected
-          ? "bg-cyan-500/15 border-cyan-400 shadow-[0_0_24px_rgba(6,182,212,0.35)] ring-1 ring-cyan-400/50"
-          : "bg-white/[0.03] border-cyan-400/20 hover:border-cyan-400/40 hover:bg-white/[0.06]"
+          ? "bg-indigo-50/70 border-indigo-600 shadow-md ring-2 ring-indigo-500/20"
+          : "bg-white border-slate-200 hover:border-indigo-300 hover:bg-slate-50/60 shadow-xs"
       }`}
     >
-      <div className="flex items-start justify-between gap-2 mb-2">
-        <span className="text-2xl p-1.5 rounded-xl bg-white/10 border border-white/10 shrink-0">
-          {icon}
+      {badge && (
+        <span className="absolute top-2.5 right-2.5 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-cyan-100 text-cyan-700 border border-cyan-200">
+          {badge}
         </span>
+      )}
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 border ${iconBg} shadow-xs`}>
+          {icon}
+        </div>
         <div
-          className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
+          className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
             selected
-              ? "bg-cyan-400 border-cyan-400 text-teal-950 shadow-[0_0_10px_rgba(6,182,212,0.8)]"
-              : "border-cyan-400/30 group-hover:border-cyan-400/60"
+              ? "bg-indigo-600 border-indigo-600 text-white shadow-xs"
+              : "border-slate-300 group-hover:border-indigo-400 bg-white"
           }`}
         >
-          {selected && <Check size={12} strokeWidth={3.5} />}
+          {selected && <Check size={13} strokeWidth={3.5} />}
         </div>
       </div>
 
       <div>
-        <div className="font-bold text-sm text-white group-hover:text-cyan-200 transition-colors">
+        <div className={`font-heading font-black text-sm sm:text-base transition-colors ${selected ? "text-indigo-950" : "text-slate-900 group-hover:text-indigo-600"}`}>
           {label}
         </div>
-        <p className="text-xs text-cyan-200/70 mt-1 leading-snug line-clamp-2">
+        <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
           {desc}
         </p>
       </div>
@@ -86,6 +105,7 @@ export default function CreateRoomModal({
   onClose,
   initialQuizId,
   initialMode = "HOST_PACED",
+  initialTheme = "CLASSIC",
 }: CreateRoomModalProps) {
   const router = useRouter();
 
@@ -98,19 +118,41 @@ export default function CreateRoomModal({
   const [quizTopicFilter, setQuizTopicFilter] = useState("ALL");
 
   const [selectedMode, setSelectedMode] = useState<
-    "HOST_PACED" | "PLAYER_PACED" | "ASYNC_TOURNAMENT"
-  >(initialMode);
+    "HOST_PACED" | "ASYNC_TOURNAMENT"
+  >(initialMode === "ASYNC_TOURNAMENT" ? "ASYNC_TOURNAMENT" : "HOST_PACED");
+  const [selectedTheme, setSelectedTheme] = useState<string>(initialTheme || "CLASSIC");
+
+  // Tournament settings
+  const [tournamentDurationHours, setTournamentDurationHours] = useState<number>(24);
+  const [tournamentCustomEndTime, setTournamentCustomEndTime] = useState<string>("");
+  const [tournamentQuestionTimeLimit, setTournamentQuestionTimeLimit] = useState<number>(30);
 
   const [creating, setCreating] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Cập nhật khi mở modal hoặc đổi initialQuizId
+  const computedEndTime = useMemo(() => {
+    if (tournamentCustomEndTime) {
+      return new Date(tournamentCustomEndTime).toISOString();
+    }
+    if (tournamentDurationHours <= 0) return null;
+    const d = new Date();
+    d.setHours(d.getHours() + tournamentDurationHours);
+    return d.toISOString();
+  }, [tournamentDurationHours, tournamentCustomEndTime]);
+
+  // Cập nhật khi mở modal hoặc đổi initialQuizId / initialTheme
   useEffect(() => {
     if (initialQuizId) {
       setSelectedQuizId(initialQuizId);
       setIsChangingQuiz(false);
     }
   }, [initialQuizId]);
+
+  useEffect(() => {
+    if (initialTheme) {
+      setSelectedTheme(initialTheme);
+    }
+  }, [initialTheme]);
 
   // Tải danh sách bộ đề (Ưu tiên bộ đề của tôi, fallback bộ đề công khai)
   useEffect(() => {
@@ -135,23 +177,28 @@ export default function CreateRoomModal({
           }
         }
 
-        // Nếu người dùng chưa có bộ đề nào, lấy thêm bộ đề công khai mẫu
+        // Nếu người dùng chưa có bộ đề nào, lấy thêm bộ đề công khai
         if (list.length === 0) {
-          const publicRes = await api.get("/quizzes");
-          if (publicRes.data?.data && Array.isArray(publicRes.data.data)) {
-            list = publicRes.data.data;
+          try {
+            const publicRes = await api.get("/quizzes");
+            if (publicRes.data?.data && Array.isArray(publicRes.data.data)) {
+              list = publicRes.data.data;
+            } else if (Array.isArray(publicRes.data)) {
+              list = publicRes.data;
+            }
+          } catch (e) {
+            console.warn("Lỗi tải public quizzes:", e);
           }
         }
 
         if (isMounted) {
           setQuizzes(list);
-          // Tự động chọn đề đầu tiên nếu chưa có đề nào được chọn
           if (!selectedQuizId && list.length > 0) {
             setSelectedQuizId(list[0].id);
           }
         }
-      } catch (err) {
-        console.error("Lỗi khi tải danh sách đề:", err);
+      } catch (err: any) {
+        console.warn("Lỗi nạp danh sách bộ đề:", err);
       } finally {
         if (isMounted) setLoadingQuizzes(false);
       }
@@ -161,14 +208,14 @@ export default function CreateRoomModal({
     return () => {
       isMounted = false;
     };
-  }, [isOpen]);
+  }, [isOpen, selectedQuizId]);
 
-  // Bộ đề được chọn hiện tại
+  // Bộ đề đang được chọn
   const currentQuiz = useMemo(() => {
     return quizzes.find((q) => q.id === selectedQuizId);
   }, [quizzes, selectedQuizId]);
 
-  // Danh sách chủ đề môn học có trong quizzes
+  // Danh sách chủ đề có trong dữ liệu
   const availableTopics = useMemo(() => {
     const set = new Set<string>();
     quizzes.forEach((q) => {
@@ -177,24 +224,35 @@ export default function CreateRoomModal({
     return Array.from(set);
   }, [quizzes]);
 
-  // Lọc danh sách bộ đề
+  // Danh sách sau khi tìm kiếm và lọc
   const filteredQuizzes = useMemo(() => {
     return quizzes.filter((q) => {
       const matchSearch =
-        !quizSearch.trim() ||
+        quizSearch.trim() === "" ||
         q.title.toLowerCase().includes(quizSearch.toLowerCase()) ||
         (q.topic && q.topic.toLowerCase().includes(quizSearch.toLowerCase()));
+
       const matchTopic =
-        quizTopicFilter === "ALL" || q.topic === quizTopicFilter;
+        quizTopicFilter === "ALL" ||
+        (q.topic && q.topic.toUpperCase() === quizTopicFilter.toUpperCase());
+
       return matchSearch && matchTopic;
     });
   }, [quizzes, quizSearch, quizTopicFilter]);
 
-  // Xử lý tạo phòng
+  const getQuizSlideCount = (quiz: any): number => {
+    if (!quiz) return 0;
+    return quiz.slideCount ?? quiz.slide_count ?? quiz.slides?.length ?? quiz.total_slides ?? 0;
+  };
+
+  // Xử lý nút Bắt đầu tạo phòng thi đấu
   const handleStartGame = async () => {
     const token = Cookies.get("token");
     if (!token) {
-      router.push("/login");
+      setErrorMsg("Bạn cần đăng nhập tài khoản Giáo viên / Quản trò để mở phòng thi.");
+      setTimeout(() => {
+        router.push("/login");
+      }, 1200);
       return;
     }
 
@@ -204,21 +262,37 @@ export default function CreateRoomModal({
       return;
     }
 
+    const questionCount = getQuizSlideCount(currentQuiz);
+    if (questionCount === 0) {
+      setErrorMsg(
+        `Bộ đề "${currentQuiz?.title || "này"}" hiện chưa có câu hỏi nào (0 câu). Vui lòng chọn bộ đề khác đã có câu hỏi hoặc vào mục Quản lý bộ đề để thêm câu hỏi trước khi mở phòng!`
+      );
+      return;
+    }
+
     setCreating(true);
     setErrorMsg(null);
     try {
       const res = await api.post("/rooms", {
         quizId: selectedQuizId,
         mode: selectedMode,
-        gameModeTheme: "CLASSIC",
+        gameModeTheme: selectedTheme,
+        endTime: selectedMode === "ASYNC_TOURNAMENT" ? computedEndTime : null,
+        questionTimeLimit:
+          selectedMode === "ASYNC_TOURNAMENT" && tournamentQuestionTimeLimit > 0
+            ? tournamentQuestionTimeLimit
+            : null,
       });
 
       if (res.data.success) {
         const room = res.data.data;
+        const pin = room.pinCode || room.pin;
         onClose();
-        router.push(
-          `/host/${room.id}?pin=${room.pinCode}`
-        );
+        if (selectedTheme === "NAVAL_WAR") {
+          router.push(`/rooms/${pin}/naval`);
+        } else {
+          router.push(`/host/${room.id}?pin=${pin}`);
+        }
       } else {
         setErrorMsg(res.data.message || "Tạo phòng không thành công.");
       }
@@ -245,23 +319,23 @@ export default function CreateRoomModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 animate-fade-in">
-      <div className="bg-[#08282e] border-2 border-cyan-400/40 rounded-[28px] md:rounded-[36px] p-5 sm:p-6 md:p-8 w-full max-w-4xl shadow-[0_20px_70px_rgba(0,0,0,0.85)] font-sans max-h-[92vh] flex flex-col relative overflow-hidden">
-        {/* Ambient background glow effects */}
-        <div className="absolute top-0 right-0 w-80 h-80 bg-cyan-400/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute bottom-0 left-0 w-80 h-80 bg-amber-400/10 rounded-full blur-3xl pointer-events-none" />
+    <div className="fixed inset-0 bg-slate-950/75 backdrop-blur-md z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 animate-in fade-in duration-200">
+      <div className="bg-white border border-slate-200/90 rounded-[28px] md:rounded-[32px] p-5 sm:p-6 md:p-8 w-full max-w-3xl shadow-2xl font-sans max-h-[92vh] flex flex-col relative overflow-hidden">
+        {/* Ambient subtle glow */}
+        <div className="absolute top-0 right-0 w-80 h-80 bg-indigo-500/5 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute bottom-0 left-0 w-80 h-80 bg-purple-500/5 rounded-full blur-3xl pointer-events-none" />
 
         {/* ── MODAL HEADER ──────────────────────────────────────────────────── */}
-        <div className="flex items-start justify-between gap-4 pb-4 border-b border-cyan-400/20 shrink-0 relative z-10">
+        <div className="flex items-start justify-between gap-4 pb-4 border-b border-slate-100 shrink-0 relative z-10">
           <div className="flex items-center gap-3.5">
-            <div className="w-12 h-12 bg-gradient-to-br from-amber-400 via-amber-300 to-yellow-500 rounded-2xl flex items-center justify-center text-teal-950 shadow-[0_0_20px_rgba(251,191,36,0.35)] shrink-0">
-              <Gamepad2 size={26} strokeWidth={2.2} />
+            <div className="w-12 h-12 bg-indigo-500/15 border border-indigo-200 text-indigo-600 rounded-2xl flex items-center justify-center shadow-xs shrink-0">
+              <Gamepad2 size={26} strokeWidth={2.4} />
             </div>
             <div>
-              <h3 className="font-black text-xl sm:text-2xl text-white font-serif leading-tight">
+              <h3 className="font-heading font-black text-xl sm:text-2xl text-slate-900 leading-tight">
                 Khởi Tạo Phòng Chơi Trực Tiếp
               </h3>
-              <p className="text-xs sm:text-sm text-cyan-200/80 mt-0.5">
+              <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
                 Chọn bộ đề câu hỏi và chế độ điều khiển để bắt đầu phòng chơi
               </p>
             </div>
@@ -270,7 +344,7 @@ export default function CreateRoomModal({
           <button
             type="button"
             onClick={onClose}
-            className="w-10 h-10 rounded-xl bg-white/5 hover:bg-white/10 border border-cyan-300/20 text-cyan-200 hover:text-white flex items-center justify-center transition-all shrink-0"
+            className="w-10 h-10 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center transition-colors shrink-0"
             title="Đóng cửa sổ"
           >
             <X size={20} />
@@ -279,21 +353,21 @@ export default function CreateRoomModal({
 
         {/* Error Alert */}
         {errorMsg && (
-          <div className="my-2 p-3 rounded-xl bg-rose-500/20 border border-rose-500/40 text-rose-200 text-xs font-bold flex items-center gap-2">
-            <AlertCircle size={16} className="shrink-0 text-rose-400" />
+          <div className="my-2.5 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold flex items-center gap-2">
+            <AlertCircle size={16} className="shrink-0 text-rose-500" />
             <span>{errorMsg}</span>
           </div>
         )}
 
         {/* ── MODAL BODY (SCROLLABLE) ───────────────────────────────────────── */}
-        <div className="flex-1 overflow-y-auto space-y-6 py-4 pr-1.5 custom-scrollbar relative z-10">
+        <div className="flex-1 overflow-y-auto space-y-6 py-4 pr-1.5 relative z-10">
           {/* ═══════════════════════════════════════════════════════════════════
               BƯỚC 1: CHỌN BỘ ĐỀ THI ĐẤU (QUIZ SELECTION)
           ═══════════════════════════════════════════════════════════════════ */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <label className="text-xs sm:text-sm font-bold text-cyan-100 flex items-center gap-2 uppercase tracking-wider">
-                <span className="w-5 h-5 rounded-lg bg-emerald-400/20 text-emerald-300 flex items-center justify-center text-xs">
+              <label className="text-xs sm:text-sm font-black font-heading text-slate-800 flex items-center gap-2 uppercase tracking-wider">
+                <span className="w-6 h-6 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-600 flex items-center justify-center text-xs font-black">
                   1
                 </span>
                 Bộ Đề Câu Hỏi Sử Dụng
@@ -303,7 +377,7 @@ export default function CreateRoomModal({
                 <button
                   type="button"
                   onClick={() => setIsChangingQuiz(true)}
-                  className="text-xs font-bold text-cyan-300 hover:text-white flex items-center gap-1.5 bg-white/5 hover:bg-white/10 border border-cyan-400/20 px-3 py-1 rounded-xl transition-all"
+                  className="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1.5 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200/80 px-3 py-1.5 rounded-xl transition-all cursor-pointer"
                 >
                   <RotateCcw size={12} />
                   <span>Chọn Đề Khác ({quizzes.length} Bộ Đề)</span>
@@ -311,106 +385,86 @@ export default function CreateRoomModal({
               )}
             </div>
 
-            {/* Selected Quiz Card (Hiển thị nổi bật bộ đề đang được chọn) */}
+            {/* Selected Quiz Card */}
             {currentQuiz && !isChangingQuiz ? (
-              <div className="bg-gradient-to-r from-teal-900/60 via-emerald-950/50 to-teal-900/60 border-2 border-emerald-400/50 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-[0_4px_20px_rgba(16,185,129,0.2)]">
+              <div className="bg-gradient-to-r from-indigo-50/80 via-purple-50/50 to-indigo-50/80 border-2 border-indigo-400/60 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm">
                 <div className="flex items-center gap-3.5 min-w-0">
-                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-600 flex items-center justify-center text-2xl text-teal-950 shadow-md shrink-0">
+                  <div className="w-13 h-13 rounded-2xl bg-indigo-600 text-white flex items-center justify-center text-2xl shadow-sm shrink-0">
                     📚
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="bg-emerald-400/20 text-emerald-300 border border-emerald-400/30 px-2 py-0.5 rounded-md text-[10px] font-black uppercase">
+                      <span className="bg-indigo-600 text-white px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider">
                         {currentQuiz.topic || "Tổng Hợp"}
                       </span>
-                      <span className="text-xs text-cyan-300/70 font-semibold">
-                        {(currentQuiz as any).slide_count ?? (currentQuiz as any).slides?.length ?? (currentQuiz as any).total_slides ?? 0} câu hỏi
-                      </span>
+                      {getQuizSlideCount(currentQuiz) > 0 ? (
+                        <span className="text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-md text-[11px] font-bold">
+                          ✓ Đủ điều kiện ({getQuizSlideCount(currentQuiz)} câu)
+                        </span>
+                      ) : (
+                        <span className="text-rose-700 bg-rose-100 px-2 py-0.5 rounded-md text-[11px] font-bold">
+                          ⚠ Chưa có câu hỏi
+                        </span>
+                      )}
                     </div>
-                    <h4 className="text-base sm:text-lg font-black text-white font-serif truncate mt-0.5">
+                    <h4 className="font-heading font-black text-base sm:text-lg text-slate-900 mt-1 truncate">
                       {currentQuiz.title}
                     </h4>
+                    <p className="text-xs text-slate-500 line-clamp-1 mt-0.5">
+                      {currentQuiz.description || "Bộ câu hỏi luyện tập trực tiếp cho phòng thi đấu."}
+                    </p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className="text-xs font-black text-emerald-300 flex items-center gap-1 bg-emerald-500/20 px-3 py-1.5 rounded-xl border border-emerald-400/30">
-                    <Check size={14} strokeWidth={3} /> Đã Chọn
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setIsChangingQuiz(true)}
-                    className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-cyan-200 text-xs font-bold border border-cyan-400/30 transition-all"
-                  >
-                    Thay Đổi
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsChangingQuiz(true)}
+                  className="px-4 py-2 rounded-xl bg-white hover:bg-slate-50 border border-indigo-200 text-indigo-700 font-bold text-xs shadow-xs hover:border-indigo-300 transition-all cursor-pointer shrink-0 self-end sm:self-center"
+                >
+                  Thay đổi
+                </button>
               </div>
             ) : (
-              /* Quiz Picker Grid (Giao diện tìm kiếm và chọn bộ đề) */
-              <div className="bg-white/[0.02] border border-cyan-400/20 rounded-2xl p-4 space-y-3">
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+              /* Quiz Selection List (Khi người dùng mở danh sách chọn đề) */
+              <div className="bg-slate-50/80 border border-slate-200 rounded-2xl p-4 space-y-3.5">
+                <div className="flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center justify-between">
                   <div className="relative flex-1">
                     <Search
-                      size={14}
-                      className="absolute left-3 top-1/2 -translate-y-1/2 text-cyan-400/60 pointer-events-none"
+                      size={16}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
                     />
                     <input
                       type="text"
                       value={quizSearch}
                       onChange={(e) => setQuizSearch(e.target.value)}
                       placeholder="Tìm kiếm bộ đề theo tên hoặc chủ đề..."
-                      className="w-full pl-8 pr-7 py-2 bg-white/5 border border-cyan-400/25 rounded-xl text-xs text-white placeholder:text-cyan-300/40 outline-none focus:border-cyan-400 focus:bg-white/10 transition-all"
+                      className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-xs sm:text-sm bg-white focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 transition-all"
                     />
-                    {quizSearch && (
-                      <button
-                        type="button"
-                        onClick={() => setQuizSearch("")}
-                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-cyan-300/60 hover:text-white text-xs font-bold"
-                      >
-                        ✕
-                      </button>
-                    )}
                   </div>
 
-                  {/* Topic Filter Pills */}
-                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
-                    <button
-                      type="button"
-                      onClick={() => setQuizTopicFilter("ALL")}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
-                        quizTopicFilter === "ALL"
-                          ? "bg-cyan-400 text-teal-950 font-black shadow-sm"
-                          : "bg-white/5 text-cyan-200 hover:bg-white/10"
-                      }`}
+                  {availableTopics.length > 0 && (
+                    <select
+                      value={quizTopicFilter}
+                      onChange={(e) => setQuizTopicFilter(e.target.value)}
+                      className="px-3 py-2 rounded-xl border border-slate-200 text-xs bg-white text-slate-700 focus:outline-none focus:border-indigo-500 font-medium cursor-pointer shrink-0"
                     >
-                      Tất Cả
-                    </button>
-                    {availableTopics.slice(0, 4).map((topic) => (
-                      <button
-                        key={topic}
-                        type="button"
-                        onClick={() => setQuizTopicFilter(topic)}
-                        className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
-                          quizTopicFilter === topic
-                            ? "bg-cyan-400 text-teal-950 font-black shadow-sm"
-                            : "bg-white/5 text-cyan-200 hover:bg-white/10"
-                        }`}
-                      >
-                        {topic}
-                      </button>
-                    ))}
-                  </div>
+                      <option value="ALL">Tất cả chủ đề ({quizzes.length})</option>
+                      {availableTopics.map((topic) => (
+                        <option key={topic} value={topic}>
+                          {topic}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </div>
 
-                {/* Quizzes List */}
                 {loadingQuizzes ? (
-                  <div className="py-8 text-center text-cyan-300 flex items-center justify-center gap-2 text-xs font-bold">
-                    <Loader2 size={18} className="animate-spin" />
-                    <span>Đang tải danh sách bộ đề câu hỏi...</span>
+                  <div className="py-10 text-center text-slate-400 flex flex-col items-center justify-center gap-2">
+                    <Loader2 size={24} className="animate-spin text-indigo-600" />
+                    <span className="text-xs font-medium">Đang tải danh sách bộ đề...</span>
                   </div>
                 ) : filteredQuizzes.length > 0 ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-[220px] overflow-y-auto pr-1 custom-scrollbar">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-56 overflow-y-auto pr-1">
                     {filteredQuizzes.map((quiz) => {
                       const isSelected = selectedQuizId === quiz.id;
                       return (
@@ -421,47 +475,53 @@ export default function CreateRoomModal({
                             setSelectedQuizId(quiz.id);
                             setIsChangingQuiz(false);
                           }}
-                          className={`text-left p-3 rounded-xl border transition-all flex items-center justify-between gap-3 ${
+                          className={`text-left p-3.5 rounded-xl border transition-all flex items-center justify-between gap-3 cursor-pointer ${
                             isSelected
-                              ? "bg-emerald-500/20 border-emerald-400 text-white shadow-[0_0_15px_rgba(16,185,129,0.3)]"
-                              : "bg-white/5 border-cyan-400/20 hover:border-cyan-400/40 text-cyan-100"
+                              ? "bg-indigo-50 border-2 border-indigo-600 text-slate-900 shadow-xs"
+                              : "bg-white border-slate-200/90 hover:border-indigo-300 hover:bg-indigo-50/30 text-slate-800 shadow-2xs"
                           }`}
                         >
                           <div className="min-w-0">
-                            <div className="font-bold text-xs sm:text-sm text-white truncate">
+                            <div className="font-heading font-black text-xs sm:text-sm text-slate-900 truncate">
                               {quiz.title}
                             </div>
-                            <div className="text-[11px] text-cyan-300/70 flex items-center gap-2 mt-0.5">
-                              <span className="font-semibold text-emerald-300">
+                            <div className="text-[11px] text-slate-500 flex items-center gap-2 mt-0.5">
+                              <span className="font-bold text-indigo-600">
                                 {quiz.topic || "Môn học"}
                               </span>
                               <span>•</span>
-                              <span>
-                                {(quiz as any).slide_count ?? (quiz as any).slides?.length ?? (quiz as any).total_slides ?? 0} câu
-                              </span>
+                              {getQuizSlideCount(quiz) > 0 ? (
+                                <span className="font-semibold text-slate-600">
+                                  {getQuizSlideCount(quiz)} câu
+                                </span>
+                              ) : (
+                                <span className="font-bold text-rose-600 bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded text-[10px]">
+                                  0 câu (Trống)
+                                </span>
+                              )}
                             </div>
                           </div>
 
                           <div
-                            className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${
+                            className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
                               isSelected
-                                ? "bg-emerald-400 border-emerald-400 text-teal-950"
-                                : "border-cyan-400/30"
+                                ? "bg-indigo-600 border-indigo-600 text-white"
+                                : "border-slate-300 bg-white"
                             }`}
                           >
-                            {isSelected && <Check size={10} strokeWidth={3.5} />}
+                            {isSelected && <Check size={11} strokeWidth={3.5} />}
                           </div>
                         </button>
                       );
                     })}
                   </div>
                 ) : (
-                  <div className="py-6 text-center text-cyan-300/70 text-xs">
-                    <p className="font-bold">Không tìm thấy bộ đề nào!</p>
+                  <div className="py-8 text-center text-slate-500 text-xs bg-white rounded-xl border border-slate-200/80">
+                    <p className="font-bold text-slate-700">Không tìm thấy bộ đề nào!</p>
                     <button
                       type="button"
                       onClick={() => router.push("/quiz/create")}
-                      className="mt-2 text-amber-300 hover:underline font-bold inline-flex items-center gap-1"
+                      className="mt-2 text-indigo-600 hover:text-indigo-800 font-bold inline-flex items-center gap-1 cursor-pointer"
                     >
                       <Plus size={14} /> Tạo bộ đề mới ngay
                     </button>
@@ -474,63 +534,166 @@ export default function CreateRoomModal({
           {/* ═══════════════════════════════════════════════════════════════════
               BƯỚC 2: CHẾ ĐỘ VẬN HÀNH PHÒNG (ROOM MODE)
           ═══════════════════════════════════════════════════════════════════ */}
-          <div className="space-y-2.5">
+          <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <label className="text-xs sm:text-sm font-bold text-cyan-100 flex items-center gap-2 uppercase tracking-wider">
-                <span className="w-5 h-5 rounded-lg bg-cyan-400/20 text-cyan-300 flex items-center justify-center text-xs">
+              <label className="text-xs sm:text-sm font-black font-heading text-slate-800 flex items-center gap-2 uppercase tracking-wider">
+                <span className="w-6 h-6 rounded-lg bg-purple-50 border border-purple-200 text-purple-600 flex items-center justify-center text-xs font-black">
                   2
                 </span>
                 Chế Độ Vận Hành Phòng
               </label>
-              <span className="text-[11px] text-cyan-300/70">
+              <span className="text-[11px] text-slate-500">
                 Chọn cách thức dẫn dắt tiến độ thi đấu
               </span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <ModeOptionCard
-                mode="HOST_PACED"
-                label="Chế Độ Lớp Học (Classic Host)"
-                icon="👑"
-                desc="Chủ phòng kiểm soát từng slide, thi đua thời gian thực trên màn hình lớn."
-                selected={selectedMode === "HOST_PACED"}
-                onClick={() => setSelectedMode("HOST_PACED")}
+                mode="NAVAL_WAR"
+                label="Hải Tặc Tri Thức"
+                icon={<Anchor size={24} className="text-cyan-600" />}
+                iconBg="bg-cyan-50 border-cyan-200 text-cyan-600"
+                desc="Đấu trường chiến thuật Bắn Tàu 2 phe Đội Đỏ vs Đội Xanh (50 người). Trả lời câu hỏi nạp đạn pháo, bật Radar & Khiên."
+                badge="HOT • MỚI"
+                selected={selectedTheme === "NAVAL_WAR"}
+                onClick={() => {
+                  setSelectedTheme("NAVAL_WAR");
+                  setSelectedMode("HOST_PACED");
+                }}
               />
               <ModeOptionCard
-                mode="PLAYER_PACED"
-                label="Tự Luyện Tập (Player-Paced)"
-                icon="🚀"
-                desc="Người chơi tự bấm bắt đầu, làm bài theo tốc độ cá nhân, tự do bứt phá."
-                selected={selectedMode === "PLAYER_PACED"}
-                onClick={() => setSelectedMode("PLAYER_PACED")}
+                mode="HOST_PACED"
+                label="Phòng Thường"
+                icon={<Gamepad2 size={24} className="text-violet-600" />}
+                iconBg="bg-violet-50 border-violet-200 text-violet-600"
+                desc="Cả lớp thi đấu trực tiếp cùng lúc. Hệ thống tự động đếm ngược và chuyển câu hỏi khi hoàn thành."
+                selected={selectedTheme !== "NAVAL_WAR" && selectedMode === "HOST_PACED"}
+                onClick={() => {
+                  setSelectedTheme("CLASSIC");
+                  setSelectedMode("HOST_PACED");
+                }}
               />
               <ModeOptionCard
                 mode="ASYNC_TOURNAMENT"
-                label="Giải Đấu Mở (Bảng Xếp Hạng)"
-                icon="🏆"
-                desc="Mở phòng dài hạn có timer Redis độc lập, lưu nháp tự động mỗi 30s."
-                selected={selectedMode === "ASYNC_TOURNAMENT"}
-                onClick={() => setSelectedMode("ASYNC_TOURNAMENT")}
+                label="Phòng Giải Đấu"
+                icon={<Trophy size={24} className="text-amber-600" />}
+                iconBg="bg-amber-50 border-amber-200 text-amber-600"
+                desc="Mở giải đấu bảng xếp hạng 24/7, thí sinh tự do vào thi bất đồng bộ với timer cá nhân, tự lưu nháp 30s."
+                selected={selectedTheme !== "NAVAL_WAR" && selectedMode === "ASYNC_TOURNAMENT"}
+                onClick={() => {
+                  setSelectedTheme("CLASSIC");
+                  setSelectedMode("ASYNC_TOURNAMENT");
+                }}
               />
             </div>
+
+            {/* ── TOURNAMENT SPECIFIC SETTINGS ── */}
+            {selectedTheme !== "NAVAL_WAR" && selectedMode === "ASYNC_TOURNAMENT" && (
+              <div className="mt-4 p-4 rounded-2xl bg-gradient-to-r from-amber-500/10 via-amber-400/5 to-yellow-500/10 border-2 border-amber-300/80 space-y-4 animate-in fade-in duration-200">
+                <div className="flex items-center gap-2">
+                  <Trophy className="w-5 h-5 text-amber-600 shrink-0" />
+                  <h4 className="text-xs font-black uppercase tracking-wider text-amber-900 font-heading">
+                    Cài Đặt Phòng Giải Đấu (Thời Hạn & Thời Gian Câu Hỏi)
+                  </h4>
+                </div>
+
+                {/* 1. Thời hạn giải đấu */}
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                    <Calendar size={14} className="text-amber-600" />
+                    <span>Thời hạn kết thúc giải đấu:</span>
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { label: "1 Giờ", hours: 1 },
+                      { label: "6 Giờ", hours: 6 },
+                      { label: "12 Giờ", hours: 12 },
+                      { label: "24 Giờ (1 Ngày)", hours: 24 },
+                      { label: "3 Ngày", hours: 72 },
+                      { label: "7 Ngày", hours: 168 },
+                      { label: "Không giới hạn", hours: 0 },
+                    ].map((opt) => (
+                      <button
+                        key={opt.hours}
+                        type="button"
+                        onClick={() => {
+                          setTournamentDurationHours(opt.hours);
+                          setTournamentCustomEndTime("");
+                        }}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                          tournamentDurationHours === opt.hours && !tournamentCustomEndTime
+                            ? "bg-amber-500 text-slate-950 shadow-sm"
+                            : "bg-white border border-slate-200 text-slate-700 hover:bg-amber-50"
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Hoặc chọn ngày giờ cụ thể */}
+                  <div className="pt-1 flex items-center gap-2">
+                    <span className="text-[11px] font-semibold text-slate-500">Hoặc ngày giờ cụ thể:</span>
+                    <input
+                      type="datetime-local"
+                      value={tournamentCustomEndTime}
+                      onChange={(e) => setTournamentCustomEndTime(e.target.value)}
+                      className="px-2.5 py-1 text-xs font-mono font-bold bg-white border border-slate-300 rounded-lg text-slate-800 outline-none focus:border-amber-500"
+                    />
+                  </div>
+                </div>
+
+                {/* 2. Thời gian mỗi câu hỏi */}
+                <div className="space-y-2 pt-2 border-t border-amber-200/60">
+                  <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                    <Clock size={14} className="text-amber-600" />
+                    <span>Thời gian tối đa mỗi câu hỏi:</span>
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { label: "Theo bộ đề (Mặc định)", val: 0 },
+                      { label: "15 Giây", val: 15 },
+                      { label: "30 Giây", val: 30 },
+                      { label: "45 Giây", val: 45 },
+                      { label: "60 Giây (1 Phút)", val: 60 },
+                      { label: "90 Giây", val: 90 },
+                      { label: "120 Giây (2 Phút)", val: 120 },
+                    ].map((opt) => (
+                      <button
+                        key={opt.val}
+                        type="button"
+                        onClick={() => setTournamentQuestionTimeLimit(opt.val)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                          tournamentQuestionTimeLimit === opt.val
+                            ? "bg-amber-500 text-slate-950 shadow-sm"
+                            : "bg-white border border-slate-200 text-slate-700 hover:bg-amber-50"
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
         {/* ── FOOTER ACTIONS & SUMMARY ──────────────────────────────────────── */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-4 border-t border-cyan-400/20 shrink-0 relative z-10">
-          <div className="flex items-center gap-2 text-xs text-cyan-200/80 overflow-hidden">
-            <span className="text-cyan-300 font-semibold shrink-0">Đã chọn:</span>
-            <span className="px-2.5 py-1 rounded-lg bg-emerald-500/15 border border-emerald-400/30 text-white font-bold flex items-center gap-1.5 truncate">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-4 border-t border-slate-100 shrink-0 relative z-10">
+          <div className="flex items-center gap-2 text-xs text-slate-600 overflow-hidden">
+            <span className="text-slate-400 font-bold shrink-0">Đã chọn:</span>
+            <span className="px-3 py-1.5 rounded-xl bg-slate-100 border border-slate-200 text-slate-800 font-bold flex items-center gap-1.5 truncate">
               <span>📚</span>
-              <span className="truncate max-w-[150px] sm:max-w-[200px]">
+              <span className="truncate max-w-[180px] sm:max-w-[240px]">
                 {currentQuiz ? currentQuiz.title : "Chưa chọn đề"}
               </span>
             </span>
-            <span className="text-cyan-400/40 shrink-0">•</span>
-            <span className="text-cyan-200 font-medium truncate shrink-0">
-              {selectedMode === "HOST_PACED" && "Lớp Học"}
-              {selectedMode === "PLAYER_PACED" && "Tự Luyện"}
-              {selectedMode === "ASYNC_TOURNAMENT" && "Giải Đấu"}
+            <span className="text-slate-300 shrink-0">•</span>
+            <span className="text-indigo-600 font-bold truncate shrink-0">
+              {selectedTheme === "NAVAL_WAR" && "⚓ Hải Tặc Tri Thức"}
+              {selectedTheme !== "NAVAL_WAR" && selectedMode === "HOST_PACED" && "🎮 Phòng Thường"}
+              {selectedTheme !== "NAVAL_WAR" && selectedMode === "ASYNC_TOURNAMENT" && "🏆 Phòng Giải Đấu"}
             </span>
           </div>
 
@@ -538,7 +701,7 @@ export default function CreateRoomModal({
             <button
               type="button"
               onClick={onClose}
-              className="px-5 py-3 rounded-2xl bg-white/10 hover:bg-white/15 text-cyan-100 font-bold border border-cyan-300/30 transition-colors text-sm"
+              className="px-5 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-heading font-bold text-xs transition-colors cursor-pointer"
             >
               Hủy Bỏ
             </button>
@@ -546,17 +709,17 @@ export default function CreateRoomModal({
               type="button"
               disabled={creating || !selectedQuizId}
               onClick={handleStartGame}
-              className="flex-1 sm:flex-initial px-6 py-3 rounded-2xl bg-gradient-to-r from-amber-400 via-amber-300 to-yellow-400 hover:from-amber-300 hover:to-amber-400 text-teal-950 font-black shadow-[0_0_20px_rgba(251,191,36,0.35)] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm"
+              className="flex-1 sm:flex-initial px-6 py-3 rounded-2xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-heading font-black text-sm shadow-lg shadow-indigo-600/25 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
             >
               {creating ? (
                 <>
-                  <div className="w-4 h-4 border-2 border-teal-950 border-t-transparent rounded-full animate-spin" />
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                   <span>Đang Mở Phòng...</span>
                 </>
               ) : (
                 <>
                   <Gamepad2 size={18} />
-                  <span>Khởi Tạo Phòng Chơi Ngay</span>
+                  <span>Khởi Tạo Phòng Chơi</span>
                 </>
               )}
             </button>

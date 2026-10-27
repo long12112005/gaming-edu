@@ -1,98 +1,87 @@
 "use client";
 
 import Link from "next/link";
-import { Gamepad2, Sparkles, Heart, Mail } from "lucide-react";
+import { Gamepad2 } from "lucide-react";
 
 export default function Footer() {
   return (
-    <footer className="bg-white border-t border-slate-200/80 text-slate-600 mt-auto">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
-          {/* Brand */}
-          <div className="md:col-span-2">
-            <Link href="/" className="flex items-center gap-2.5 mb-3">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center text-white shadow-xs">
-                <Gamepad2 size={20} />
+    <footer className="bg-[#13182E] text-slate-300 border-t border-slate-800/80">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 lg:py-16">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-8 lg:gap-12 mb-12">
+          {/* Brand Info (Left) */}
+          <div className="md:col-span-6 lg:col-span-7">
+            <Link href="/" className="inline-flex items-center gap-2.5 mb-4 group">
+              <div className="w-10 h-10 rounded-xl bg-[#F59E0B] flex items-center justify-center text-slate-950 shadow-md group-hover:scale-105 transition-transform">
+                <Gamepad2 size={22} className="stroke-[2.5]" />
               </div>
-              <span className="font-heading font-black text-xl text-slate-900 tracking-tight">
-                Game<span className="text-indigo-600">Edu</span>
+              <span className="font-heading font-black text-2xl text-white tracking-tight">
+                Gaming <span className="text-amber-400">Edu</span>
               </span>
             </Link>
-            <p className="text-sm text-slate-500 max-w-sm leading-relaxed mb-4">
-              Nền tảng thi đấu kiến thức thế hệ mới. Kết hợp giao diện quản lý tinh gọn kiểu Notion và sảnh chơi tương tác bùng nổ phong cách Kahoot.
+            <p className="text-sm text-slate-400 max-w-md leading-relaxed">
+              Gaming Edu biến lớp học thành không gian chơi thú vị, trực quan và dễ theo dõi cho cả giáo viên lẫn học sinh.
             </p>
-            <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span>Hệ thống máy chủ hoạt động ổn định 99.9%</span>
-            </div>
           </div>
 
-          {/* Features */}
-          <div>
-            <h4 className="font-heading font-bold text-xs uppercase tracking-wider text-slate-900 mb-3.5">
-              Tính Năng Nổi Bật
+          {/* SẢN PHẨM (Right Column 1) */}
+          <div className="md:col-span-3 lg:col-span-2 lg:col-start-9">
+            <h4 className="font-heading font-bold text-xs uppercase tracking-wider text-white mb-4">
+              SẢN PHẨM
             </h4>
-            <ul className="space-y-2 text-sm">
+            <ul className="space-y-2.5 text-sm">
               <li>
-                <Link href="/" className="hover:text-indigo-600 transition-colors">
-                  Đấu trường Live trực tiếp
+                <Link href="/" className="text-slate-400 hover:text-amber-400 transition-colors">
+                  Tạo Phòng
                 </Link>
               </li>
               <li>
-                <Link href="/quiz/create" className="hover:text-indigo-600 transition-colors flex items-center gap-1.5">
-                  <span>Trình tạo câu hỏi AI</span>
-                  <span className="text-[10px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-md font-bold">Mới</span>
+                <Link href="/library" className="text-slate-400 hover:text-amber-400 transition-colors">
+                  Chế Độ Chơi
                 </Link>
               </li>
               <li>
-                <Link href="/groups" className="hover:text-indigo-600 transition-colors">
-                  Không gian lớp học & Nhóm
-                </Link>
-              </li>
-              <li>
-                <Link href="/reports" className="hover:text-indigo-600 transition-colors">
-                  Báo cáo & Phân tích ma trận
+                <Link href="#pricing" className="text-slate-400 hover:text-amber-400 transition-colors">
+                  Giá Cả
                 </Link>
               </li>
             </ul>
           </div>
 
-          {/* Resources */}
-          <div>
-            <h4 className="font-heading font-bold text-xs uppercase tracking-wider text-slate-900 mb-3.5">
-              Hỗ Trợ & Cộng Đồng
+          {/* TÀI NGUYÊN (Right Column 2) */}
+          <div className="md:col-span-3 lg:col-span-2">
+            <h4 className="font-heading font-bold text-xs uppercase tracking-wider text-white mb-4">
+              TÀI NGUYÊN
             </h4>
-            <ul className="space-y-2 text-sm">
+            <ul className="space-y-2.5 text-sm">
               <li>
-                <Link href="/library" className="hover:text-indigo-600 transition-colors">
-                  Thư viện câu hỏi mẫu
+                <Link href="#blog" className="text-slate-400 hover:text-amber-400 transition-colors">
+                  Blog
                 </Link>
               </li>
               <li>
-                <a href="#guide" className="hover:text-indigo-600 transition-colors">
-                  Hướng dẫn giáo viên
-                </a>
+                <Link href="#support" className="text-slate-400 hover:text-amber-400 transition-colors">
+                  Hỗ Trợ
+                </Link>
               </li>
               <li>
-                <a href="#api" className="hover:text-indigo-600 transition-colors">
-                  Tài liệu API & SignalR
-                </a>
-              </li>
-              <li>
-                <Link href="/admin/users" className="hover:text-indigo-600 transition-colors">
-                  Cổng quản trị viên
+                <Link href="#privacy" className="text-slate-400 hover:text-amber-400 transition-colors">
+                  Quyền Riêng Tư
                 </Link>
               </li>
             </ul>
           </div>
         </div>
 
-        <div className="pt-6 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-400">
-          <p>© {new Date().getFullYear()} GameEdu. Bản quyền thuộc về đội ngũ phát triển.</p>
-          <div className="flex items-center gap-4">
-            <span className="flex items-center gap-1 text-slate-500">
-              Thiết kế theo chuẩn <span className="font-bold text-indigo-600">Dual-Tone Gamified SaaS</span>
-            </span>
+        {/* Bottom copyright & terms */}
+        <div className="pt-8 border-t border-slate-800/80 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
+          <p>© 2024 Gaming Edu. Tất cả quyền được bảo lưu.</p>
+          <div className="flex items-center gap-6">
+            <Link href="#terms" className="hover:text-slate-300 transition-colors">
+              Điều Khoản Dịch Vụ
+            </Link>
+            <Link href="#privacy-policy" className="hover:text-slate-300 transition-colors">
+              Chính Sách Quyền Riêng Tư
+            </Link>
           </div>
         </div>
       </div>

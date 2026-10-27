@@ -59,75 +59,6 @@ const TOPIC_OPTIONS = [
   "Kỹ Năng Sống",
 ];
 
-const MOCK_COMMUNITY_QUIZZES: QuizItem[] = [
-  {
-    id: "comm-1",
-    title: "Thử Thách Lịch Sử Việt Nam & Các Triều Đại Hào Hùng",
-    description: "Bộ câu hỏi trắc nghiệm 20 câu tổng hợp từ thời Đinh, Tiền Lê đến thời Hậu Lê với nhiều cứ liệu thú vị.",
-    topic: "Lịch Sử",
-    isPublic: true,
-    slideCount: 20,
-    playCount: 1420,
-    createdAt: "2026-03-10",
-    creatorNickname: "Thầy Hưng Sử",
-  },
-  {
-    id: "comm-2",
-    title: "Chinh Phục 500 Từ Vựng IELTS Band 7.5+ Theo Chủ Đề",
-    description: "Nắm vững collocations và idioms học thuật thường gặp trong IELTS Speaking & Writing Task 2.",
-    topic: "Tiếng Anh",
-    isPublic: true,
-    slideCount: 25,
-    playCount: 2890,
-    createdAt: "2026-03-15",
-    creatorNickname: "Cô Mai Anh IELTS",
-  },
-  {
-    id: "comm-3",
-    title: "Toán 12: Đạo Hàm & Khảo Sát Đồ Thị Hàm Số Nâng Cao",
-    description: "Các bài toán thực tế và bẫy trắc nghiệm ôn thi THPT Quốc gia môn Toán.",
-    topic: "Toán Học",
-    isPublic: true,
-    slideCount: 18,
-    playCount: 950,
-    createdAt: "2026-03-18",
-    creatorNickname: "Toán Tư Duy Pro",
-  },
-  {
-    id: "comm-4",
-    title: "Kiến Thức Khoa Học Tự Nhiên & Vũ Trụ Kỳ Thú",
-    description: "Khám phá các hành tinh, lỗ đen vũ trụ và các định luật vật lý cơ bản qua góc nhìn gamified.",
-    topic: "Khoa Học",
-    isPublic: true,
-    slideCount: 15,
-    playCount: 3100,
-    createdAt: "2026-03-20",
-    creatorNickname: "Science Geek",
-  },
-  {
-    id: "comm-5",
-    title: "Lập Trình Web Hiện Đại & AI Prompts Cho Kỹ Sư",
-    description: "Kiểm tra kiến thức Frontend React, Next.js, TypeScript và cách ứng dụng Generative AI.",
-    topic: "Tin Học",
-    isPublic: true,
-    slideCount: 16,
-    playCount: 1750,
-    createdAt: "2026-03-22",
-    creatorNickname: "DevPro Hub",
-  },
-  {
-    id: "comm-6",
-    title: "Văn Học Dân Gian & Truyện Kiều - Phân Tích Hình Tượng",
-    description: "Đề bài trắc nghiệm nhanh kiểm tra khả năng cảm thụ văn học và ghi nhớ điển tích kinh điển.",
-    topic: "Ngữ Văn",
-    isPublic: true,
-    slideCount: 12,
-    playCount: 620,
-    createdAt: "2026-03-25",
-    creatorNickname: "Văn Học Trẻ",
-  },
-];
-
 export default function LibraryPage() {
   const router = useRouter();
   const { isAuthenticated, user } = useAuthStore();
@@ -152,7 +83,7 @@ export default function LibraryPage() {
     quiz: QuizItem | null;
   }>({ isOpen: false, quiz: null });
 
-  // Lấy danh sách bộ đề
+  // Lấy danh sách bộ đề trực tiếp từ API Backend
   const fetchQuizzes = useCallback(async () => {
     try {
       setLoading(true);
@@ -163,12 +94,10 @@ export default function LibraryPage() {
       } else if (Array.isArray(res.data)) {
         setQuizzes(res.data);
       } else {
-        // Fallback mock nếu API trống
-        setQuizzes(activeTab === "community" ? MOCK_COMMUNITY_QUIZZES : []);
+        setQuizzes([]);
       }
     } catch {
-      // Dùng mock data thân thiện
-      setQuizzes(activeTab === "community" ? MOCK_COMMUNITY_QUIZZES : []);
+      setQuizzes([]);
     } finally {
       setLoading(false);
     }

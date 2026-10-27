@@ -80,7 +80,8 @@ public class UsersController : ControllerBase
             user.IsAdmin,
             user.Status,
             quotaDto,
-            stats
+            stats,
+            user.AvatarFrame ?? "default"
         );
 
         return Ok(new ApiResponse<UserProfileDto>(true, "Lấy thông tin hồ sơ thành công.", profile));
@@ -101,6 +102,9 @@ public class UsersController : ControllerBase
             
         if (request.AvatarUrl != null) // Cho phép xóa avatar nếu truyền ""
             user.AvatarUrl = string.IsNullOrWhiteSpace(request.AvatarUrl) ? null : request.AvatarUrl;
+
+        if (request.AvatarFrame != null)
+            user.AvatarFrame = string.IsNullOrWhiteSpace(request.AvatarFrame) ? "default" : request.AvatarFrame.Trim();
 
         user.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
@@ -196,6 +200,15 @@ public class AdminUsersController : ControllerBase
     {
         var user = await _db.Users.FindAsync(userId);
         if (user == null) return NotFound(new ApiResponse<string>(false, "User not found", null));
+
+        if (lockMinutes <= 0)
+        {
+            user.Status = "ACTIVE";
+            user.LockedUntil = null;
+            user.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+            return Ok(new ApiResponse<string>(true, $"Đã mở khóa tài khoản {user.Email}.", null));
+        }
 
         user.Status = "LOCKED";
         user.LockedUntil = DateTime.UtcNow.AddMinutes(lockMinutes);
