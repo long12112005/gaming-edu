@@ -24,12 +24,15 @@ import {
   EyeOff,
   Home,
   X,
+  Lock,
+  Unlock,
+  Clock,
+  Sparkles,
+  UserX,
+  Cloud,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import Link from "next/link";
-
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
 // ─── Component Nút bấm 3D phong cách UI/UX Pro Max ───────────────────────────
 function ActionButton({
@@ -48,11 +51,18 @@ function ActionButton({
   } ${className}`;
   
   const variants: any = {
-    primary: "bg-violet-500 border-violet-700 text-white shadow-[0_6px_0_0_#5b21b6] hover:bg-violet-600 active:shadow-none",
-    secondary: "bg-pink-500 border-pink-700 text-white shadow-[0_6px_0_0_#be185d] hover:bg-pink-600 active:shadow-none",
-    outline: "bg-white border-gray-200 text-gray-700 shadow-[0_6px_0_0_#e5e7eb] hover:bg-gray-50 active:shadow-none",
-    danger: "bg-red-500 border-red-700 text-white shadow-[0_6px_0_0_#b91c1c] hover:bg-red-600 active:shadow-none",
-    disabled: "bg-gray-300 border-gray-400 text-gray-500 cursor-not-allowed shadow-[0_6px_0_0_#9ca3af]",
+    primary:
+      "bg-violet-600 hover:bg-violet-500 border-violet-800 text-white shadow-[0_6px_0_0_#4c1d95] active:shadow-none",
+    secondary:
+      "bg-amber-400 hover:bg-amber-300 border-amber-600 text-amber-950 shadow-[0_6px_0_0_#b45309] active:shadow-none",
+    success:
+      "bg-emerald-500 hover:bg-emerald-400 border-emerald-700 text-white shadow-[0_6px_0_0_#047857] active:shadow-none",
+    danger:
+      "bg-rose-500 hover:bg-rose-400 border-rose-700 text-white shadow-[0_6px_0_0_#be123c] active:shadow-none",
+    outline:
+      "bg-white hover:bg-gray-50 border-gray-200 text-gray-700 shadow-[0_6px_0_0_#e5e7eb] active:shadow-none",
+    teal:
+      "bg-teal-500 hover:bg-teal-400 border-teal-700 text-white shadow-[0_6px_0_0_#0f766e] active:shadow-none",
   };
 
   return (
@@ -60,43 +70,28 @@ function ActionButton({
       id={id}
       onClick={onClick}
       disabled={disabled || loading}
-      className={`${baseClasses} ${disabled ? variants.disabled : variants[variant]}`}
+      className={`${baseClasses} ${variants[variant]} ${
+        disabled ? "opacity-50 cursor-not-allowed filter grayscale" : ""
+      }`}
     >
       {loading ? (
-         <div className="w-5 h-5 border-4 border-white border-t-transparent rounded-full animate-spin" />
+        <span className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
       ) : (
-         Icon && <Icon size={20} className={disabled ? "text-gray-400" : "text-current"} />
+        Icon && <Icon size={20} className="stroke-[2.5]" />
       )}
-      {label}
+      <span>{label}</span>
     </button>
   );
 }
 
-// ─── Leaderboard Entry ─────────────────────────────────────────────────────────
-function LeaderboardEntry({
-  player,
-  rank,
-}: {
-  player: any;
-  rank: number;
-}) {
+// ─── Bảng Hạng Player Hàng ──────────────────────────────────────────────────
+function PlayerRow({ player, rank }: { player: any; rank: number }) {
   const rankStyles = [
-    {
-      bg: "bg-yellow-400 border-yellow-600",
-      text: "text-yellow-900",
-      icon: <Crown size={16} className="text-yellow-900" />,
-    },
-    {
-      bg: "bg-gray-300 border-gray-500",
-      text: "text-gray-800",
-      icon: <Medal size={16} className="text-gray-800" />,
-    },
-    {
-      bg: "bg-amber-500 border-amber-700",
-      text: "text-amber-900",
-      icon: <Medal size={16} className="text-amber-900" />,
-    },
+    { bg: "bg-amber-400 border-amber-600", text: "text-amber-950", icon: <Crown size={24} className="fill-amber-950 text-amber-950" /> },
+    { bg: "bg-slate-300 border-slate-400", text: "text-slate-800", icon: <Medal size={24} className="text-slate-800" /> },
+    { bg: "bg-amber-700 border-amber-900", text: "text-amber-100", icon: <Medal size={24} className="text-amber-100" /> },
   ];
+
   const style = rankStyles[rank - 1] ?? { bg: "bg-gray-100 border-gray-300", text: "text-gray-700", icon: null };
 
   return (
@@ -130,29 +125,103 @@ function LeaderboardEntry({
   );
 }
 
-// ─── Player Avatar Chip ────────────────────────────────────────────────────────
-function PlayerChip({ player, index }: { player: any; index: number }) {
+// ─── Player Avatar Chip (có nút kick) ─────────────────────────────────────────
+function PlayerChip({
+  player,
+  index,
+  onKick,
+}: {
+  player: any;
+  index: number;
+  onKick?: (playerId: string) => void;
+}) {
   return (
     <div
-      className="flex flex-col items-center gap-2 animate-fade-in-up"
+      className="group relative flex flex-col items-center gap-2 animate-fade-in-up"
       style={{ animationDelay: `${index * 60}ms` }}
     >
       <div className="relative">
-         <img
-         src={
+        <img
+          src={
             player.avatarUrl ??
             `https://api.dicebear.com/7.x/avataaars/svg?seed=${player.nickname}`
-         }
-         alt={player.nickname}
-         className="w-16 h-16 rounded-[20px] border-4 border-violet-200 shadow-[4px_4px_0_0_#ddd6fe] bg-white"
-         />
-         <div className="absolute -bottom-2 -right-2 w-6 h-6 bg-emerald-400 rounded-full border-2 border-white shadow-sm flex items-center justify-center">
-            <Check size={12} className="text-white font-900"/>
-         </div>
+          }
+          alt={player.nickname}
+          className="w-16 h-16 rounded-[20px] border-4 border-violet-200 shadow-[4px_4px_0_0_#ddd6fe] bg-white object-cover"
+        />
+        <div className="absolute -bottom-2 -right-2 w-6 h-6 bg-emerald-400 rounded-full border-2 border-white shadow-sm flex items-center justify-center">
+          <Check size={12} className="text-white font-900" />
+        </div>
+
+        {/* Nút kick khi hover */}
+        {onKick && (
+          <button
+            onClick={() => onKick(player.playerId)}
+            className="absolute -top-2 -right-2 w-7 h-7 bg-rose-500 hover:bg-rose-600 text-white rounded-full border-2 border-white shadow-md flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+            title="Mời ra khỏi phòng"
+          >
+            <X size={14} className="stroke-[3]" />
+          </button>
+        )}
       </div>
-      <span className="text-sm font-900 text-gray-700 max-w-[80px] truncate bg-white px-2 py-0.5 rounded-lg border-2 border-gray-100 shadow-sm mt-1">
+      <span className="text-sm font-900 text-gray-700 max-w-[90px] truncate bg-white px-2 py-0.5 rounded-lg border-2 border-gray-100 shadow-sm mt-1 text-center">
         {player.nickname}
       </span>
+    </div>
+  );
+}
+
+// ─── Word Cloud Visualizer Component ─────────────────────────────────────────
+function WordCloudDisplay({ wordData }: { wordData: Record<string, number> }) {
+  const entries = Object.entries(wordData);
+
+  if (entries.length === 0) {
+    return (
+      <div className="p-12 text-center text-gray-400 font-bold bg-gray-50 rounded-[32px] border-4 border-dashed border-gray-200">
+        <Cloud size={48} className="mx-auto mb-3 text-gray-300 animate-pulse" />
+        <p className="text-xl">Đang chờ thí sinh gửi từ khóa lên...</p>
+      </div>
+    );
+  }
+
+  const maxCount = Math.max(...entries.map(([, count]) => count), 1);
+  const colorPalette = [
+    "text-teal-600 bg-teal-50 border-teal-200",
+    "text-violet-600 bg-violet-50 border-violet-200",
+    "text-amber-600 bg-amber-50 border-amber-200",
+    "text-rose-600 bg-rose-50 border-rose-200",
+    "text-blue-600 bg-blue-50 border-blue-200",
+    "text-emerald-600 bg-emerald-50 border-emerald-200",
+    "text-fuchsia-600 bg-fuchsia-50 border-fuchsia-200",
+  ];
+
+  return (
+    <div className="flex flex-wrap items-center justify-center gap-4 p-8 bg-gradient-to-br from-violet-50/50 to-teal-50/50 rounded-[32px] border-4 border-violet-100 min-h-[220px]">
+      {entries.map(([word, count], idx) => {
+        const ratio = count / maxCount;
+        const fontSizeClass =
+          ratio > 0.8
+            ? "text-4xl md:text-5xl font-black py-3 px-6"
+            : ratio > 0.5
+            ? "text-2xl md:text-3xl font-extrabold py-2 px-5"
+            : ratio > 0.3
+            ? "text-xl md:text-2xl font-bold py-2 px-4"
+            : "text-base md:text-lg font-semibold py-1.5 px-3";
+
+        const colorClass = colorPalette[idx % colorPalette.length];
+
+        return (
+          <span
+            key={word}
+            className={`inline-flex items-center gap-2 rounded-2xl border-2 shadow-sm transition-transform hover:scale-110 duration-200 ${fontSizeClass} ${colorClass}`}
+          >
+            <span>{word}</span>
+            <span className="text-xs bg-black/10 px-2 py-0.5 rounded-full font-mono">
+              {count}
+            </span>
+          </span>
+        );
+      })}
     </div>
   );
 }
@@ -165,14 +234,20 @@ export default function HostLobbyPage() {
 
   const {
     isConnected,
-    gameState,
+    roomInfo,
     players,
+    gameState,
     currentSlide,
+    countdown,
+    slideTimeLeft,
     leaderboard,
-    joinRoom,
+    wordCloudData,
+    hostJoinRoom,
     startGame: hubStartGame,
     nextSlide: hubNextSlide,
     endGame: hubEndGame,
+    lockRoom: hubLockRoom,
+    kickPlayer: hubKickPlayer,
   } = useGameHub();
 
   const {
@@ -187,6 +262,14 @@ export default function HostLobbyPage() {
   const [starting, setStarting] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [showQA, setShowQA] = useState(false);
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [myGroups, setMyGroups] = useState<any[]>([]);
+  const [invitingGroupId, setInvitingGroupId] = useState<string | null>(null);
+  const [inviteFeedback, setInviteFeedback] = useState<string | null>(null);
+  const [qrCodeBase64, setQrCodeBase64] = useState<string | null>(null);
+  const [quizTitle, setQuizTitle] = useState<string>("");
+
+  const pinnedQuestion = questions.find((q) => q.isPinned && !q.isResolved);
 
   // ── Init SignalR ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -198,17 +281,29 @@ export default function HostLobbyPage() {
   }, [router]);
 
   useEffect(() => {
-    if (isConnected) {
-      const urlParams = new URLSearchParams(window.location.search);
-      const pin = urlParams.get("pin");
-      if (pin) {
-        setPinCode(pin);
-        const userStr = Cookies.get("user");
-        const user = userStr ? JSON.parse(userStr) : null;
-        joinRoom(pin, user?.nickname ?? "Host");
-      }
+    const urlParams = new URLSearchParams(window.location.search);
+    const pin = urlParams.get("pin");
+    if (pin) {
+      setPinCode(pin);
+      api.get(`/rooms/pin/${pin}`).then((res) => {
+        if (res.data?.success && res.data.data) {
+          if (res.data.data.qrCodeBase64) {
+            setQrCodeBase64(res.data.data.qrCodeBase64);
+          }
+          if (res.data.data.quizTitle) {
+            setQuizTitle(res.data.data.quizTitle);
+          }
+        }
+      }).catch(console.error);
     }
-  }, [isConnected, joinRoom]);
+  }, []);
+
+  useEffect(() => {
+    if (isConnected && pinCode) {
+      // Host gia nhập phòng bằng lệnh HostJoinRoom chuẩn xác
+      hostJoinRoom(pinCode);
+    }
+  }, [isConnected, pinCode, hostJoinRoom]);
 
   useEffect(() => {
     if (gameState === "FINISHED") {
@@ -221,14 +316,14 @@ export default function HostLobbyPage() {
           angle: 60,
           spread: 55,
           origin: { x: 0 },
-          colors: ['#7c3aed', '#f59e0b', '#10b981']
+          colors: ["#7c3aed", "#f59e0b", "#10b981"],
         });
         confetti({
           particleCount: 5,
           angle: 120,
           spread: 55,
           origin: { x: 1 },
-          colors: ['#7c3aed', '#f59e0b', '#10b981']
+          colors: ["#7c3aed", "#f59e0b", "#10b981"],
         });
 
         if (Date.now() < end) {
@@ -256,18 +351,53 @@ export default function HostLobbyPage() {
     hubEndGame(roomId);
   };
 
+  const toggleLockRoom = () => {
+    const nextLocked = !roomInfo?.isLocked;
+    hubLockRoom(nextLocked);
+  };
+
+  const handleKickPlayer = (playerId: string) => {
+    if (confirm("Bạn có chắc chắn muốn mời người chơi này ra khỏi phòng?")) {
+      hubKickPlayer(playerId);
+    }
+  };
+
+  const openInviteModal = async () => {
+    setShowInviteModal(true);
+    setInviteFeedback(null);
+    try {
+      const res = await api.get("/groups");
+      setMyGroups(res.data.data || []);
+    } catch {
+      setMyGroups([]);
+    }
+  };
+
+  const handleInviteGroup = async (groupId: string) => {
+    setInvitingGroupId(groupId);
+    setInviteFeedback(null);
+    try {
+      await api.post(`/rooms/${roomId}/invite-group/${groupId}`);
+      setInviteFeedback("Đã gửi lời mời thành công tới toàn bộ thành viên trong nhóm!");
+    } catch (err: any) {
+      setInviteFeedback(err.response?.data?.message || "Không thể gửi lời mời vào lúc này.");
+    } finally {
+      setInvitingGroupId(null);
+    }
+  };
+
   const exportReport = async () => {
     setExporting(true);
     try {
-      const res = await api.get(`/rooms/${roomId}/export`, { responseType: 'blob' });
+      const res = await api.get(`/rooms/${roomId}/export`, { responseType: "blob" });
       const url = window.URL.createObjectURL(new Blob([res.data]));
-      const link = document.createElement('a');
+      const link = document.createElement("a");
       link.href = url;
-      link.setAttribute('download', `Room_${roomId}_Report.xlsx`);
+      link.setAttribute("download", `Room_${roomId}_Report.xlsx`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-    } catch (e) {
+    } catch {
       alert("Xuất báo cáo thất bại.");
     } finally {
       setExporting(false);
@@ -280,11 +410,6 @@ export default function HostLobbyPage() {
       setTimeout(() => setCopied(false), 2000);
     });
   };
-
-  const joinUrl =
-    typeof window !== "undefined"
-      ? `${window.location.origin}/play?pin=${pinCode}`
-      : "";
 
   if (!pinCode) {
     return (
@@ -341,8 +466,13 @@ export default function HostLobbyPage() {
               <Trophy size={24} className="text-white" />
             </div>
             <div>
-              <div className="font-900 text-gray-900 text-xl tracking-tight">
-                Màn Hình Trình Chiếu (Host)
+              <div className="font-900 text-gray-900 text-xl tracking-tight flex items-center gap-2">
+                <span>Màn Hình Trình Chiếu (Host)</span>
+                {roomInfo?.isLocked && (
+                  <span className="text-xs font-black bg-rose-100 text-rose-700 px-2.5 py-0.5 rounded-full border border-rose-300 flex items-center gap-1">
+                    <Lock size={12} /> Đã khóa phòng
+                  </span>
+                )}
               </div>
               <div className="text-sm font-700 text-gray-500">
                 {gameState === "WAITING" && "Đang chờ người chơi vào phòng..."}
@@ -354,55 +484,137 @@ export default function HostLobbyPage() {
             </div>
           </div>
 
-          <ActionButton
-            variant="outline"
-            onClick={() => router.push("/")}
-            icon={LogOut}
-            label="Thoát Màn Hình"
-            className="hidden sm:flex"
-          />
+          <div className="flex items-center gap-3">
+            <ActionButton
+              variant="outline"
+              onClick={() => setShowQA(!showQA)}
+              icon={MessageCircle}
+              label={`Hỏi Đáp (${questions.length})`}
+            />
+
+            <ActionButton
+              variant="outline"
+              onClick={() => router.push("/dashboard")}
+              icon={LogOut}
+              label="Thoát"
+              className="hidden sm:flex"
+            />
+          </div>
         </div>
       </header>
 
+      {/* Overlay Countdown 3-2-1 */}
+      {countdown !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md animate-fade-in">
+          <div className="text-center">
+            <div className="text-9xl md:text-[14rem] font-black text-amber-400 drop-shadow-[0_12px_24px_rgba(245,158,11,0.5)] animate-bounce">
+              {countdown}
+            </div>
+            <p className="text-2xl md:text-3xl font-extrabold text-white uppercase tracking-widest mt-4">
+              Chuẩn bị bắt đầu...
+            </p>
+          </div>
+        </div>
+      )}
+
       <main className="flex-1 max-w-6xl w-full mx-auto px-4 py-8 relative z-10">
+        {/* Banner Câu Hỏi Được Ghim Nổi Bật (Q&A Pin Banner) */}
+        {pinnedQuestion && (
+          <div className="bg-gradient-to-r from-amber-400 via-amber-300 to-yellow-400 text-teal-950 px-6 py-4 rounded-[28px] shadow-lg border-4 border-amber-500 mb-8 flex flex-wrap items-center justify-between gap-4 animate-fade-in-up">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-teal-900 text-amber-300 rounded-2xl flex items-center justify-center font-black shadow-inner shrink-0">
+                <Pin size={22} className="rotate-45" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-900 uppercase tracking-widest bg-teal-900 text-amber-300 px-2.5 py-0.5 rounded-lg">
+                    Câu Hỏi Đang Ghim
+                  </span>
+                  <span className="text-sm font-bold text-teal-900">
+                    từ {pinnedQuestion.playerNickname}
+                  </span>
+                </div>
+                <p className="text-xl md:text-2xl font-black text-teal-950 mt-1 leading-snug">
+                  &quot;{pinnedQuestion.content}&quot;
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 ml-auto">
+              <span className="text-sm font-black bg-white/70 px-4 py-2 rounded-xl text-teal-950 border border-amber-600/30">
+                👍 {pinnedQuestion.upvotes} Lượt Thích
+              </span>
+              <button
+                onClick={() => resolveQuestion(pinnedQuestion.id)}
+                className="bg-teal-900 hover:bg-teal-800 text-white font-900 text-sm px-5 py-2.5 rounded-xl border-2 border-teal-950 shadow-sm transition-all"
+              >
+                ✓ Đánh Dấu Đã Giải Đáp
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* ════════════════════════════════════════════════════════════
             LOBBY STATE (CHỜ NGƯỜI CHƠI)
         ════════════════════════════════════════════════════════════ */}
         {gameState === "WAITING" && (
           <div className="space-y-8 animate-fade-in-up">
-            {/* PIN Display Card (Khối hiển thị mã PIN bự chà bá) */}
-            <div className="bg-white rounded-[40px] border-4 border-violet-100 shadow-[4px_4px_16px_rgba(0,0,0,0.05),_inset_-4px_-4px_8px_rgba(0,0,0,0.02)] p-10 text-center relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-8">
-              
-              <div className="flex-1 text-left relative z-10 space-y-4">
+            {/* PIN Display Card kèm QR Code */}
+            <div className="bg-white rounded-[40px] border-4 border-violet-100 shadow-[4px_4px_16px_rgba(0,0,0,0.05)] p-8 md:p-10 text-center relative overflow-hidden flex flex-col lg:flex-row items-center justify-between gap-8">
+              <div className="flex-1 text-left relative z-10 space-y-3">
                 <div className="inline-block bg-violet-100 border-2 border-violet-200 text-violet-800 font-900 px-4 py-2 rounded-2xl uppercase tracking-widest text-sm shadow-sm">
-                  Truy cập bằng điện thoại
+                  {quizTitle ? `Bộ Đề: ${quizTitle}` : "Truy cập bằng điện thoại / máy tính"}
                 </div>
-                <div className="text-4xl md:text-5xl font-900 text-gray-900 tracking-tight">
-                  <span className="text-gray-400 font-700">Tại </span> 
+                <div className="text-2xl md:text-4xl font-900 text-gray-900 tracking-tight">
+                  <span className="text-gray-400 font-700">Tại </span>
                   {typeof window !== "undefined" ? window.location.origin : ""}/play
                 </div>
+                <p className="text-gray-500 font-bold text-base">
+                  Mở trình duyệt nhập PIN hoặc dùng máy ảnh quét mã QR bên phải để vào ngay!
+                </p>
               </div>
 
-              <div className="bg-violet-600 rounded-[32px] border-4 border-violet-800 shadow-[0_8px_0_0_#4c1d95] p-8 text-center relative z-10 w-full md:w-auto">
-                 <p className="text-violet-200 font-800 text-sm uppercase tracking-widest mb-2">
-                  Nhập Mã PIN Này
-                 </p>
-                 <div className="flex items-center justify-center gap-4">
-                   <div className="text-6xl md:text-8xl font-black tracking-[0.1em] text-white drop-shadow-xl">
-                     {pinCode}
-                   </div>
-                   <button
-                     onClick={copyPin}
-                     className="w-14 h-14 bg-white/20 hover:bg-white/30 rounded-2xl flex items-center justify-center transition-all border-2 border-white/30 active:scale-95"
-                     title="Sao chép mã PIN"
-                   >
-                     {copied ? (
-                       <Check size={28} className="text-emerald-400" />
-                     ) : (
-                       <Copy size={28} className="text-white" />
-                     )}
-                   </button>
-                 </div>
+              <div className="flex flex-col sm:flex-row items-center gap-6 relative z-10 w-full lg:w-auto justify-center">
+                {/* Khung QR Code */}
+                {qrCodeBase64 ? (
+                  <div className="bg-white p-3 rounded-[28px] border-4 border-violet-200 shadow-md flex flex-col items-center">
+                    <img
+                      src={`data:image/png;base64,${qrCodeBase64}`}
+                      alt="QR Code tham gia phòng"
+                      className="w-28 h-28 md:w-32 md:h-32 object-contain"
+                    />
+                    <span className="text-[11px] font-black uppercase text-violet-700 tracking-wider mt-1.5">
+                      Quét Để Vào Phòng
+                    </span>
+                  </div>
+                ) : (
+                  <div className="bg-violet-50 p-4 rounded-[28px] border-4 border-dashed border-violet-200 flex flex-col items-center justify-center w-28 h-28 md:w-32 md:h-32 text-center text-xs font-bold text-violet-500">
+                    <Sparkles size={24} className="mb-1 text-violet-400" />
+                    <span>game.edu</span>
+                  </div>
+                )}
+
+                {/* Khung Mã PIN */}
+                <div className="bg-violet-600 rounded-[32px] border-4 border-violet-800 shadow-[0_8px_0_0_#4c1d95] p-6 md:p-8 text-center w-full sm:w-auto">
+                  <p className="text-violet-200 font-800 text-xs md:text-sm uppercase tracking-widest mb-1.5">
+                    Mã PIN Tham Gia
+                  </p>
+                  <div className="flex items-center justify-center gap-4">
+                    <div className="text-5xl md:text-7xl font-black tracking-[0.1em] text-white drop-shadow-xl font-mono">
+                      {pinCode}
+                    </div>
+                    <button
+                      onClick={copyPin}
+                      className="w-12 h-12 md:w-14 md:h-14 bg-white/20 hover:bg-white/30 rounded-2xl flex items-center justify-center transition-all border-2 border-white/30 active:scale-95"
+                      title="Sao chép mã PIN"
+                    >
+                      {copied ? (
+                        <Check size={26} className="text-emerald-400" />
+                      ) : (
+                        <Copy size={26} className="text-white" />
+                      )}
+                    </button>
+                  </div>
+                </div>
               </div>
 
               {/* Decorative Background */}
@@ -410,8 +622,8 @@ export default function HostLobbyPage() {
               <div className="absolute bottom-0 left-0 w-64 h-64 bg-violet-400/10 rounded-full blur-3xl -z-0 pointer-events-none" />
             </div>
 
-            {/* Điều khiển Bắt Đầu */}
-            <div className="flex items-center justify-between bg-white rounded-[32px] border-4 border-gray-100 shadow-[4px_4px_16px_rgba(0,0,0,0.05)] px-8 py-6">
+            {/* Điều khiển Bắt Đầu & Khóa phòng */}
+            <div className="flex flex-wrap items-center justify-between bg-white rounded-[32px] border-4 border-gray-100 shadow-[4px_4px_16px_rgba(0,0,0,0.05)] px-8 py-6 gap-4">
               <div className="flex items-center gap-4">
                 <div className="w-16 h-16 bg-blue-100 border-2 border-blue-200 rounded-[20px] flex items-center justify-center shadow-inner">
                   <Users size={32} className="text-blue-600" />
@@ -420,44 +632,70 @@ export default function HostLobbyPage() {
                   <div className="text-4xl font-black text-gray-900 tracking-tight leading-none">
                     {players.length}
                   </div>
-                  <div className="text-sm font-800 text-gray-500 uppercase tracking-widest mt-1">Người Đã Tham Gia</div>
+                  <div className="text-sm font-800 text-gray-500 uppercase tracking-widest mt-1">
+                    Người Đã Tham Gia
+                  </div>
                 </div>
               </div>
 
-              <ActionButton
-                variant="primary"
-                onClick={startGame}
-                disabled={players.length === 0}
-                loading={starting}
-                label={players.length === 0 ? "Đợi Người Chơi..." : "BẮT ĐẦU NGAY!"}
-                icon={Play}
-                className="text-xl px-10 py-5"
-              />
+              <div className="flex flex-wrap items-center gap-3">
+                <ActionButton
+                  variant="outline"
+                  onClick={openInviteModal}
+                  icon={Users}
+                  label="Mời Nhóm"
+                />
+
+                <ActionButton
+                  variant={roomInfo?.isLocked ? "danger" : "outline"}
+                  onClick={toggleLockRoom}
+                  icon={roomInfo?.isLocked ? Lock : Unlock}
+                  label={roomInfo?.isLocked ? "Mở Khóa Phòng" : "Khóa Phòng"}
+                />
+
+                <ActionButton
+                  variant="primary"
+                  onClick={startGame}
+                  disabled={players.length === 0}
+                  loading={starting}
+                  label={players.length === 0 ? "Đợi Người Chơi..." : "BẮT ĐẦU NGAY!"}
+                  icon={Play}
+                  className="text-xl px-10 py-5"
+                />
+              </div>
             </div>
 
             {/* Lưới Người Chơi */}
             <div className="bg-white rounded-[40px] border-4 border-gray-100 shadow-[4px_4px_16px_rgba(0,0,0,0.05)] p-10 min-h-[300px]">
-               {players.length > 0 ? (
-               <div>
-                  <div className="flex flex-wrap gap-8 justify-center">
-                     {players.map((p, idx) => (
-                     <PlayerChip key={p.playerId ?? idx} player={p} index={idx} />
-                     ))}
+              {players.length > 0 ? (
+                <div>
+                  <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-6 text-center">
+                    (Di chuột vào người chơi để kick ra khỏi phòng nếu cần)
                   </div>
-               </div>
-               ) : (
-               <div className="h-full flex flex-col items-center justify-center text-center">
+                  <div className="flex flex-wrap gap-8 justify-center">
+                    {players.map((p, idx) => (
+                      <PlayerChip
+                        key={p.playerId ?? idx}
+                        player={p}
+                        index={idx}
+                        onKick={handleKickPlayer}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="h-full flex flex-col items-center justify-center text-center py-12">
                   <div className="w-24 h-24 bg-gray-50 rounded-[24px] border-4 border-dashed border-gray-200 flex items-center justify-center mb-6 animate-pulse">
-                     <Users size={40} className="text-gray-300" />
+                    <Users size={40} className="text-gray-300" />
                   </div>
                   <p className="font-900 text-2xl text-gray-700 mb-2">
-                     Đang tìm kiếm người chơi...
+                    Đang tìm kiếm người chơi...
                   </p>
                   <p className="text-lg font-600 text-gray-500">
-                     Hãy nhắc mọi người nhập PIN để vào phòng nhé!
+                    Hãy nhắc mọi người nhập PIN <span className="font-mono font-bold text-violet-600">{pinCode}</span> để vào phòng nhé!
                   </p>
-               </div>
-               )}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -467,40 +705,119 @@ export default function HostLobbyPage() {
         ════════════════════════════════════════════════════════════ */}
         {(gameState === "PLAYING" || gameState === "LEADERBOARD" || gameState === "STARTING") && (
           <div className="flex flex-col items-center gap-8 animate-fade-in-up">
-            
             {/* Hiển thị câu hỏi hiện tại trên màn chiếu */}
             {currentSlide ? (
-              <div className="w-full bg-white rounded-[40px] shadow-[4px_4px_16px_rgba(0,0,0,0.05)] border-4 border-violet-100 p-8 md:p-14 text-center">
-                <div className="inline-block bg-violet-100 border-2 border-violet-200 text-violet-700 font-900 px-6 py-2 rounded-2xl uppercase tracking-widest text-sm shadow-sm mb-8">
-                  Câu hỏi {currentSlide?.index !== undefined ? currentSlide.index + 1 : "?"}
+              <div className="w-full bg-white rounded-[40px] shadow-[4px_4px_16px_rgba(0,0,0,0.05)] border-4 border-violet-100 p-8 md:p-14 text-center relative">
+                {/* Header thanh thời gian và thứ tự câu hỏi */}
+                <div className="flex items-center justify-between mb-8 max-w-5xl mx-auto">
+                  <div className="inline-block bg-violet-100 border-2 border-violet-200 text-violet-700 font-900 px-6 py-2 rounded-2xl uppercase tracking-widest text-sm shadow-sm">
+                    Câu hỏi {currentSlide?.index !== undefined ? currentSlide.index + 1 : "?"}
+                    {currentSlide.type && ` • ${currentSlide.type}`}
+                  </div>
+
+                  {/* Đồng hồ đếm ngược to rõ */}
+                  <div
+                    className={`flex items-center gap-2 font-black px-6 py-2.5 rounded-2xl border-4 text-2xl transition-all shadow-md ${
+                      slideTimeLeft !== null && slideTimeLeft <= 5
+                        ? "bg-rose-500 text-white border-rose-700 animate-pulse"
+                        : "bg-teal-50 text-teal-800 border-teal-200"
+                    }`}
+                  >
+                    <Clock size={26} className="stroke-[2.5]" />
+                    <span>{slideTimeLeft ?? currentSlide.timeLimit}s</span>
+                  </div>
                 </div>
+
                 <h2 className="text-3xl md:text-5xl font-black text-gray-900 mb-12 leading-tight tracking-tight max-w-4xl mx-auto">
                   {currentSlide.questionText}
                 </h2>
-                {currentSlide.options && currentSlide.options.length > 0 && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-5xl mx-auto">
-                    {currentSlide.options.map((opt: any, idx: number) => {
-                      const colors = [
-                        "bg-red-500 border-red-700 shadow-[0_6px_0_0_#b91c1c]",
-                        "bg-blue-500 border-blue-700 shadow-[0_6px_0_0_#1d4ed8]",
-                        "bg-amber-400 border-amber-600 shadow-[0_6px_0_0_#b45309]",
-                        "bg-emerald-500 border-emerald-700 shadow-[0_6px_0_0_#047857]",
-                      ];
-                      const letters = ["A", "B", "C", "D"];
-                      return (
-                        <div
-                          key={opt.id}
-                          className={`${
-                            colors[idx % 4]
-                          } text-white rounded-[24px] border-4 p-6 text-left flex items-center gap-6 transform transition-transform hover:-translate-y-1`}
-                        >
-                          <div className="w-14 h-14 bg-white/20 rounded-2xl border-2 border-white/30 flex items-center justify-center text-2xl font-black shrink-0 shadow-inner">
-                            {letters[idx]}
+
+                {/* 1. DẠNG TRẮC NGHIỆM (QUIZ / POLL) */}
+                {(currentSlide.type === "QUIZ" || currentSlide.type === "POLL" || !currentSlide.type) &&
+                  currentSlide.options &&
+                  currentSlide.options.length > 0 && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-5xl mx-auto">
+                      {currentSlide.options.map((opt: any, idx: number) => {
+                        const colors = [
+                          "bg-red-500 border-red-700 shadow-[0_6px_0_0_#b91c1c]",
+                          "bg-blue-500 border-blue-700 shadow-[0_6px_0_0_#1d4ed8]",
+                          "bg-amber-400 border-amber-600 shadow-[0_6px_0_0_#b45309]",
+                          "bg-emerald-500 border-emerald-700 shadow-[0_6px_0_0_#047857]",
+                        ];
+                        const letters = ["A", "B", "C", "D"];
+                        return (
+                          <div
+                            key={opt.id}
+                            className={`${
+                              colors[idx % 4]
+                            } text-white rounded-[24px] border-4 p-6 text-left flex items-center gap-6 transform transition-transform`}
+                          >
+                            <div className="w-14 h-14 bg-white/20 rounded-2xl border-2 border-white/30 flex items-center justify-center text-2xl font-black shrink-0 shadow-inner">
+                              {letters[idx]}
+                            </div>
+                            <span className="font-800 text-2xl leading-snug">{opt.content}</span>
                           </div>
-                          <span className="font-800 text-2xl leading-snug">{opt.content}</span>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                {/* 2. DẠNG ĐÁM MÂY TỪ KHÓA (WORD_CLOUD) */}
+                {currentSlide.type === "WORD_CLOUD" && (
+                  <div className="max-w-4xl mx-auto">
+                    <div className="mb-4 text-sm font-bold text-gray-500 uppercase tracking-wider">
+                      Tổng hợp từ khóa gửi về thời gian thực
+                    </div>
+                    <WordCloudDisplay wordData={wordCloudData} />
+                  </div>
+                )}
+
+                {/* 3. DẠNG ĐIỀN KHUYẾT (FILL_IN_BLANK) */}
+                {currentSlide.type === "FILL_IN_BLANK" && (
+                  <div className="max-w-3xl mx-auto p-8 bg-teal-50/60 rounded-[32px] border-4 border-teal-200 text-center">
+                    <p className="text-xl font-bold text-teal-900 mb-4">
+                      Thí sinh nhập đáp án từ thiết bị cá nhân
+                    </p>
+                    <div className="inline-block bg-white px-8 py-4 rounded-2xl border-2 border-teal-300 font-mono text-2xl font-black text-teal-800 tracking-widest shadow-inner">
+                      [ . . . . . . . . . . ]
+                    </div>
+                  </div>
+                )}
+
+                {/* 4. DẠNG GHÉP CẶP (MATCHING) */}
+                {currentSlide.type === "MATCHING" && (
+                  <div className="max-w-4xl mx-auto p-6 bg-violet-50/50 rounded-[32px] border-4 border-violet-100">
+                    <p className="text-lg font-bold text-violet-900 mb-6 text-center">
+                      Thí sinh đang ghép nối các cặp tương ứng trên thiết bị
+                    </p>
+                    <div className="grid grid-cols-2 gap-4 text-left">
+                      <div className="space-y-3">
+                        <div className="text-xs font-black text-gray-400 uppercase tracking-widest">
+                          Cột Vấn đề
                         </div>
-                      );
-                    })}
+                        {currentSlide.options?.map((opt: any, idx: number) => (
+                          <div
+                            key={opt.id}
+                            className="bg-white p-4 rounded-2xl border-2 border-violet-200 font-bold text-gray-800 shadow-sm"
+                          >
+                            {idx + 1}. {opt.content}
+                          </div>
+                        ))}
+                      </div>
+                      <div className="space-y-3">
+                        <div className="text-xs font-black text-gray-400 uppercase tracking-widest">
+                          Cột Ghép Cặp
+                        </div>
+                        {currentSlide.options?.map((opt: any, idx: number) => (
+                          <div
+                            key={opt.id}
+                            className="bg-white p-4 rounded-2xl border-2 border-amber-200 font-bold text-gray-800 shadow-sm"
+                          >
+                            {String.fromCharCode(65 + idx)}. {opt.matchingPair || "???"}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
@@ -522,12 +839,12 @@ export default function HostLobbyPage() {
             {leaderboard.length > 0 && (
               <div className="w-full max-w-3xl bg-white rounded-[32px] border-4 border-gray-100 shadow-[4px_4px_16px_rgba(0,0,0,0.05)] p-8">
                 <div className="flex items-center gap-3 mb-6">
-                   <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center">
-                      <Trophy size={20} className="text-amber-600" />
-                   </div>
-                   <h3 className="text-xl font-900 text-gray-900 tracking-tight">
-                     Top Người Chơi Hiện Tại
-                   </h3>
+                  <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center">
+                    <Trophy size={20} className="text-amber-600" />
+                  </div>
+                  <h3 className="text-xl font-900 text-gray-900 tracking-tight">
+                    Top Người Chơi Hiện Tại
+                  </h3>
                 </div>
                 <div className="space-y-3">
                   {leaderboard.slice(0, 5).map((p, idx) => (
@@ -536,7 +853,7 @@ export default function HostLobbyPage() {
                       className="flex items-center gap-4 bg-gray-50 border-2 border-gray-100 p-3 rounded-2xl"
                     >
                       <div className="w-10 h-10 bg-white border-2 border-gray-200 rounded-xl flex items-center justify-center font-900 text-gray-500">
-                         {idx + 1}
+                        {idx + 1}
                       </div>
                       <span className="flex-1 font-900 text-lg text-gray-900 truncate">
                         {p.nickname}
@@ -576,159 +893,274 @@ export default function HostLobbyPage() {
           <div className="flex flex-col items-center gap-8 animate-fade-in-up pb-10">
             {/* Podium (Bục Vinh Quang) */}
             <div className="bg-white rounded-[40px] border-4 border-yellow-200 shadow-[4px_4px_16px_rgba(0,0,0,0.05)] p-12 text-center w-full max-w-4xl relative overflow-hidden flex flex-col items-center">
-               <div className="absolute inset-0 bg-gradient-to-br from-yellow-50 to-amber-100 opacity-50" />
-               <div className="relative z-10">
-                  <div className="w-24 h-24 bg-yellow-400 border-4 border-yellow-500 rounded-[24px] shadow-[0_8px_0_0_#b45309] flex items-center justify-center mx-auto mb-6 transform -rotate-6 hover:rotate-0 transition-transform">
-                     <span className="text-5xl">🏆</span>
-                  </div>
-                  <h1 className="text-4xl md:text-5xl font-black text-yellow-800 mb-4 tracking-tight">
-                     Bục Vinh Quang
-                  </h1>
-                  <p className="text-xl font-800 text-yellow-700/80">
-                     Trò chơi đã kết thúc. Xin chúc mừng tất cả người chơi!
-                  </p>
-               </div>
-            </div>
-
-            {/* Bảng Xếp Hạng Đầy Đủ */}
-            <div className="w-full max-w-4xl bg-white rounded-[40px] shadow-[4px_4px_16px_rgba(0,0,0,0.05)] border-4 border-gray-100 p-8">
-              <div className="flex items-center gap-4 mb-8 pb-6 border-b-4 border-gray-100">
-                <div className="w-12 h-12 bg-gray-100 rounded-[16px] flex items-center justify-center">
-                   <Users size={24} className="text-gray-600" />
+              <div className="absolute inset-0 bg-gradient-to-br from-yellow-50 to-amber-100 opacity-50" />
+              <div className="relative z-10">
+                <div className="w-24 h-24 bg-gradient-to-tr from-amber-400 to-yellow-300 rounded-[32px] border-4 border-amber-500 shadow-[0_8px_0_0_#b45309] flex items-center justify-center mx-auto mb-6 transform -rotate-6">
+                  <Trophy size={48} className="text-amber-950 fill-amber-950" />
                 </div>
-                <h2 className="text-2xl font-black text-gray-900 tracking-tight flex-1">Bảng Xếp Hạng Cuối Cùng</h2>
-                <span className="font-800 text-lg text-gray-500 bg-gray-100 px-4 py-2 rounded-xl border-2 border-gray-200">
-                  {leaderboard.length} người chơi
-                </span>
-              </div>
-              
-              <div className="space-y-4">
-                {leaderboard.length === 0 ? (
-                  <div className="text-center bg-gray-50 rounded-[24px] border-2 border-dashed border-gray-200 py-12">
-                     <p className="font-800 text-gray-400 text-xl">Không có dữ liệu người chơi 😢</p>
-                  </div>
-                ) : (
-                  leaderboard.map((player, idx) => (
-                    <LeaderboardEntry
-                      key={player.playerId ?? idx}
-                      player={player}
-                      rank={idx + 1}
-                    />
-                  ))
-                )}
+                <h2 className="text-5xl font-black text-gray-900 mb-2 tracking-tight">
+                  Bục Vinh Danh Top 3! 🏆
+                </h2>
+                <p className="text-xl font-800 text-amber-900/80 mb-12">
+                  Chúc mừng các quán quân đã xuất sắc dẫn đầu phòng thi đấu
+                </p>
+
+                {/* 3 Bục Podium */}
+                <div className="flex items-end justify-center gap-4 md:gap-8 mb-8 min-h-[280px]">
+                  {/* Top 2 */}
+                  {leaderboard[1] && (
+                    <div className="flex flex-col items-center animate-fade-in-up order-1">
+                      <img
+                        src={
+                          leaderboard[1].avatarUrl ??
+                          `https://ui-avatars.com/api/?name=${leaderboard[1].nickname}&background=64748b&color=fff&size=60`
+                        }
+                        alt={leaderboard[1].nickname}
+                        className="w-16 h-16 rounded-[20px] border-4 border-slate-300 shadow-md mb-2 bg-white"
+                      />
+                      <span className="font-900 text-gray-800 text-base max-w-[100px] truncate mb-2">
+                        {leaderboard[1].nickname}
+                      </span>
+                      <div className="w-24 md:w-28 h-40 bg-slate-200 border-4 border-slate-300 rounded-t-[28px] shadow-[inset_0_4px_0_0_rgba(255,255,255,0.6)] flex flex-col items-center justify-center p-2">
+                        <span className="text-3xl font-black text-slate-600">2</span>
+                        <span className="text-xs font-bold text-slate-500 mt-1">
+                          {leaderboard[1].totalScore?.toLocaleString("vi-VN")} pts
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Top 1 */}
+                  {leaderboard[0] && (
+                    <div className="flex flex-col items-center animate-fade-in-up order-2">
+                      <div className="relative">
+                        <Crown
+                          size={32}
+                          className="absolute -top-6 left-1/2 -translate-x-1/2 text-amber-500 fill-amber-400 drop-shadow animate-bounce"
+                        />
+                        <img
+                          src={
+                            leaderboard[0].avatarUrl ??
+                            `https://ui-avatars.com/api/?name=${leaderboard[0].nickname}&background=f59e0b&color=fff&size=80`
+                          }
+                          alt={leaderboard[0].nickname}
+                          className="w-20 h-20 rounded-[24px] border-4 border-amber-400 shadow-lg mb-2 bg-white"
+                        />
+                      </div>
+                      <span className="font-900 text-amber-950 text-lg max-w-[120px] truncate mb-2">
+                        {leaderboard[0].nickname}
+                      </span>
+                      <div className="w-28 md:w-36 h-56 bg-gradient-to-t from-amber-400 to-yellow-300 border-4 border-amber-500 rounded-t-[32px] shadow-[inset_0_4px_0_0_rgba(255,255,255,0.8),0_10px_20px_rgba(245,158,11,0.2)] flex flex-col items-center justify-center p-2">
+                        <span className="text-5xl font-black text-amber-950">1</span>
+                        <span className="text-sm font-black text-amber-900 mt-2 bg-white/60 px-2 py-0.5 rounded-lg">
+                          {leaderboard[0].totalScore?.toLocaleString("vi-VN")} pts
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Top 3 */}
+                  {leaderboard[2] && (
+                    <div className="flex flex-col items-center animate-fade-in-up order-3">
+                      <img
+                        src={
+                          leaderboard[2].avatarUrl ??
+                          `https://ui-avatars.com/api/?name=${leaderboard[2].nickname}&background=b45309&color=fff&size=60`
+                        }
+                        alt={leaderboard[2].nickname}
+                        className="w-16 h-16 rounded-[20px] border-4 border-amber-600 shadow-md mb-2 bg-white"
+                      />
+                      <span className="font-900 text-gray-800 text-base max-w-[100px] truncate mb-2">
+                        {leaderboard[2].nickname}
+                      </span>
+                      <div className="w-24 md:w-28 h-32 bg-amber-100 border-4 border-amber-300 rounded-t-[28px] shadow-[inset_0_4px_0_0_rgba(255,255,255,0.6)] flex flex-col items-center justify-center p-2">
+                        <span className="text-3xl font-black text-amber-800">3</span>
+                        <span className="text-xs font-bold text-amber-700 mt-1">
+                          {leaderboard[2].totalScore?.toLocaleString("vi-VN")} pts
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
-            {/* Nút Xuất Báo Cáo */}
-            <div className="flex gap-4 w-full max-w-4xl">
+            {/* Bảng xếp hạng chi tiết đầy đủ */}
+            <div className="w-full max-w-4xl bg-white rounded-[40px] border-4 border-gray-100 shadow-[4px_4px_16px_rgba(0,0,0,0.05)] p-10">
+              <h3 className="font-900 text-2xl text-gray-900 mb-6 flex items-center gap-3">
+                <Trophy size={28} className="text-violet-600" />
+                <span>Bảng Thành Tích Chung Cuộc</span>
+              </h3>
+              <div className="divide-y divide-gray-100">
+                {leaderboard.map((p, idx) => (
+                  <PlayerRow key={p.playerId ?? idx} player={p} rank={idx + 1} />
+                ))}
+              </div>
+            </div>
+
+            {/* Các nút hành động kết thúc */}
+            <div className="flex flex-wrap gap-4 justify-center w-full max-w-md">
               <ActionButton
-                variant="primary"
-                fullWidth
+                variant="success"
                 onClick={exportReport}
                 loading={exporting}
+                icon={Sparkles}
                 label="Xuất Báo Cáo Excel"
+                fullWidth
               />
               <ActionButton
                 variant="outline"
-                fullWidth
                 onClick={() => router.push("/dashboard")}
-                label="Về Dashboard"
                 icon={Home}
+                label="Về Trang Quản Trị"
+                fullWidth
               />
             </div>
           </div>
         )}
       </main>
 
-      {/* Q&A Floating Button for Host */}
-      <button
-         onClick={() => setShowQA(true)}
-         className="fixed bottom-8 right-8 w-16 h-16 bg-violet-600 text-white rounded-[24px] border-4 border-violet-800 shadow-[0_6px_0_0_#4c1d95] active:translate-y-2 active:shadow-none flex items-center justify-center transition-all z-40 hover:bg-violet-500"
-      >
-         <MessageCircle size={28} />
-         {questions.filter(q => !q.isResolved).length > 0 && (
-            <span className="absolute -top-3 -right-3 w-8 h-8 bg-red-500 border-4 border-white rounded-full text-sm font-black flex items-center justify-center shadow-md">
-               {questions.filter(q => !q.isResolved).length}
-            </span>
-         )}
-      </button>
-
-      {/* Host Q&A Modal */}
+      {/* ── Slide-over Panel Hỏi Đáp (Q&A) ── */}
       {showQA && (
-         <div className="fixed inset-0 z-50 flex flex-col items-center justify-center p-4 bg-gray-900/60 backdrop-blur-md animate-fade-in-up">
-            <div className="bg-white max-w-4xl w-full h-[85vh] rounded-[40px] shadow-[0_20px_60px_rgba(0,0,0,0.2)] border-4 border-violet-100 overflow-hidden flex flex-col">
-               
-               {/* Modal Header */}
-               <div className="bg-violet-50 p-6 flex items-center justify-between border-b-4 border-violet-100 shrink-0">
-                  <h3 className="font-900 text-gray-900 text-2xl flex items-center gap-3 tracking-tight">
-                     <div className="w-12 h-12 bg-white rounded-[16px] border-2 border-violet-200 flex items-center justify-center">
-                        <MessageCircle size={24} className="text-violet-600" />
-                     </div>
-                     Quản Lý Hỏi Đáp (Q&A)
-                  </h3>
-                  <button onClick={() => setShowQA(false)} className="w-12 h-12 bg-white border-2 border-gray-200 text-gray-500 rounded-2xl hover:bg-gray-100 flex items-center justify-center transition-colors">
-                     <X size={24} />
-                  </button>
-               </div>
-
-               {/* Modal Body */}
-               <div className="flex-1 overflow-y-auto p-8 space-y-6 bg-[#F4F1FA]">
-                  {questions.length === 0 ? (
-                     <div className="h-full flex flex-col items-center justify-center text-center">
-                        <div className="w-24 h-24 bg-white rounded-[32px] border-4 border-dashed border-gray-200 flex items-center justify-center mb-6">
-                           <MessageCircle size={40} className="text-gray-300" />
-                        </div>
-                        <h4 className="font-900 text-xl text-gray-900 mb-2">Chưa có câu hỏi nào</h4>
-                        <p className="font-600 text-gray-500">Khuyến khích mọi người đặt câu hỏi trong lúc chơi nhé!</p>
-                     </div>
-                  ) : (
-                     questions
-                        .sort((a, b) => (b.isPinned ? 1 : 0) - (a.isPinned ? 1 : 0) || b.upvotes - a.upvotes)
-                        .map(q => (
-                        <div key={q.id} className={`bg-white p-6 rounded-[24px] border-4 shadow-sm transition-all ${q.isPinned ? 'border-amber-300 bg-amber-50' : 'border-gray-100'} ${q.isResolved ? 'opacity-60 grayscale' : ''}`}>
-                           <div className="flex items-center justify-between mb-4">
-                              <div className="flex items-center gap-3">
-                                 <div className="font-900 text-lg text-gray-900">{q.playerNickname}</div>
-                                 <div className="text-sm font-800 text-violet-700 bg-violet-100 px-3 py-1 rounded-xl border-2 border-violet-200 shadow-sm">{q.upvotes} Lượt thích</div>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                 <button 
-                                    onClick={() => pinQuestion(q.id, !q.isPinned)}
-                                    title={q.isPinned ? "Bỏ ghim" : "Ghim câu hỏi"}
-                                    className={`w-10 h-10 flex items-center justify-center rounded-xl border-2 transition-colors ${q.isPinned ? 'bg-amber-100 text-amber-700 border-amber-300' : 'bg-gray-50 hover:bg-gray-100 text-gray-500 border-gray-200'}`}
-                                 >
-                                    <Pin size={18} />
-                                 </button>
-                                 {!q.isResolved && (
-                                    <button 
-                                       onClick={() => resolveQuestion(q.id)}
-                                       title="Đánh dấu đã trả lời"
-                                       className="w-10 h-10 flex items-center justify-center bg-green-50 hover:bg-green-100 text-green-600 border-2 border-green-200 rounded-xl transition-colors"
-                                    >
-                                       <CheckCircle size={18} />
-                                    </button>
-                                 )}
-                                 <button 
-                                    onClick={() => hideQuestion(q.id)}
-                                    title="Ẩn câu hỏi"
-                                    className="w-10 h-10 flex items-center justify-center bg-red-50 hover:bg-red-100 text-red-600 border-2 border-red-200 rounded-xl transition-colors"
-                                 >
-                                    <EyeOff size={18} />
-                                 </button>
-                              </div>
-                           </div>
-                           <p className="text-gray-800 font-700 text-lg">{q.content}</p>
-                           {q.isResolved && (
-                              <div className="mt-4 inline-flex items-center gap-2 bg-green-100 border-2 border-green-200 px-3 py-1.5 rounded-lg text-sm font-900 text-green-700">
-                                 <CheckCircle size={16} /> Đã giải quyết
-                              </div>
-                           )}
-                        </div>
-                     ))
-                  )}
-               </div>
+        <div className="fixed inset-y-0 right-0 w-full sm:w-[420px] bg-white border-l-4 border-teal-200 shadow-2xl z-50 flex flex-col animate-slide-in">
+          <div className="p-6 border-b-2 border-gray-100 flex items-center justify-between bg-teal-50/50">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-teal-600 rounded-xl flex items-center justify-center text-white">
+                <MessageCircle size={20} />
+              </div>
+              <h3 className="font-black text-lg text-gray-900">Hộp Thoại Hỏi Đáp</h3>
             </div>
-         </div>
+            <button
+              onClick={() => setShowQA(false)}
+              className="w-8 h-8 rounded-lg hover:bg-gray-100 flex items-center justify-center text-gray-500"
+            >
+              <X size={18} />
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {questions.length === 0 ? (
+              <div className="text-center py-16 text-gray-400 font-bold">
+                Chưa có câu hỏi nào từ người chơi.
+              </div>
+            ) : (
+              questions.map((q) => (
+                <div
+                  key={q.id}
+                  className={`p-4 rounded-2xl border-2 transition-all ${
+                    q.isPinned
+                      ? "bg-amber-50 border-amber-300 shadow-sm"
+                      : q.isResolved
+                      ? "bg-gray-50 border-gray-200 opacity-60"
+                      : "bg-white border-gray-100 shadow-sm"
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-black text-sm text-teal-800">
+                      {q.playerNickname}
+                    </span>
+                    <span className="text-xs font-bold text-gray-400">
+                      👍 {q.upvotes}
+                    </span>
+                  </div>
+                  <p className="text-gray-900 font-semibold mb-3">{q.content}</p>
+                  <div className="flex items-center gap-2 text-xs font-bold">
+                    <button
+                      onClick={() => pinQuestion(q.id, !q.isPinned)}
+                      className={`px-2.5 py-1 rounded-lg border flex items-center gap-1 ${
+                        q.isPinned
+                          ? "bg-amber-400 border-amber-600 text-amber-950"
+                          : "bg-gray-100 border-gray-200 text-gray-700"
+                      }`}
+                    >
+                      <Pin size={12} /> {q.isPinned ? "Bỏ Ghim" : "Ghim"}
+                    </button>
+                    {!q.isResolved && (
+                      <button
+                        onClick={() => resolveQuestion(q.id)}
+                        className="px-2.5 py-1 rounded-lg border bg-emerald-100 border-emerald-300 text-emerald-800 flex items-center gap-1"
+                      >
+                        <CheckCircle size={12} /> Đã Xong
+                      </button>
+                    )}
+                    <button
+                      onClick={() => hideQuestion(q.id)}
+                      className="px-2.5 py-1 rounded-lg border bg-rose-50 border-rose-200 text-rose-700 flex items-center gap-1 ml-auto"
+                    >
+                      <EyeOff size={12} /> Ẩn
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal Mời Nhóm Học Tập Vào Phòng ── */}
+      {showInviteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="bg-white rounded-[32px] border-4 border-violet-100 shadow-2xl max-w-lg w-full p-6 space-y-5 animate-scale-up">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-violet-100 text-violet-700 rounded-xl flex items-center justify-center font-bold">
+                  <Users size={22} />
+                </div>
+                <div>
+                  <h3 className="font-black text-xl text-gray-900">Mời Nhóm Vào Phòng</h3>
+                  <p className="text-xs text-gray-500 font-semibold">Tất cả thành viên trong nhóm sẽ nhận được thông báo mời thi đấu</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowInviteModal(false)}
+                className="w-8 h-8 rounded-lg hover:bg-gray-100 flex items-center justify-center text-gray-400"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {inviteFeedback && (
+              <div className="p-3.5 rounded-2xl bg-violet-50 border-2 border-violet-200 text-violet-900 font-bold text-sm">
+                {inviteFeedback}
+              </div>
+            )}
+
+            <div className="max-h-64 overflow-y-auto space-y-3 pr-1">
+              {myGroups.length === 0 ? (
+                <div className="text-center py-8 text-gray-400 font-bold text-sm">
+                  Bạn chưa tạo nhóm học tập nào. Hãy vào mục &quot;Nhóm Của Tôi&quot; để tạo nhóm trước.
+                </div>
+              ) : (
+                myGroups.map((g: any) => (
+                  <div
+                    key={g.id}
+                    className="flex items-center justify-between p-3.5 rounded-2xl border-2 border-gray-100 hover:border-violet-200 bg-gray-50/50 transition-all"
+                  >
+                    <div>
+                      <div className="font-black text-base text-gray-900">{g.name}</div>
+                      <div className="text-xs text-gray-500 font-medium">{g.description || "Không có mô tả"}</div>
+                    </div>
+                    <button
+                      onClick={() => handleInviteGroup(g.id)}
+                      disabled={invitingGroupId === g.id}
+                      className="bg-violet-600 hover:bg-violet-700 text-white font-bold text-xs px-4 py-2 rounded-xl border border-violet-800 shadow-sm active:scale-95 disabled:opacity-50 transition-all"
+                    >
+                      {invitingGroupId === g.id ? "Đang gửi..." : "Mời Ngay"}
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="pt-2 flex justify-end">
+              <ActionButton
+                variant="outline"
+                onClick={() => setShowInviteModal(false)}
+                label="Đóng"
+              />
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

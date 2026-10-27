@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import Cookies from "js-cookie";
@@ -37,6 +37,8 @@ interface OptionDraft {
   id: string; // temp uuid for UI
   content: string;
   isCorrect: boolean;
+  matchingPair?: string;
+  blankKeywords?: string;
 }
 
 interface SlideDraft {
@@ -69,22 +71,58 @@ const optionBgColors = [
 
 const tempId = () => `new-${Math.random().toString(36).slice(2, 9)}`;
 
-const blankSlide = (type: SlideType = "QUIZ"): SlideDraft => ({
-  id: tempId(),
-  type,
-  questionText: "",
-  timeLimit: 30,
-  points: 1000,
-  status: "DRAFT",
-  options: [
-    { id: tempId(), content: "", isCorrect: true },
-    { id: tempId(), content: "", isCorrect: false },
-    { id: tempId(), content: "", isCorrect: false },
-    { id: tempId(), content: "", isCorrect: false },
-  ],
-  isExpanded: true,
-  isSaving: false,
-});
+const blankSlide = (type: SlideType = "QUIZ"): SlideDraft => {
+  if (type === "MATCHING") {
+    return {
+      id: tempId(),
+      type,
+      questionText: "",
+      timeLimit: 45,
+      points: 1000,
+      status: "DRAFT",
+      options: [
+        { id: tempId(), content: "", matchingPair: "", isCorrect: true },
+        { id: tempId(), content: "", matchingPair: "", isCorrect: true },
+        { id: tempId(), content: "", matchingPair: "", isCorrect: true },
+      ],
+      isExpanded: true,
+      isSaving: false,
+    };
+  }
+
+  if (type === "FILL_IN_BLANK") {
+    return {
+      id: tempId(),
+      type,
+      questionText: "",
+      timeLimit: 30,
+      points: 1000,
+      status: "DRAFT",
+      options: [
+        { id: tempId(), content: "", blankKeywords: "", isCorrect: true },
+      ],
+      isExpanded: true,
+      isSaving: false,
+    };
+  }
+
+  return {
+    id: tempId(),
+    type,
+    questionText: "",
+    timeLimit: 30,
+    points: 1000,
+    status: "DRAFT",
+    options: [
+      { id: tempId(), content: "", isCorrect: true },
+      { id: tempId(), content: "", isCorrect: false },
+      { id: tempId(), content: "", isCorrect: false },
+      { id: tempId(), content: "", isCorrect: false },
+    ],
+    isExpanded: true,
+    isSaving: false,
+  };
+};
 
 // ─── Option Input Row ──────────────────────────────────────────────────────────
 function OptionRow({
@@ -172,7 +210,9 @@ function SlideCard({
   const hasError =
     !slide.questionText.trim() ||
     ((slide.type === "QUIZ" || slide.type === "FILL_IN_BLANK") &&
-      !slide.options.some((o) => o.isCorrect && o.content.trim()));
+      !slide.options.some((o) => o.isCorrect && o.content.trim())) ||
+    (slide.type === "MATCHING" &&
+      slide.options.filter((o) => o.content.trim() && o.matchingPair?.trim()).length < 2);
 
   const addOption = () => {
     if (slide.options.length >= 6) return;
@@ -184,10 +224,36 @@ function SlideCard({
     });
   };
 
+  const addMatchingPair = () => {
+    if (slide.options.length >= 8) return;
+    onUpdate({
+      options: [
+        ...slide.options,
+        { id: tempId(), content: "", matchingPair: "", isCorrect: true },
+      ],
+    });
+  };
+
   const updateOption = (optId: string, content: string) => {
     onUpdate({
       options: slide.options.map((o) =>
         o.id === optId ? { ...o, content } : o
+      ),
+    });
+  };
+
+  const updateOptionMatchingPair = (optId: string, matchingPair: string) => {
+    onUpdate({
+      options: slide.options.map((o) =>
+        o.id === optId ? { ...o, matchingPair } : o
+      ),
+    });
+  };
+
+  const updateOptionBlankKeywords = (optId: string, blankKeywords: string) => {
+    onUpdate({
+      options: slide.options.map((o) =>
+        o.id === optId ? { ...o, blankKeywords } : o
       ),
     });
   };
@@ -201,7 +267,7 @@ function SlideCard({
   };
 
   const deleteOption = (optId: string) => {
-    if (slide.options.length <= 2) return;
+    if (slide.options.length <= 1) return;
     onUpdate({
       options: slide.options.filter((o) => o.id !== optId),
     });
@@ -388,18 +454,90 @@ function SlideCard({
 
           {/* FILL_IN_BLANK helper */}
           {slide.type === "FILL_IN_BLANK" && (
+            <div className="bg-white p-5 rounded-[24px] border-4 border-gray-100 space-y-4">
+              <div>
+                <label className="text-sm font-black text-gray-800 block mb-1">
+                  Từ Khóa Đáp Án Chuẩn (Bắt buộc)
+                </label>
+                <input
+                  type="text"
+                  placeholder="Nhập từ hoặc cụm từ học sinh cần điền vào (VD: Hà Nội)"
+                  value={slide.options[0]?.content || ""}
+                  onChange={(e) => updateOption(slide.options[0]?.id || "", e.target.value)}
+                  className="w-full px-5 py-3.5 text-base font-bold border-4 border-gray-100 rounded-[20px] bg-gray-50 focus:bg-white focus:border-violet-400 outline-none transition-all placeholder-gray-400 text-gray-800"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-black text-gray-800 block mb-1">
+                  Từ Khóa Biến Thể / Đồng Nghĩa (Tùy chọn)
+                </label>
+                <input
+                  type="text"
+                  placeholder="Các biến thể ngăn cách bằng dấu phẩy (VD: ha noi, hn, thủ đô hà nội)"
+                  value={slide.options[0]?.blankKeywords || ""}
+                  onChange={(e) => updateOptionBlankKeywords(slide.options[0]?.id || "", e.target.value)}
+                  className="w-full px-5 py-3 text-sm font-bold border-2 border-gray-200 rounded-[16px] bg-gray-50 focus:bg-white focus:border-violet-400 outline-none transition-all placeholder-gray-400 text-gray-700"
+                />
+                <p className="text-xs text-gray-400 font-bold mt-1.5">
+                  Hệ thống tự động chấm đúng nếu học sinh gõ trùng với từ chuẩn hoặc bất kỳ biến thể nào trên đây.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* MATCHING section */}
+          {slide.type === "MATCHING" && (
             <div className="bg-white p-5 rounded-[24px] border-4 border-gray-100">
-              <label className="text-sm font-black text-gray-800 block mb-2">
-                Từ Khóa Đáp Án Đúng (Học sinh nhập đúng từ này sẽ có điểm)
-              </label>
-              <OptionRow
-                opt={slide.options[0] || { id: tempId(), content: "", isCorrect: true }}
-                idx={0}
-                slideType="FILL_IN_BLANK"
-                onChange={(val) => updateOption(slide.options[0]?.id || "", val)}
-                onToggleCorrect={() => {}}
-                onDelete={() => {}}
-              />
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <label className="text-sm font-black text-gray-800 block">
+                    Các Cặp Khái Niệm Ghép Nối
+                  </label>
+                  <span className="text-gray-400 font-bold text-xs">
+                    (Vế Trái sẽ được ghép tương ứng với Vế Phải khi học sinh làm bài)
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={addMatchingPair}
+                  disabled={slide.options.length >= 8}
+                  className="text-xs font-black text-violet-600 hover:text-white bg-violet-50 hover:bg-violet-500 flex items-center gap-1.5 px-3 py-2 rounded-[12px] transition-colors disabled:opacity-50"
+                >
+                  <Plus size={14} className="stroke-[3px]" /> Thêm Cặp Ghép
+                </button>
+              </div>
+              <div className="space-y-3">
+                {slide.options.map((opt, optIdx) => (
+                  <div key={opt.id} className="flex items-center gap-3 bg-gray-50 p-3.5 rounded-[20px] border-2 border-gray-200">
+                    <div className="w-8 h-8 rounded-[12px] bg-violet-600 text-white font-black flex items-center justify-center text-xs flex-shrink-0">
+                      {optIdx + 1}
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="Vế A (Ví dụ: Thủ đô Việt Nam)"
+                      value={opt.content}
+                      onChange={(e) => updateOption(opt.id, e.target.value)}
+                      className="flex-1 px-4 py-2.5 text-sm font-bold border-2 border-gray-200 rounded-[14px] bg-white focus:border-violet-400 outline-none text-gray-800"
+                    />
+                    <span className="text-gray-400 font-black text-base flex-shrink-0">↔</span>
+                    <input
+                      type="text"
+                      placeholder="Vế B (Ví dụ: Hà Nội)"
+                      value={opt.matchingPair || ""}
+                      onChange={(e) => updateOptionMatchingPair(opt.id, e.target.value)}
+                      className="flex-1 px-4 py-2.5 text-sm font-bold border-2 border-gray-200 rounded-[14px] bg-white focus:border-violet-400 outline-none text-gray-800"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => deleteOption(opt.id)}
+                      disabled={slide.options.length <= 2}
+                      className="w-9 h-9 rounded-[12px] bg-red-50 hover:bg-red-100 text-red-500 flex items-center justify-center transition-colors flex-shrink-0 disabled:opacity-40"
+                    >
+                      <X size={16} className="stroke-[3px]" />
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
@@ -458,6 +596,11 @@ export default function QuizEditorPage() {
   const [loadingQuiz, setLoadingQuiz] = useState(true);
   const [toast, setToast] = useState<{ msg: string; type: "ok" | "err" } | null>(null);
 
+  const showToast = useCallback((msg: string, type: "ok" | "err" = "ok") => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3500);
+  }, []);
+
   // AI Modal States
   const [aiModalOpen, setAiModalOpen] = useState(false);
   const [aiInputTab, setAiInputTab] = useState<"upload" | "text">("upload");
@@ -484,7 +627,7 @@ export default function QuizEditorPage() {
           const q = res.data.data;
           setQuiz(q);
           const draftSlides: SlideDraft[] = (q.slides ?? []).map(
-            (s: { id: string; type: SlideType; questionText: string; timeLimit?: number; points?: number; status?: SlideStatus; options?: { id: string; content: string; isCorrect?: boolean }[]; isAIGenerated?: boolean }, idx: number) => ({
+            (s: { id: string; type: SlideType; questionText: string; timeLimit?: number; points?: number; status?: SlideStatus; options?: { id: string; content: string; isCorrect?: boolean; matchingPair?: string; blankKeywords?: string }[]; isAIGenerated?: boolean }, idx: number) => ({
               id: s.id,
               type: s.type,
               questionText: s.questionText,
@@ -494,8 +637,10 @@ export default function QuizEditorPage() {
               isAIGenerated: s.isAIGenerated ?? false,
               options: (s.options ?? []).map((o) => ({
                 id: o.id,
-                content: o.content,
+                content: o.content ?? "",
                 isCorrect: o.isCorrect ?? false,
+                matchingPair: o.matchingPair ?? "",
+                blankKeywords: o.blankKeywords ?? "",
               })),
               isExpanded: idx === 0,
               isSaving: false,
@@ -574,7 +719,8 @@ export default function QuizEditorPage() {
         headers: { "Content-Type": "multipart/form-data" },
       });
       if (res.data?.success) {
-        setAiFileUrl("http://localhost:5000" + res.data.data);
+        const uploadedPath = res.data.data?.fileUrl || (typeof res.data.data === "string" ? res.data.data : "");
+        setAiFileUrl(uploadedPath);
       }
     } catch (err: unknown) {
       const errorObj = err as { response?: { data?: { message?: string } } };
@@ -603,7 +749,8 @@ export default function QuizEditorPage() {
           headers: { "Content-Type": "multipart/form-data" },
         });
         if (resUpload.data?.success) {
-          targetUrl = "http://localhost:5000" + resUpload.data.data;
+          const uploadedPath = resUpload.data.data?.fileUrl || (typeof resUpload.data.data === "string" ? resUpload.data.data : "");
+          targetUrl = uploadedPath;
         } else {
           throw new Error("Không thể lưu văn bản bài giảng.");
         }
@@ -636,10 +783,7 @@ export default function QuizEditorPage() {
     }
   };
 
-  const showToast = (msg: string, type: "ok" | "err" = "ok") => {
-    setToast({ msg, type });
-    setTimeout(() => setToast(null), 3500);
-  };
+
 
   const updateSlide = (id: string, patch: Partial<SlideDraft>) => {
     setSlides((prev) =>
@@ -721,8 +865,10 @@ export default function QuizEditorPage() {
       options: slide.options
         .filter((o) => o.content.trim())
         .map((o, i) => ({
-          content: o.content,
-          isCorrect: o.isCorrect,
+          content: o.content.trim(),
+          isCorrect: slide.type === "MATCHING" ? true : o.isCorrect,
+          matchingPair: slide.type === "MATCHING" ? (o.matchingPair?.trim() || null) : null,
+          blankKeywords: slide.type === "FILL_IN_BLANK" ? (o.blankKeywords?.trim() || null) : null,
           orderIndex: i,
         })),
     };

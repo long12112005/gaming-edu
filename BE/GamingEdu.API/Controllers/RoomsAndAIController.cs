@@ -66,9 +66,10 @@ public class RoomsController : ControllerBase
         if (room is null)
             return NotFound(new ApiResponse<string>(false, "Không tìm thấy phòng với mã PIN này.", null));
 
+        var qrCode = _roomService.GenerateQrCodeBase64(room.PinCode);
         var dto = new RoomDto(
             room.Id, room.PinCode, room.Mode, room.Status,
-            room.QuizId, room.Quiz?.Title ?? "", room.CreatedAt);
+            room.QuizId, room.Quiz?.Title ?? "", room.CreatedAt, qrCode);
 
         return Ok(new ApiResponse<RoomDto>(true, null, dto));
     }
@@ -165,6 +166,26 @@ public class RoomsController : ControllerBase
 
         var history = await _roomService.GetPlayedRoomsHistoryAsync(userId.Value);
         return Ok(new ApiResponse<IEnumerable<PlayedRoomHistoryDto>>(true, "Lấy lịch sử phòng đã chơi thành công.", history));
+    }
+
+    // GET /api/rooms/{id}/report
+    /// <summary>Lấy dữ liệu báo cáo phân tích chi tiết của phòng chơi (JSON).</summary>
+    [HttpGet("{id:guid}/report")]
+    [ProducesResponseType(typeof(ApiResponse<RoomDetailReportDto>), 200)]
+    [ProducesResponseType(403)]
+    [ProducesResponseType(404)]
+    public async Task<IActionResult> GetRoomDetailReport(Guid id)
+    {
+        var userId = GetCurrentUserId();
+        if (userId is null) return Unauthorized();
+
+        try
+        {
+            var report = await _roomService.GetRoomReportDetailAsync(id, userId.Value);
+            return Ok(new ApiResponse<RoomDetailReportDto>(true, "Lấy báo cáo chi tiết thành công.", report));
+        }
+        catch (UnauthorizedAccessException ex) { return StatusCode(403, new ApiResponse<string>(false, ex.Message, null)); }
+        catch (KeyNotFoundException ex) { return NotFound(new ApiResponse<string>(false, ex.Message, null)); }
     }
 
     // GET /api/rooms/{id}/export

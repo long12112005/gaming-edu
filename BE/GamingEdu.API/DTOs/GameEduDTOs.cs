@@ -223,6 +223,41 @@ public record PlayedRoomHistoryDto(
     DateTime PlayedAt
 );
 
+public record RoomDetailReportDto(
+    Guid RoomId,
+    string PinCode,
+    string QuizTitle,
+    string Mode,
+    string Status,
+    DateTime CreatedAt,
+    int TotalPlayers,
+    double OverallAccuracy,
+    string? HardestQuestion,
+    string? EasiestQuestion,
+    List<PlayerReportItemDto> Players,
+    List<QuestionReportItemDto> Questions
+);
+
+public record PlayerReportItemDto(
+    int Rank,
+    string Nickname,
+    int TotalScore,
+    int CorrectCount,
+    int WrongCount,
+    double Accuracy,
+    double AvgResponseTimeSec
+);
+
+public record QuestionReportItemDto(
+    int OrderIndex,
+    string QuestionText,
+    string Type,
+    int TotalAnswers,
+    int CorrectAnswers,
+    double Accuracy,
+    string Difficulty
+);
+
 // ─── Game (SignalR) DTOs ───────────────────────────────────────────────────
 
 public record SubmitAnswerRequest(

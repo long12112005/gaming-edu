@@ -98,6 +98,8 @@ public class GroupsController : ControllerBase
     }
 
     [HttpPost("{id:guid}/leave")]
+    [HttpDelete("{id:guid}/leave")]
+    [HttpDelete("{id:guid}/members/me")]
     [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> LeaveGroup(Guid id)

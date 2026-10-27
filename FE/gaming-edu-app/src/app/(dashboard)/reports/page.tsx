@@ -18,6 +18,11 @@ import {
   CheckCircle2,
   AlertCircle,
   Eye,
+  X,
+  Award,
+  TrendingUp,
+  TrendingDown,
+  HelpCircle,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAuthStore } from "@/store/useAuthStore";
@@ -45,6 +50,41 @@ export interface PlayedRoomReport {
   createdAt: string;
 }
 
+export interface PlayerReportItem {
+  rank: number;
+  nickname: string;
+  totalScore: number;
+  correctCount: number;
+  wrongCount: number;
+  accuracy: number;
+  avgResponseTimeSec: number;
+}
+
+export interface QuestionReportItem {
+  orderIndex: number;
+  questionText: string;
+  type: string;
+  totalAnswers: number;
+  correctAnswers: number;
+  accuracy: number;
+  difficulty: string;
+}
+
+export interface RoomDetailReport {
+  roomId: string;
+  pinCode: string;
+  quizTitle: string;
+  mode: string;
+  status: string;
+  createdAt: string;
+  totalPlayers: number;
+  overallAccuracy: number;
+  hardestQuestion: string | null;
+  easiestQuestion: string | null;
+  players: PlayerReportItem[];
+  questions: QuestionReportItem[];
+}
+
 export default function ReportsPage() {
   const { isAuthenticated } = useAuthStore();
   const [activeTab, setActiveTab] = useState<TabType>("hosted");
@@ -54,6 +94,9 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(true);
 
   const [exportingId, setExportingId] = useState<string | null>(null);
+  const [selectedRoomReport, setSelectedRoomReport] = useState<RoomDetailReport | null>(null);
+  const [loadingDetailId, setLoadingDetailId] = useState<string | null>(null);
+  const [modalTab, setModalTab] = useState<"players" | "questions">("players");
   const [toastMsg, setToastMsg] = useState<{ text: string; type: "success" | "error" } | null>(null);
 
   const fetchReports = useCallback(async () => {
@@ -164,6 +207,24 @@ export default function ReportsPage() {
       });
     } finally {
       setExportingId(null);
+    }
+  };
+
+  // Xem chi tiết báo cáo qua GET /api/rooms/{id}/report
+  const handleViewDetailReport = async (roomId: string) => {
+    try {
+      setLoadingDetailId(roomId);
+      const res = await api.get(`/rooms/${roomId}/report`);
+      if (res.data?.success && res.data.data) {
+        setSelectedRoomReport(res.data.data);
+      } else {
+        setToastMsg({ text: "Không thể lấy dữ liệu phân tích chi tiết.", type: "error" });
+      }
+    } catch (err: unknown) {
+      console.error("Lỗi khi tải chi tiết báo cáo:", err);
+      setToastMsg({ text: "Không thể kết nối đến máy chủ để lấy báo cáo.", type: "error" });
+    } finally {
+      setLoadingDetailId(null);
     }
   };
 
@@ -324,12 +385,31 @@ export default function ReportsPage() {
                       </div>
                     </div>
 
-                    {/* NÚT TẢI BÁO CÁO EXCEL */}
-                    <div className="flex items-center gap-2.5 w-full md:w-auto justify-end pt-3 md:pt-0 border-t md:border-t-0 border-teal-100">
+                    {/* CÁC NÚT THAO TÁC BÁO CÁO */}
+                    <div className="flex items-center gap-2.5 w-full md:w-auto justify-end pt-3 md:pt-0 border-t md:border-t-0 border-teal-100 flex-wrap">
+                      <button
+                        onClick={() => handleViewDetailReport(room.id)}
+                        disabled={loadingDetailId === room.id}
+                        className="px-4 py-2.5 bg-white hover:bg-teal-50 border border-teal-300/80 text-teal-800 font-bold text-xs md:text-sm rounded-xl shadow-sm transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-1.5"
+                        title="Xem bảng điểm và phân tích câu hỏi trực tiếp trên màn hình"
+                      >
+                        {loadingDetailId === room.id ? (
+                          <>
+                            <Loader2 size={16} className="animate-spin text-teal-600" />
+                            <span>Đang Tải...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Eye size={16} className="text-teal-600" />
+                            <span>Xem Thống Kê</span>
+                          </>
+                        )}
+                      </button>
+
                       <button
                         onClick={() => handleDownloadExcel(room.id, room.quizTitle)}
                         disabled={exportingId === room.id}
-                        className="flex-1 md:flex-none px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white font-bold text-xs md:text-sm rounded-xl shadow-sm transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-2 disabled:opacity-60"
+                        className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white font-bold text-xs md:text-sm rounded-xl shadow-sm transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-2 disabled:opacity-60"
                         title="Tải bảng điểm và kết quả dạng file Excel .xlsx"
                       >
                         {exportingId === room.id ? (
@@ -340,7 +420,7 @@ export default function ReportsPage() {
                         ) : (
                           <>
                             <FileSpreadsheet size={16} />
-                            <span>Tải Báo Cáo Excel (.xlsx)</span>
+                            <span>Tải Excel</span>
                           </>
                         )}
                       </button>
@@ -410,6 +490,244 @@ export default function ReportsPage() {
           </div>
         )}
       </main>
+
+      {/* MODAL CHI TIẾT BÁO CÁO PHÒNG CHƠI */}
+      {selectedRoomReport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 md:p-6 bg-gray-950/60 backdrop-blur-md animate-in fade-in font-sans">
+          <div className="bg-[#FAF8F5] rounded-[32px] w-full max-w-4xl shadow-2xl border-4 border-white flex flex-col max-h-[90vh] overflow-hidden animate-in zoom-in-95">
+            {/* Modal Header */}
+            <div className="p-6 md:p-8 border-b border-amber-900/10 bg-white/80 backdrop-blur-md flex items-start justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                  <span className="px-3 py-1 bg-teal-100 text-teal-950 rounded-lg font-mono text-xs font-bold">
+                    MÃ PIN: {selectedRoomReport.pinCode}
+                  </span>
+                  <span className="px-3 py-1 bg-amber-100 text-amber-950 rounded-lg text-xs font-bold">
+                    Chế độ: {selectedRoomReport.mode}
+                  </span>
+                  <span className="text-xs text-teal-800/70 font-semibold flex items-center gap-1">
+                    <Clock size={13} /> {new Date(selectedRoomReport.createdAt).toLocaleString("vi-VN")}
+                  </span>
+                </div>
+                <h2 className="text-2xl md:text-3xl font-bold font-serif text-[#08282e]">
+                  {selectedRoomReport.quizTitle}
+                </h2>
+              </div>
+              <button
+                onClick={() => setSelectedRoomReport(null)}
+                className="w-10 h-10 rounded-2xl bg-gray-100 hover:bg-gray-200 text-gray-500 hover:text-black flex items-center justify-center transition-colors shrink-0"
+              >
+                <X size={20} className="stroke-[2.5px]" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 md:p-8 overflow-y-auto space-y-6 flex-1">
+              {/* 4 Cards Thống Kê Tổng Quan */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
+                <div className="bg-white p-4 rounded-2xl border border-teal-100 shadow-sm">
+                  <span className="text-xs font-bold text-teal-800/70 block mb-1">Tổng Thí Sinh</span>
+                  <div className="flex items-center gap-2">
+                    <Users size={20} className="text-teal-600" />
+                    <span className="text-2xl font-black text-teal-950">{selectedRoomReport.totalPlayers}</span>
+                  </div>
+                </div>
+
+                <div className="bg-white p-4 rounded-2xl border border-teal-100 shadow-sm">
+                  <span className="text-xs font-bold text-teal-800/70 block mb-1">Độ Chính Xác Chung</span>
+                  <div className="flex items-center gap-2">
+                    <Award size={20} className="text-amber-600" />
+                    <span className="text-2xl font-black text-amber-950">{selectedRoomReport.overallAccuracy}%</span>
+                  </div>
+                </div>
+
+                <div className="bg-white p-4 rounded-2xl border border-teal-100 shadow-sm">
+                  <span className="text-xs font-bold text-emerald-800/70 block mb-1 flex items-center gap-1">
+                    <TrendingUp size={14} className="text-emerald-600" /> Câu Dễ Nhất
+                  </span>
+                  <p className="text-xs font-bold text-emerald-950 truncate" title={selectedRoomReport.easiestQuestion || "Chưa có"}>
+                    {selectedRoomReport.easiestQuestion || "Chưa có"}
+                  </p>
+                </div>
+
+                <div className="bg-white p-4 rounded-2xl border border-teal-100 shadow-sm">
+                  <span className="text-xs font-bold text-rose-800/70 block mb-1 flex items-center gap-1">
+                    <TrendingDown size={14} className="text-rose-600" /> Câu Khó Nhất
+                  </span>
+                  <p className="text-xs font-bold text-rose-950 truncate" title={selectedRoomReport.hardestQuestion || "Chưa có"}>
+                    {selectedRoomReport.hardestQuestion || "Chưa có"}
+                  </p>
+                </div>
+              </div>
+
+              {/* Tabs chuyển đổi giữa Bảng Điểm & Phân Tích Câu Hỏi */}
+              <div className="flex gap-2 p-1 bg-gray-200/60 rounded-xl w-fit">
+                <button
+                  onClick={() => setModalTab("players")}
+                  className={`px-5 py-2 rounded-lg font-bold text-xs md:text-sm transition-all ${
+                    modalTab === "players"
+                      ? "bg-white text-teal-950 shadow-sm"
+                      : "text-gray-600 hover:text-black"
+                  }`}
+                >
+                  Bảng Điểm Thí Sinh ({selectedRoomReport.players.length})
+                </button>
+                <button
+                  onClick={() => setModalTab("questions")}
+                  className={`px-5 py-2 rounded-lg font-bold text-xs md:text-sm transition-all ${
+                    modalTab === "questions"
+                      ? "bg-white text-teal-950 shadow-sm"
+                      : "text-gray-600 hover:text-black"
+                  }`}
+                >
+                  Phân Tích Câu Hỏi ({selectedRoomReport.questions.length})
+                </button>
+              </div>
+
+              {/* BẢNG 1: THÍ SINH */}
+              {modalTab === "players" && (
+                <div className="bg-white rounded-2xl border border-teal-100 overflow-hidden shadow-sm">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs md:text-sm">
+                      <thead className="bg-[#005C53] text-white font-bold uppercase text-[11px] tracking-wider">
+                        <tr>
+                          <th className="py-3 px-4 text-center">Hạng</th>
+                          <th className="py-3 px-4">Thí Sinh</th>
+                          <th className="py-3 px-4 text-right">Tổng Điểm</th>
+                          <th className="py-3 px-4 text-center">Đúng / Sai</th>
+                          <th className="py-3 px-4 text-right">Chính Xác</th>
+                          <th className="py-3 px-4 text-right">Thời Gian TB</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {selectedRoomReport.players.length === 0 ? (
+                          <tr>
+                            <td colSpan={6} className="py-8 text-center text-gray-400 font-bold">
+                              Chưa có thí sinh nào hoàn thành bài thi.
+                            </td>
+                          </tr>
+                        ) : (
+                          selectedRoomReport.players.map((p) => (
+                            <tr
+                              key={p.rank + p.nickname}
+                              className={`hover:bg-teal-50/50 transition-colors ${
+                                p.rank === 1
+                                  ? "bg-amber-100/40 font-semibold"
+                                  : p.rank === 2
+                                  ? "bg-gray-100/50 font-semibold"
+                                  : p.rank === 3
+                                  ? "bg-amber-50/30 font-semibold"
+                                  : ""
+                              }`}
+                            >
+                              <td className="py-3 px-4 text-center font-black">
+                                {p.rank === 1 ? "🥇 1" : p.rank === 2 ? "🥈 2" : p.rank === 3 ? "🥉 3" : p.rank}
+                              </td>
+                              <td className="py-3 px-4 font-bold text-gray-900">{p.nickname}</td>
+                              <td className="py-3 px-4 text-right font-black text-teal-800">
+                                {p.totalScore.toLocaleString()}
+                              </td>
+                              <td className="py-3 px-4 text-center font-bold">
+                                <span className="text-emerald-700">{p.correctCount}</span> /{" "}
+                                <span className="text-rose-600">{p.wrongCount}</span>
+                              </td>
+                              <td className="py-3 px-4 text-right font-black text-amber-900">{p.accuracy}%</td>
+                              <td className="py-3 px-4 text-right text-gray-500 font-bold">{p.avgResponseTimeSec}s</td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* BẢNG 2: CÂU HỎI */}
+              {modalTab === "questions" && (
+                <div className="bg-white rounded-2xl border border-teal-100 overflow-hidden shadow-sm">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs md:text-sm">
+                      <thead className="bg-[#042940] text-white font-bold uppercase text-[11px] tracking-wider">
+                        <tr>
+                          <th className="py-3 px-4 text-center">STT</th>
+                          <th className="py-3 px-4">Nội Dung Câu Hỏi</th>
+                          <th className="py-3 px-4 text-center">Dạng Câu</th>
+                          <th className="py-3 px-4 text-center">Lượt Nộp</th>
+                          <th className="py-3 px-4 text-right">Tỷ Lệ Đúng</th>
+                          <th className="py-3 px-4 text-center">Độ Khó</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {selectedRoomReport.questions.length === 0 ? (
+                          <tr>
+                            <td colSpan={6} className="py-8 text-center text-gray-400 font-bold">
+                              Chưa có dữ liệu phân tích câu hỏi.
+                            </td>
+                          </tr>
+                        ) : (
+                          selectedRoomReport.questions.map((q) => (
+                            <tr key={q.orderIndex} className="hover:bg-teal-50/50 transition-colors">
+                              <td className="py-3 px-4 text-center font-black text-gray-500">{q.orderIndex}</td>
+                              <td className="py-3 px-4 font-bold text-gray-900 max-w-xs md:max-w-md truncate" title={q.questionText}>
+                                {q.questionText}
+                              </td>
+                              <td className="py-3 px-4 text-center">
+                                <span className="px-2 py-0.5 bg-gray-100 rounded text-xs font-bold text-gray-600">
+                                  {q.type}
+                                </span>
+                              </td>
+                              <td className="py-3 px-4 text-center font-bold text-gray-700">
+                                {q.correctAnswers} / {q.totalAnswers}
+                              </td>
+                              <td className="py-3 px-4 text-right font-black text-teal-800">{q.accuracy}%</td>
+                              <td className="py-3 px-4 text-center">
+                                <span
+                                  className={`px-2.5 py-0.5 rounded-full text-xs font-black ${
+                                    q.difficulty === "Dễ"
+                                      ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                                      : q.difficulty === "Khó"
+                                      ? "bg-rose-100 text-rose-800 border border-rose-300"
+                                      : "bg-amber-100 text-amber-800 border border-amber-300"
+                                  }`}
+                                >
+                                  {q.difficulty}
+                                </span>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-5 md:p-6 border-t border-amber-900/10 bg-gray-50 flex items-center justify-between gap-4">
+              <button
+                onClick={() => handleDownloadExcel(selectedRoomReport.roomId, selectedRoomReport.quizTitle)}
+                disabled={exportingId === selectedRoomReport.roomId}
+                className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white font-bold text-xs md:text-sm rounded-xl shadow-sm transition-all hover:scale-105 active:scale-95 flex items-center gap-2 disabled:opacity-60"
+              >
+                {exportingId === selectedRoomReport.roomId ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  <FileSpreadsheet size={16} />
+                )}
+                <span>Xuất Báo Cáo Excel (.xlsx)</span>
+              </button>
+
+              <button
+                onClick={() => setSelectedRoomReport(null)}
+                className="px-5 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold text-xs md:text-sm rounded-xl transition-all"
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <footer className="py-8 border-t border-amber-600/20 text-center text-teal-900/60 bg-white/50 backdrop-blur-md text-xs font-sans relative z-10">
         <p>© 2026 Gaming Edu · Hệ thống quản lý và báo cáo thành tích học tập.</p>

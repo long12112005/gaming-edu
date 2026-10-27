@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Cookies from "js-cookie";
 import { useGameHub } from "@/hooks/useGameHub";
 import { useQAHub } from "@/hooks/useQAHub";
+import { api } from "@/lib/api";
 import {
   Trophy,
   Check,
@@ -76,8 +77,10 @@ export default function PlayerGameRoom() {
     error,
     roomInfo,
     currentSlide,
+    countdown,
     slideTimeLeft,
     answerResult,
+    answerRejected,
     leaderboard,
     joinRoom,
     submitAnswer: hubSubmitAnswer,
@@ -88,6 +91,8 @@ export default function PlayerGameRoom() {
     askQuestion,
     upvoteQuestion,
   } = useQAHub(roomInfo?.roomId || null);
+
+  const pinnedQuestion = questions.find((q) => q.isPinned && !q.isResolved);
 
   const [hasAnswered, setHasAnswered] = useState(false);
   const [showQA, setShowQA] = useState(false);
@@ -131,6 +136,39 @@ export default function PlayerGameRoom() {
       setMatchingPairs({});
     }
   }, [gameState, currentSlide?.slideId]);
+
+  // Auto-save draft mỗi 30s khi đang làm bài (chế độ Async / Tự luận / Matching)
+  useEffect(() => {
+    if (gameState !== "PLAYING" || !currentSlide || hasAnswered) return;
+
+    const interval = setInterval(async () => {
+      const draftContent =
+        currentSlide.type === "FILL_IN_BLANK"
+          ? blankAnswer
+          : currentSlide.type === "MATCHING"
+          ? JSON.stringify(matchingPairs)
+          : currentSlide.type === "WORD_CLOUD"
+          ? wordCloudAnswer
+          : "";
+
+      if (draftContent && roomInfo?.roomId) {
+        try {
+          const playerId = (roomInfo as any)?.playerId || (roomInfo as any)?.roomPlayerId;
+          if (playerId) {
+            await api.put("/rooms/answers/draft", {
+              roomPlayerId: playerId,
+              slideId: currentSlide.slideId,
+              answerData: draftContent,
+            });
+          }
+        } catch {
+          // ignore auto-save network issues
+        }
+      }
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [gameState, currentSlide, hasAnswered, blankAnswer, matchingPairs, wordCloudAnswer, roomInfo]);
 
   // Danh sách thẻ bên phải cho MATCHING
   const matchingRightOptions = useMemo(() => {
@@ -339,7 +377,40 @@ export default function PlayerGameRoom() {
         </div>
       </header>
 
+      {/* Overlay Countdown 3-2-1 */}
+      {countdown !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md animate-fade-in">
+          <div className="text-center">
+            <div className="text-9xl md:text-[14rem] font-black text-amber-400 drop-shadow-[0_12px_24px_rgba(245,158,11,0.5)] animate-bounce font-mono">
+              {countdown}
+            </div>
+            <p className="text-2xl md:text-3xl font-extrabold text-white uppercase tracking-widest mt-4">
+              Chuẩn bị trả lời...
+            </p>
+          </div>
+        </div>
+      )}
+
       <main className="flex-1 flex flex-col p-4 md:p-8 max-w-4xl mx-auto w-full relative z-10">
+        {/* Banner Câu Hỏi Được Ghim Từ Host */}
+        {pinnedQuestion && (
+          <div className="bg-gradient-to-r from-amber-400 to-yellow-400 text-teal-950 p-4 rounded-2xl shadow-md border-2 border-amber-500 mb-6 flex items-center justify-between gap-3 animate-fade-in-up">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 bg-teal-900 text-amber-300 rounded-xl flex items-center justify-center font-bold text-base shrink-0">
+                📌
+              </div>
+              <div>
+                <span className="text-[11px] font-black uppercase text-teal-900 block tracking-wider">
+                  Chủ phòng đang giải đáp ({pinnedQuestion.playerNickname})
+                </span>
+                <span className="text-sm font-extrabold line-clamp-1">{pinnedQuestion.content}</span>
+              </div>
+            </div>
+            <span className="text-xs font-black bg-white/50 px-2.5 py-1 rounded-lg shrink-0">
+              👍 {pinnedQuestion.upvotes}
+            </span>
+          </div>
+        )}
         {/* ════════════════════════════════════════════════════════════
             WAITING STATE (CHỜ HOST BẮT ĐẦU)
         ════════════════════════════════════════════════════════════ */}
@@ -642,6 +713,23 @@ export default function PlayerGameRoom() {
         )}
 
         {/* ════════════════════════════════════════════════════════════
+            ANSWER REJECTED STATE (KHI CÂU TRẢ LỜI BỊ TỪ CHỐI)
+        ════════════════════════════════════════════════════════════ */}
+        {answerRejected && !answerResult && (
+          <div className="flex-1 flex flex-col items-center justify-center text-center animate-fade-in-up py-8">
+            <div className="w-28 h-28 bg-rose-500 text-white rounded-[32px] border-4 border-rose-700 shadow-[0_8px_0_0_#be123c] flex items-center justify-center mb-6 transform rotate-3">
+              <X size={60} strokeWidth={4} />
+            </div>
+            <h2 className="text-3xl md:text-4xl font-black text-rose-700 mb-3 tracking-tight">
+              {answerRejected.reason === "EXPIRED" ? "Đã Hết Thời Gian!" : "Không Thể Ghi Nhận"}
+            </h2>
+            <p className="text-base font-bold text-gray-700 bg-white/95 px-6 py-3.5 rounded-2xl border-2 border-rose-200 shadow-sm max-w-md">
+              {answerRejected.message || "Đã quá thời gian quy định cho câu hỏi này."}
+            </p>
+          </div>
+        )}
+
+        {/* ════════════════════════════════════════════════════════════
             FINISHED STATE (TRÒ CHƠI KẾT THÚC)
         ════════════════════════════════════════════════════════════ */}
         {gameState === "FINISHED" && (
@@ -740,15 +828,33 @@ export default function PlayerGameRoom() {
                     questions.map((q) => (
                       <div
                         key={q.id}
-                        className="p-4 bg-gray-50 border border-teal-100 rounded-2xl flex items-start justify-between gap-3"
+                        className={`p-4 rounded-2xl flex items-start justify-between gap-3 border transition-all ${
+                          q.isPinned
+                            ? "bg-amber-50 border-amber-300 shadow-sm"
+                            : q.isResolved
+                            ? "bg-gray-50 border-gray-200 opacity-70"
+                            : "bg-white border-teal-100 shadow-sm"
+                        }`}
                       >
                         <div>
-                          <p className="font-bold text-teal-950 text-sm">{q.content}</p>
-                          <p className="text-[11px] text-gray-500 mt-1 font-semibold">{q.playerNickname}</p>
+                          <div className="flex items-center gap-2 mb-1 flex-wrap">
+                            {q.isPinned && (
+                              <span className="text-[10px] font-black uppercase bg-amber-400 text-amber-950 px-2 py-0.5 rounded-md">
+                                📌 Đang Ghim
+                              </span>
+                            )}
+                            {q.isResolved && (
+                              <span className="text-[10px] font-black uppercase bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md">
+                                ✓ Đã Giải Đáp
+                              </span>
+                            )}
+                            <span className="text-[11px] text-teal-800 font-bold">{q.playerNickname}</span>
+                          </div>
+                          <p className="font-bold text-teal-950 text-sm leading-relaxed">{q.content}</p>
                         </div>
                         <button
                           onClick={() => upvoteQuestion(q.id)}
-                          className="flex items-center gap-1 px-3 py-1.5 bg-white border border-teal-200 rounded-xl text-teal-800 font-bold text-xs hover:bg-teal-50 shadow-sm"
+                          className="flex items-center gap-1 px-3 py-1.5 bg-white border border-teal-200 rounded-xl text-teal-800 font-bold text-xs hover:bg-teal-50 shadow-sm shrink-0"
                         >
                           <ThumbsUp size={13} />
                           <span>{q.upvotes}</span>
