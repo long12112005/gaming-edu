@@ -25,9 +25,17 @@ import {
   Shield,
   Clock,
   Calendar,
+  Globe,
+  User as UserIcon,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { Quiz } from "@/types/database";
+
+export interface QuizOptionItem extends Quiz {
+  isMine?: boolean;
+  creatorNickname?: string;
+  creatorAvatar?: string | null;
+}
 
 interface CreateRoomModalProps {
   isOpen: boolean;
@@ -110,12 +118,13 @@ export default function CreateRoomModal({
   const router = useRouter();
 
   // Step States
-  const [quizzes, setQuizzes] = useState<Quiz[]>([]);
+  const [quizzes, setQuizzes] = useState<QuizOptionItem[]>([]);
   const [loadingQuizzes, setLoadingQuizzes] = useState(false);
   const [selectedQuizId, setSelectedQuizId] = useState<string>(initialQuizId || "");
   const [isChangingQuiz, setIsChangingQuiz] = useState(false);
   const [quizSearch, setQuizSearch] = useState("");
   const [quizTopicFilter, setQuizTopicFilter] = useState("ALL");
+  const [quizSourceTab, setQuizSourceTab] = useState<"ALL" | "MINE" | "COMMUNITY">("ALL");
 
   const [selectedMode, setSelectedMode] = useState<
     "HOST_PACED" | "ASYNC_TOURNAMENT"
@@ -154,7 +163,7 @@ export default function CreateRoomModal({
     }
   }, [initialTheme]);
 
-  // Tải danh sách bộ đề (Ưu tiên bộ đề của tôi, fallback bộ đề công khai)
+  // Tải danh sách bộ đề: Hợp nhất cả Bộ đề của tôi và Bộ đề công khai cộng đồng
   useEffect(() => {
     if (!isOpen) return;
 
@@ -164,37 +173,47 @@ export default function CreateRoomModal({
       setErrorMsg(null);
       try {
         const token = Cookies.get("token");
-        let list: Quiz[] = [];
+        const quizMap = new Map<string, QuizOptionItem>();
 
+        // 1. Tải bộ đề cá nhân của tôi (nếu đã đăng nhập)
         if (token) {
           try {
             const mineRes = await api.get("/quizzes/mine");
-            if (mineRes.data?.data && Array.isArray(mineRes.data.data)) {
-              list = mineRes.data.data;
+            const mineList = mineRes.data?.data || mineRes.data;
+            if (Array.isArray(mineList)) {
+              mineList.forEach((q: any) => {
+                quizMap.set(q.id, { ...q, isMine: true });
+              });
             }
           } catch (e) {
-            console.warn("Lỗi tải quizzes/mine, fallback sang public:", e);
+            console.warn("Lỗi tải quizzes/mine:", e);
           }
         }
 
-        // Nếu người dùng chưa có bộ đề nào, lấy thêm bộ đề công khai
-        if (list.length === 0) {
-          try {
-            const publicRes = await api.get("/quizzes");
-            if (publicRes.data?.data && Array.isArray(publicRes.data.data)) {
-              list = publicRes.data.data;
-            } else if (Array.isArray(publicRes.data)) {
-              list = publicRes.data;
-            }
-          } catch (e) {
-            console.warn("Lỗi tải public quizzes:", e);
+        // 2. Tải toàn bộ bộ đề công khai do người khác/cộng đồng tạo
+        try {
+          const publicRes = await api.get("/quizzes");
+          const publicList = publicRes.data?.data || publicRes.data;
+          if (Array.isArray(publicList)) {
+            publicList.forEach((q: any) => {
+              if (quizMap.has(q.id)) {
+                const existing = quizMap.get(q.id)!;
+                quizMap.set(q.id, { ...q, ...existing, isMine: true });
+              } else {
+                quizMap.set(q.id, { ...q, isMine: false });
+              }
+            });
           }
+        } catch (e) {
+          console.warn("Lỗi tải public quizzes:", e);
         }
+
+        const combinedList = Array.from(quizMap.values());
 
         if (isMounted) {
-          setQuizzes(list);
-          if (!selectedQuizId && list.length > 0) {
-            setSelectedQuizId(list[0].id);
+          setQuizzes(combinedList);
+          if (!selectedQuizId && combinedList.length > 0) {
+            setSelectedQuizId(combinedList[0].id);
           }
         }
       } catch (err: any) {
@@ -215,6 +234,10 @@ export default function CreateRoomModal({
     return quizzes.find((q) => q.id === selectedQuizId);
   }, [quizzes, selectedQuizId]);
 
+  // Số lượng phân theo nguồn
+  const myQuizzesCount = useMemo(() => quizzes.filter((q) => q.isMine).length, [quizzes]);
+  const communityQuizzesCount = useMemo(() => quizzes.filter((q) => !q.isMine).length, [quizzes]);
+
   // Danh sách chủ đề có trong dữ liệu
   const availableTopics = useMemo(() => {
     const set = new Set<string>();
@@ -224,13 +247,17 @@ export default function CreateRoomModal({
     return Array.from(set);
   }, [quizzes]);
 
-  // Danh sách sau khi tìm kiếm và lọc
+  // Danh sách sau khi tìm kiếm và lọc nguồn/chủ đề
   const filteredQuizzes = useMemo(() => {
     return quizzes.filter((q) => {
+      if (quizSourceTab === "MINE" && !q.isMine) return false;
+      if (quizSourceTab === "COMMUNITY" && q.isMine) return false;
+
       const matchSearch =
         quizSearch.trim() === "" ||
         q.title.toLowerCase().includes(quizSearch.toLowerCase()) ||
-        (q.topic && q.topic.toLowerCase().includes(quizSearch.toLowerCase()));
+        (q.topic && q.topic.toLowerCase().includes(quizSearch.toLowerCase())) ||
+        (q.creatorNickname && q.creatorNickname.toLowerCase().includes(quizSearch.toLowerCase()));
 
       const matchTopic =
         quizTopicFilter === "ALL" ||
@@ -238,7 +265,7 @@ export default function CreateRoomModal({
 
       return matchSearch && matchTopic;
     });
-  }, [quizzes, quizSearch, quizTopicFilter]);
+  }, [quizzes, quizSourceTab, quizSearch, quizTopicFilter]);
 
   const getQuizSlideCount = (quiz: any): number => {
     if (!quiz) return 0;
@@ -365,7 +392,7 @@ export default function CreateRoomModal({
               BƯỚC 1: CHỌN BỘ ĐỀ THI ĐẤU (QUIZ SELECTION)
           ═══════════════════════════════════════════════════════════════════ */}
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2.5">
               <label className="text-xs sm:text-sm font-black font-heading text-slate-800 flex items-center gap-2 uppercase tracking-wider">
                 <span className="w-6 h-6 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-600 flex items-center justify-center text-xs font-black">
                   1
@@ -373,16 +400,32 @@ export default function CreateRoomModal({
                 Bộ Đề Câu Hỏi Sử Dụng
               </label>
 
-              {currentQuiz && !isChangingQuiz && (
+              <div className="flex items-center gap-2">
+                {/* Nút Tạo đề mới trực tiếp */}
                 <button
                   type="button"
-                  onClick={() => setIsChangingQuiz(true)}
-                  className="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1.5 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200/80 px-3 py-1.5 rounded-xl transition-all cursor-pointer"
+                  onClick={() => {
+                    onClose();
+                    router.push("/quiz/create");
+                  }}
+                  className="text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 px-3 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
+                  title="Tạo một bộ đề câu hỏi mới"
                 >
-                  <RotateCcw size={12} />
-                  <span>Chọn Đề Khác ({quizzes.length} Bộ Đề)</span>
+                  <Plus size={14} />
+                  <span>Tạo Đề Mới</span>
                 </button>
-              )}
+
+                {currentQuiz && !isChangingQuiz && (
+                  <button
+                    type="button"
+                    onClick={() => setIsChangingQuiz(true)}
+                    className="text-xs font-bold text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 border border-slate-200 px-3 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5"
+                  >
+                    <RotateCcw size={12} />
+                    <span>Chọn Đề Khác ({quizzes.length})</span>
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Selected Quiz Card */}
@@ -393,10 +436,19 @@ export default function CreateRoomModal({
                     📚
                   </div>
                   <div className="min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span className="bg-indigo-600 text-white px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider">
                         {currentQuiz.topic || "Tổng Hợp"}
                       </span>
+                      {currentQuiz.isMine ? (
+                        <span className="bg-amber-100 text-amber-800 border border-amber-300/60 px-2 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-1">
+                          👤 Của tôi
+                        </span>
+                      ) : (
+                        <span className="bg-sky-100 text-sky-800 border border-sky-300/60 px-2 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-1">
+                          🌐 Công khai {currentQuiz.creatorNickname ? `(${currentQuiz.creatorNickname})` : ""}
+                        </span>
+                      )}
                       {getQuizSlideCount(currentQuiz) > 0 ? (
                         <span className="text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-md text-[11px] font-bold">
                           ✓ Đủ điều kiện ({getQuizSlideCount(currentQuiz)} câu)
@@ -416,17 +468,84 @@ export default function CreateRoomModal({
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => setIsChangingQuiz(true)}
-                  className="px-4 py-2 rounded-xl bg-white hover:bg-slate-50 border border-indigo-200 text-indigo-700 font-bold text-xs shadow-xs hover:border-indigo-300 transition-all cursor-pointer shrink-0 self-end sm:self-center"
-                >
-                  Thay đổi
-                </button>
+                <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      router.push("/quiz/create");
+                    }}
+                    className="px-3.5 py-2 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-bold text-xs shadow-xs hover:border-slate-300 transition-all cursor-pointer flex items-center gap-1.5"
+                    title="Tạo bộ đề mới"
+                  >
+                    <Plus size={14} className="text-indigo-600" />
+                    <span>Tạo Đề Khác</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsChangingQuiz(true)}
+                    className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs transition-all cursor-pointer"
+                  >
+                    Thay đổi
+                  </button>
+                </div>
               </div>
             ) : (
               /* Quiz Selection List (Khi người dùng mở danh sách chọn đề) */
               <div className="bg-slate-50/80 border border-slate-200 rounded-2xl p-4 space-y-3.5">
+                {/* Tabs phân loại nguồn đề: Tất cả / Của tôi / Công khai */}
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/80 pb-3">
+                  <div className="flex items-center gap-1.5 bg-slate-200/60 p-1 rounded-xl">
+                    <button
+                      type="button"
+                      onClick={() => setQuizSourceTab("ALL")}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        quizSourceTab === "ALL"
+                          ? "bg-white text-indigo-700 shadow-xs"
+                          : "text-slate-600 hover:text-slate-900"
+                      }`}
+                    >
+                      Tất Cả ({quizzes.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setQuizSourceTab("MINE")}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                        quizSourceTab === "MINE"
+                          ? "bg-white text-indigo-700 shadow-xs"
+                          : "text-slate-600 hover:text-slate-900"
+                      }`}
+                    >
+                      <span>👤 Của Tôi</span>
+                      <span className="text-[10px] opacity-75">({myQuizzesCount})</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setQuizSourceTab("COMMUNITY")}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                        quizSourceTab === "COMMUNITY"
+                          ? "bg-white text-indigo-700 shadow-xs"
+                          : "text-slate-600 hover:text-slate-900"
+                      }`}
+                    >
+                      <span>🌐 Công Khai Cộng Đồng</span>
+                      <span className="text-[10px] opacity-75">({communityQuizzesCount})</span>
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      router.push("/quiz/create");
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold flex items-center gap-1 cursor-pointer transition-all"
+                  >
+                    <Plus size={13} />
+                    <span>+ Tạo Đề Mới</span>
+                  </button>
+                </div>
+
                 <div className="flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center justify-between">
                   <div className="relative flex-1">
                     <Search
@@ -437,7 +556,7 @@ export default function CreateRoomModal({
                       type="text"
                       value={quizSearch}
                       onChange={(e) => setQuizSearch(e.target.value)}
-                      placeholder="Tìm kiếm bộ đề theo tên hoặc chủ đề..."
+                      placeholder="Tìm kiếm bộ đề theo tên, chủ đề hoặc người tạo..."
                       className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-xs sm:text-sm bg-white focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 transition-all"
                     />
                   </div>
@@ -448,7 +567,7 @@ export default function CreateRoomModal({
                       onChange={(e) => setQuizTopicFilter(e.target.value)}
                       className="px-3 py-2 rounded-xl border border-slate-200 text-xs bg-white text-slate-700 focus:outline-none focus:border-indigo-500 font-medium cursor-pointer shrink-0"
                     >
-                      <option value="ALL">Tất cả chủ đề ({quizzes.length})</option>
+                      <option value="ALL">Tất cả chủ đề</option>
                       {availableTopics.map((topic) => (
                         <option key={topic} value={topic}>
                           {topic}
@@ -464,7 +583,7 @@ export default function CreateRoomModal({
                     <span className="text-xs font-medium">Đang tải danh sách bộ đề...</span>
                   </div>
                 ) : filteredQuizzes.length > 0 ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-56 overflow-y-auto pr-1">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-60 overflow-y-auto pr-1">
                     {filteredQuizzes.map((quiz) => {
                       const isSelected = selectedQuizId === quiz.id;
                       return (
@@ -481,18 +600,30 @@ export default function CreateRoomModal({
                               : "bg-white border-slate-200/90 hover:border-indigo-300 hover:bg-indigo-50/30 text-slate-800 shadow-2xs"
                           }`}
                         >
-                          <div className="min-w-0">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5 mb-1">
+                              {quiz.isMine ? (
+                                <span className="bg-amber-100 text-amber-800 border border-amber-300/60 px-1.5 py-0.5 rounded text-[10px] font-bold">
+                                  👤 Của tôi
+                                </span>
+                              ) : (
+                                <span className="bg-sky-100 text-sky-800 border border-sky-300/60 px-1.5 py-0.5 rounded text-[10px] font-bold">
+                                  🌐 {quiz.creatorNickname ? `Bởi ${quiz.creatorNickname}` : "Công khai"}
+                                </span>
+                              )}
+                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                                {quiz.topic || "Môn học"}
+                              </span>
+                            </div>
+
                             <div className="font-heading font-black text-xs sm:text-sm text-slate-900 truncate">
                               {quiz.title}
                             </div>
-                            <div className="text-[11px] text-slate-500 flex items-center gap-2 mt-0.5">
-                              <span className="font-bold text-indigo-600">
-                                {quiz.topic || "Môn học"}
-                              </span>
-                              <span>•</span>
+
+                            <div className="text-[11px] text-slate-500 flex items-center gap-2 mt-1">
                               {getQuizSlideCount(quiz) > 0 ? (
-                                <span className="font-semibold text-slate-600">
-                                  {getQuizSlideCount(quiz)} câu
+                                <span className="font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
+                                  ✓ {getQuizSlideCount(quiz)} câu hỏi
                                 </span>
                               ) : (
                                 <span className="font-bold text-rose-600 bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded text-[10px]">
@@ -516,17 +647,39 @@ export default function CreateRoomModal({
                     })}
                   </div>
                 ) : (
-                  <div className="py-8 text-center text-slate-500 text-xs bg-white rounded-xl border border-slate-200/80">
-                    <p className="font-bold text-slate-700">Không tìm thấy bộ đề nào!</p>
+                  <div className="py-8 text-center text-slate-500 text-xs bg-white rounded-xl border border-slate-200/80 space-y-2">
+                    <p className="font-bold text-slate-700">Không tìm thấy bộ đề nào phù hợp!</p>
+                    <p className="text-slate-400 text-[11px]">
+                      Bạn có thể tạo một bộ đề mới toanh để tổ chức phòng chơi ngay.
+                    </p>
                     <button
                       type="button"
-                      onClick={() => router.push("/quiz/create")}
-                      className="mt-2 text-indigo-600 hover:text-indigo-800 font-bold inline-flex items-center gap-1 cursor-pointer"
+                      onClick={() => {
+                        onClose();
+                        router.push("/quiz/create");
+                      }}
+                      className="mt-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl inline-flex items-center gap-1.5 cursor-pointer shadow-xs"
                     >
                       <Plus size={14} /> Tạo bộ đề mới ngay
                     </button>
                   </div>
                 )}
+
+                {/* Thanh trợ giúp cuối danh sách */}
+                <div className="pt-2 border-t border-slate-200/70 flex items-center justify-between text-xs text-slate-500">
+                  <span>💡 Muốn dùng một bộ đề riêng chưa có trong danh sách?</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      router.push("/quiz/create");
+                    }}
+                    className="font-bold text-indigo-600 hover:text-indigo-800 hover:underline cursor-pointer flex items-center gap-1"
+                  >
+                    <Plus size={13} />
+                    <span>Tự soạn bộ đề mới</span>
+                  </button>
+                </div>
               </div>
             )}
           </div>
