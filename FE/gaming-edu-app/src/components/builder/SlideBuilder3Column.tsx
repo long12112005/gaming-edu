@@ -339,10 +339,15 @@ export default function SlideBuilder3Column({ quizId }: { quizId: string }) {
         throw new Error("Không thể trích xuất câu hỏi từ tài liệu này.");
       }
 
-      const newAiSlides: SlideDraft[] = generatedItems.map((item: any) => ({
-        id: tempId(),
-        type: item.type || "QUIZ",
-        questionText: item.questionText || "Câu hỏi",
+      const newAiSlides: SlideDraft[] = generatedItems.map((item: any) => {
+        const rawType = (item.type || item.questionType || "QUIZ").toUpperCase();
+        const slideType = ["QUIZ", "FILL_IN_BLANK", "MATCHING", "POLL", "WORD_CLOUD"].includes(rawType)
+          ? (rawType as SlideType)
+          : "QUIZ";
+        return {
+          id: tempId(),
+          type: slideType,
+          questionText: item.questionText || "Câu hỏi",
         timeLimit: item.timeLimit > 0 ? item.timeLimit : 30,
         points: item.points > 0 ? item.points : 1000,
         status: "PUBLISHED",
@@ -356,7 +361,8 @@ export default function SlideBuilder3Column({ quizId }: { quizId: string }) {
               blankKeywords: opt.blankKeywords,
             }))
           : [],
-      }));
+        };
+      });
 
       setAiProgress(100);
       setAiStatus("success");
