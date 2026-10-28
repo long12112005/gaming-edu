@@ -99,14 +99,21 @@ public class SlidesController : ControllerBase
             for (int i = 0; i < request.Options.Count; i++)
             {
                 var opt = request.Options[i];
+                var content = !string.IsNullOrWhiteSpace(opt.Content)
+                    ? opt.Content.Trim()
+                    : (request.Type == "FILL_IN_BLANK" ? (opt.BlankKeywords?.Trim() ?? "") : "");
+                var blankKeywords = !string.IsNullOrWhiteSpace(opt.BlankKeywords)
+                    ? opt.BlankKeywords.Trim()
+                    : (request.Type == "FILL_IN_BLANK" ? content : null);
+
                 _db.SlideOptions.Add(new SlideOption
                 {
                     Id            = Guid.NewGuid(),
                     SlideId       = slide.Id,
-                    Content       = opt.Content.Trim(),
-                    IsCorrect     = opt.IsCorrect,
+                    Content       = content,
+                    IsCorrect     = request.Type == "MATCHING" ? true : opt.IsCorrect,
                     MatchingPair  = opt.MatchingPair?.Trim(),
-                    BlankKeywords = opt.BlankKeywords?.Trim(),
+                    BlankKeywords = blankKeywords,
                     OrderIndex    = i,
                 });
             }
@@ -174,17 +181,25 @@ public class SlidesController : ControllerBase
             _db.SlideOptions.RemoveRange(oldOptions);
 
             // Thêm options mới
+            var currentType = slide!.Type;
             for (int i = 0; i < request.Options.Count; i++)
             {
                 var opt = request.Options[i];
+                var content = !string.IsNullOrWhiteSpace(opt.Content)
+                    ? opt.Content.Trim()
+                    : (currentType == "FILL_IN_BLANK" ? (opt.BlankKeywords?.Trim() ?? "") : "");
+                var blankKeywords = !string.IsNullOrWhiteSpace(opt.BlankKeywords)
+                    ? opt.BlankKeywords.Trim()
+                    : (currentType == "FILL_IN_BLANK" ? content : null);
+
                 _db.SlideOptions.Add(new SlideOption
                 {
                     Id            = Guid.NewGuid(),
                     SlideId       = slideId,
-                    Content       = opt.Content.Trim(),
-                    IsCorrect     = opt.IsCorrect,
+                    Content       = content,
+                    IsCorrect     = currentType == "MATCHING" ? true : opt.IsCorrect,
                     MatchingPair  = opt.MatchingPair?.Trim(),
-                    BlankKeywords = opt.BlankKeywords?.Trim(),
+                    BlankKeywords = blankKeywords,
                     OrderIndex    = i,
                 });
             }
@@ -273,6 +288,7 @@ public class SlidesController : ControllerBase
     /// Chỉ áp dụng cho slides có IsAIGenerated = true.
     /// </summary>
     [HttpPost("{slideId:guid}/approve")]
+    [HttpPut("{slideId:guid}/approve")]
     [ProducesResponseType(typeof(ApiResponse<SlideDto>), 200)]
     [ProducesResponseType(400)]
     [ProducesResponseType(403)]
@@ -310,6 +326,7 @@ public class SlidesController : ControllerBase
     /// Chỉ áp dụng cho slides có IsAIGenerated = true và Status = DRAFT.
     /// </summary>
     [HttpPost("{slideId:guid}/reject")]
+    [HttpPut("{slideId:guid}/reject")]
     [ProducesResponseType(typeof(ApiResponse<string>), 200)]
     [ProducesResponseType(400)]
     [ProducesResponseType(403)]
@@ -347,6 +364,7 @@ public class SlidesController : ControllerBase
     /// Thuận tiện cho host muốn chấp nhận tất cả gợi ý AI cùng lúc.
     /// </summary>
     [HttpPost("approve-all")]
+    [HttpPut("approve-all")]
     [ProducesResponseType(typeof(ApiResponse<ApproveAllResult>), 200)]
     [ProducesResponseType(403)]
     [ProducesResponseType(404)]
@@ -452,15 +470,15 @@ public class SlidesController : ControllerBase
             case "FILL_IN_BLANK":
                 if (options.Count == 0)
                 { validationError = "Câu điền khuyết cần ít nhất 1 từ khóa đúng."; return; }
-                if (options.Any(o => string.IsNullOrWhiteSpace(o.BlankKeywords)))
-                { validationError = "Từ khóa đúng (BlankKeywords) không được để trống."; return; }
+                if (options.Any(o => string.IsNullOrWhiteSpace(o.Content) && string.IsNullOrWhiteSpace(o.BlankKeywords)))
+                { validationError = "Mỗi chỗ trống trong câu điền khuyết cần có từ khóa đáp án."; return; }
                 break;
 
             case "MATCHING":
                 if (options.Count < 2)
                 { validationError = "Câu ghép nối cần ít nhất 2 cặp."; return; }
-                if (options.Any(o => string.IsNullOrWhiteSpace(o.MatchingPair)))
-                { validationError = "Mỗi đáp án trong câu ghép nối cần có cặp tương ứng (MatchingPair)."; return; }
+                if (options.Any(o => string.IsNullOrWhiteSpace(o.Content) || string.IsNullOrWhiteSpace(o.MatchingPair)))
+                { validationError = "Mỗi cặp ghép nối cần có cả vế trái (Content) và vế tương ứng (MatchingPair)."; return; }
                 break;
         }
     }

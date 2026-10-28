@@ -19,6 +19,11 @@ import {
   Lock,
   Plus,
   Link2,
+  Sparkles,
+  Compass,
+  Share2,
+  Copy,
+  RefreshCw,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import SiteHeader from "@/components/layout/SiteHeader";
@@ -198,6 +203,8 @@ export default function QuizDetailPage() {
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [showModeModal, setShowModeModal] = useState(false);
+  const [cloning, setCloning] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
 
   const isLoggedIn = !!Cookies.get("token");
 
@@ -225,6 +232,40 @@ export default function QuizDetailPage() {
     };
   }, [quizId]);
 
+  // 3.4 Nhân bản bộ đề vào thư viện cá nhân
+  const handleCloneQuiz = async () => {
+    if (!isLoggedIn) {
+      router.push("/login");
+      return;
+    }
+    try {
+      setCloning(true);
+      const res = await api.post(`/quizzes/${quizId}/clone`);
+      if (res.data?.success) {
+        alert("Đã nhân bản bộ đề vào Thư viện của bạn thành công!");
+        const newQuizId = res.data.data?.id;
+        if (newQuizId) {
+          router.push(`/quiz/${newQuizId}`);
+        } else {
+          router.push("/quizzes");
+        }
+      }
+    } catch (err: unknown) {
+      const errorObj = err as { response?: { data?: { message?: string } } };
+      alert(errorObj.response?.data?.message || "Nhân bản bộ đề thất bại.");
+    } finally {
+      setCloning(false);
+    }
+  };
+
+  // 3.4 Sao chép liên kết mẫu chia sẻ
+  const handleCopyShareLink = () => {
+    if (typeof window !== "undefined") {
+      navigator.clipboard.writeText(window.location.href);
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2500);
+    }
+  };
   if (loading) {
     return (
       <div className="min-h-screen bg-[#F4F6FB] text-slate-900 flex items-center justify-center font-sans">
@@ -341,14 +382,31 @@ export default function QuizDetailPage() {
                 onClick={() => router.push("/play")}
               />
               {isLoggedIn && (
-                <ActionButton 
-                  variant="outline" 
-                  fullWidth
-                  icon={Pencil} 
-                  label="CHỈNH SỬA CÂU HỎI" 
-                  onClick={() => router.push(`/quiz/${quizId}/edit`)} 
-                />
+                <>
+                  <ActionButton 
+                    variant="outline" 
+                    fullWidth
+                    icon={Pencil} 
+                    label="CHỈNH SỬA CÂU HỎI" 
+                    onClick={() => router.push(`/quiz/${quizId}/edit`)} 
+                  />
+                  <ActionButton
+                    variant="outline"
+                    fullWidth
+                    icon={cloning ? RefreshCw : Copy}
+                    label={cloning ? "ĐANG NHÂN BẢN..." : "NHÂN BẢN VÀO THƯ VIỆN"}
+                    disabled={cloning}
+                    onClick={handleCloneQuiz}
+                  />
+                </>
               )}
+              <ActionButton
+                variant="outline"
+                fullWidth
+                icon={copiedLink ? Check : Share2}
+                label={copiedLink ? "ĐÃ SAO CHÉP LIÊN KẾT" : "CHIA SẺ BỘ ĐỀ (LINK)"}
+                onClick={handleCopyShareLink}
+              />
               {publishedSlides.length === 0 && (
                 <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl text-center">
                   <span className="font-semibold text-amber-800 text-xs">⚠️ Bộ đề chưa có câu hỏi nào được Publish. Hãy nhấn Chỉnh Sửa để hoàn thiện.</span>
