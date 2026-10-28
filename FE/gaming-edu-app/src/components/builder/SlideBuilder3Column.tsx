@@ -129,6 +129,7 @@ export default function SlideBuilder3Column({ quizId }: { quizId: string }) {
   const [aiModalOpen, setAiModalOpen] = useState(false);
   const [aiPrompt, setAiPrompt] = useState("");
   const [aiFile, setAiFile] = useState<File | null>(null);
+  const [aiQuestionCount, setAiQuestionCount] = useState<number | "">("");
   const [aiStatus, setAiStatus] = useState<"idle" | "polling" | "success" | "error">("idle");
   const [aiProgress, setAiProgress] = useState(0);
   const [aiStep, setAiStep] = useState(1);
@@ -288,79 +289,101 @@ export default function SlideBuilder3Column({ quizId }: { quizId: string }) {
   };
 
   // Sinh đề AI
-  const handleStartAiGenerate = () => {
+  const handleStartAiGenerate = async () => {
     if (!aiPrompt.trim() && !aiFile) {
       setToastMsg({ text: "Vui lòng nhập chủ đề hoặc tải file tài liệu!", type: "error" });
       return;
     }
 
     setAiStatus("polling");
-    setAiProgress(15);
+    setAiProgress(20);
     setAiStep(1);
 
-    setTimeout(() => {
-      setAiProgress(50);
-      setAiStep(2);
-    }, 1200);
+    try {
+      const formData = new FormData();
+      if (aiFile) {
+        formData.append("file", aiFile);
+      }
+      if (aiPrompt.trim()) {
+        formData.append("prompt", aiPrompt.trim());
+      }
+      if (typeof aiQuestionCount === "number" && aiQuestionCount > 0) {
+        formData.append("questionCount", aiQuestionCount.toString());
+      }
 
-    setTimeout(() => {
+      setAiProgress(45);
+      setAiStep(2);
+
+      const res = await api.post("/aijobs/parse-document", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      });
+
       setAiProgress(85);
       setAiStep(3);
-    }, 2400);
 
-    setTimeout(() => {
+      const rawData = res.data?.data || res.data;
+      let generatedItems: any[] = [];
+      if (typeof rawData === "string") {
+        try {
+          generatedItems = JSON.parse(rawData);
+        } catch {
+          generatedItems = [];
+        }
+      } else if (Array.isArray(rawData)) {
+        generatedItems = rawData;
+      }
+
+      if (!Array.isArray(generatedItems) || generatedItems.length === 0) {
+        throw new Error("Không thể trích xuất câu hỏi từ tài liệu này.");
+      }
+
+      const newAiSlides: SlideDraft[] = generatedItems.map((item: any) => ({
+        id: tempId(),
+        type: item.type || "QUIZ",
+        questionText: item.questionText || "Câu hỏi",
+        timeLimit: item.timeLimit > 0 ? item.timeLimit : 30,
+        points: item.points > 0 ? item.points : 1000,
+        status: "PUBLISHED",
+        isAIGenerated: true,
+        options: Array.isArray(item.options)
+          ? item.options.map((opt: any) => ({
+              id: tempId(),
+              content: opt.content || opt.text || "",
+              isCorrect: !!opt.isCorrect,
+              matchingPair: opt.matchingPair,
+              blankKeywords: opt.blankKeywords,
+            }))
+          : [],
+      }));
+
       setAiProgress(100);
       setAiStatus("success");
 
-      // Bổ sung 3 slide AI
-      const aiSlides: SlideDraft[] = [
-        {
-          id: tempId(),
-          type: "QUIZ",
-          questionText: `[AI] Theo tài liệu "${aiPrompt || aiFile?.name}", định nghĩa nào sau đây là chính xác nhất?`,
-          timeLimit: 30,
-          points: 1000,
-          status: "PUBLISHED",
-          isAIGenerated: true,
-          options: [
-            { id: tempId(), content: "Khái niệm trọng tâm của học thuyết", isCorrect: true },
-            { id: tempId(), content: "Hiện tượng ngoại biên thứ cấp", isCorrect: false },
-            { id: tempId(), content: "Quy chuẩn đã lỗi thời", isCorrect: false },
-            { id: tempId(), content: "Trường hợp loại trừ đặc biệt", isCorrect: false },
-          ],
-        },
-        {
-          id: tempId(),
-          type: "FILL_IN_BLANK",
-          questionText: "[AI] Trong phương pháp học chủ động, yếu tố then chốt nhất là [...] liên tục.",
-          timeLimit: 45,
-          points: 1000,
-          status: "PUBLISHED",
-          isAIGenerated: true,
-          options: [
-            { id: tempId(), content: "tương tác", isCorrect: true, blankKeywords: "tương tác, tuong tac, phản hồi" },
-          ],
-        },
-        {
-          id: tempId(),
-          type: "MATCHING",
-          questionText: "[AI] Hãy ghép nối các khái niệm tương ứng vừa được phân tích:",
-          timeLimit: 60,
-          points: 2000,
-          status: "PUBLISHED",
-          isAIGenerated: true,
-          options: [
-            { id: tempId(), content: "Input", isCorrect: true, matchingPair: "Dữ liệu đầu vào" },
-            { id: tempId(), content: "Process", isCorrect: true, matchingPair: "Xử lý trung tâm" },
-            { id: tempId(), content: "Output", isCorrect: true, matchingPair: "Kết quả hiển thị" },
-          ],
-        },
-      ];
-
-      setSlides((prev) => [...prev, ...aiSlides]);
-      setAiModalOpen(false);
-      setToastMsg({ text: "✨ AI đã phân tích và sinh 3 slide câu hỏi mới!", type: "success" });
-    }, 3200);
+      setTimeout(() => {
+        const startIdx = slides.length;
+        setSlides((prev) => [...prev, ...newAiSlides]);
+        setActiveSlideIndex(startIdx);
+        setSaveStatus("unsaved");
+        setAiModalOpen(false);
+        setAiStatus("idle");
+        setAiFile(null);
+        setAiPrompt("");
+        setAiQuestionCount("");
+        setToastMsg({
+          text: `✨ AI đã tạo thành công ${newAiSlides.length} câu hỏi vào bộ đề!`,
+          type: "success",
+        });
+      }, 500);
+    } catch (err: any) {
+      console.error("Lỗi khi sinh đề AI:", err);
+      setAiStatus("idle");
+      setToastMsg({
+        text: err?.response?.data?.message || err?.message || "Lỗi khi sinh đề AI. Vui lòng thử lại!",
+        type: "error",
+      });
+    }
   };
 
   // Nhập hàng loạt câu hỏi từ Modal (Text/Word/PDF/Excel)
@@ -1057,6 +1080,33 @@ export default function SlideBuilder3Column({ quizId }: { quizId: string }) {
                       className="hidden"
                     />
                   </label>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-bold text-slate-700">
+                      Số lượng câu hỏi muốn sinh:
+                    </label>
+                    <span className="text-[11px] text-slate-400 font-medium">Tùy chọn</span>
+                  </div>
+                  <input
+                    type="number"
+                    min={1}
+                    max={50}
+                    value={aiQuestionCount}
+                    onChange={(e) => {
+                      const val = e.target.value === "" ? "" : parseInt(e.target.value, 10);
+                      setAiQuestionCount(val);
+                    }}
+                    placeholder="Để trống để sinh toàn bộ theo tài liệu (ví dụ: 5, 10, 20...)"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-[#E2E8F0] rounded-[12px] text-xs font-medium outline-none focus:border-indigo-500 focus:bg-white transition-all text-slate-800"
+                  />
+                  <p className="text-[11px] text-indigo-600 mt-1.5 flex items-start gap-1 font-medium leading-relaxed">
+                    <span className="shrink-0">💡</span>
+                    <span>
+                      Nếu không nhập, AI sẽ tự động phân tích và sinh ra số lượng câu hỏi bằng đúng số lượng câu hỏi có trong tài liệu đã đưa.
+                    </span>
+                  </p>
                 </div>
 
                 <div className="flex items-center justify-end gap-2 pt-2">

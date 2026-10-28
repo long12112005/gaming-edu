@@ -6,7 +6,7 @@ namespace GamingEdu.API.Services;
 
 public interface IGeminiApiService
 {
-    Task<string> GenerateQuizJsonAsync(string prompt, string? fileUrl);
+    Task<string> GenerateQuizJsonAsync(string prompt, string? fileUrl, int? questionCount = null);
 }
 
 public class GeminiApiService : IGeminiApiService
@@ -22,7 +22,7 @@ public class GeminiApiService : IGeminiApiService
         _logger = logger;
     }
 
-    public async Task<string> GenerateQuizJsonAsync(string prompt, string? fileUrl)
+    public async Task<string> GenerateQuizJsonAsync(string prompt, string? fileUrl, int? questionCount = null)
     {
         var apiKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY") ?? _config["Gemini:ApiKey"];
         var model = _config["Gemini:Model"] ?? "gemini-3.5-flash-lite";
@@ -30,15 +30,29 @@ public class GeminiApiService : IGeminiApiService
         if (string.IsNullOrEmpty(apiKey))
         {
             _logger.LogWarning("Gemini API Key chưa được cấu hình. Hệ thống tự động kích hoạt Bộ sinh đề sư phạm thông minh dự phòng (Smart Fallback Generator).");
-            return GenerateSmartFallbackQuiz(prompt);
+            return GenerateSmartFallbackQuiz(prompt, questionCount);
         }
 
         try
         {
             var url = $"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={apiKey}";
 
-            var systemInstruction = @"Bạn là chuyên gia sư phạm và khảo thí AI chuyên nghiệp cho nền tảng Gaming Edu.
-Nhiệm vụ của bạn là phân tích tài liệu học tập hoặc chủ đề được cung cấp để sinh ra bộ câu hỏi chất lượng cao (3 đến 5 câu) gồm các định dạng đa dạng:
+            string countInstruction;
+            if (questionCount.HasValue && questionCount.Value > 0)
+            {
+                countInstruction = $"Hãy sinh ra CHÍNH XÁC {questionCount.Value} câu hỏi chất lượng cao.";
+            }
+            else
+            {
+                countInstruction = @"Nhiệm vụ đặc biệt: Phân tích toàn bộ tài liệu học tập hoặc đề thi được cung cấp.
+Nếu tài liệu đã có sẵn các câu hỏi (ví dụ: đề kiểm tra giữa kỳ, đề ôn thi trắc nghiệm Toán, Lý, Hóa, Sinh, Sử, Địa, Tiếng Anh,...), bạn PHẢI trích xuất và chuyển đổi ĐẦY ĐỦ TẤT CẢ các câu hỏi có trong tài liệu (số lượng câu hỏi sinh ra bằng đúng số lượng câu hỏi trong tài liệu, tuyệt đối không được bỏ sót). Giữ nguyên chuẩn xác câu hỏi và các phương án A, B, C, D kèm đáp án đúng.
+Nếu tài liệu là văn bản lý thuyết bài giảng, hãy tự động sinh số lượng câu hỏi tương xứng bao quát toàn diện các phần kiến thức cốt lõi của tài liệu.";
+            }
+
+            var systemInstruction = $@"Bạn là chuyên gia sư phạm và khảo thí AI chuyên nghiệp cho nền tảng Gaming Edu.
+{countInstruction}
+
+Gồm các định dạng đa dạng phù hợp:
 1. QUIZ (Trắc nghiệm 4 lựa chọn):
    - questionText: Nội dung câu hỏi rõ ràng.
    - options: Đúng 4 phương án, trong đó có duy nhất 1 phương án isCorrect: true, 3 phương án còn lại isCorrect: false.
@@ -85,7 +99,7 @@ QUY TẮC BẮT BUỘC:
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogWarning("Gemini API Error: {StatusCode} - {Response}. Tự động chuyển tiếp sang Smart Fallback Generator.", response.StatusCode, responseString);
-                return GenerateSmartFallbackQuiz(prompt);
+                return GenerateSmartFallbackQuiz(prompt, questionCount);
             }
 
             using var jsonDoc = JsonDocument.Parse(responseString);
@@ -104,10 +118,56 @@ QUY TẮC BẮT BUỘC:
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Lỗi khi gọi Gemini API. Tự động kích hoạt Smart Fallback Generator.");
-            return GenerateSmartFallbackQuiz(prompt);
+            return GenerateSmartFallbackQuiz(prompt, questionCount);
         }
 
-        return GenerateSmartFallbackQuiz(prompt);
+        return GenerateSmartFallbackQuiz(prompt, questionCount);
+    }
+
+    /// <summary>
+    /// Đọc và trích xuất nội dung văn bản từ các định dạng tài liệu .pdf, .docx, .txt (hỗ trợ tối đa 150.000 ký tự).
+    /// </summary>
+    public static string ExtractTextFromFile(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath)) return string.Empty;
+        var ext = Path.GetExtension(filePath).ToLowerInvariant();
+        try
+        {
+            if (ext == ".txt")
+            {
+                return File.ReadAllText(filePath);
+            }
+            if (ext == ".pdf")
+            {
+                using var pdf = UglyToad.PdfPig.PdfDocument.Open(filePath);
+                var sb = new StringBuilder();
+                foreach (var page in pdf.GetPages())
+                {
+                    sb.AppendLine(page.Text);
+                    if (sb.Length > 150000) break;
+                }
+                return sb.ToString();
+            }
+            if (ext == ".docx")
+            {
+                using var archive = System.IO.Compression.ZipFile.OpenRead(filePath);
+                var entry = archive.GetEntry("word/document.xml");
+                if (entry != null)
+                {
+                    using var stream = entry.Open();
+                    using var reader = new StreamReader(stream);
+                    var xml = reader.ReadToEnd();
+                    var doc = System.Xml.Linq.XDocument.Parse(xml);
+                    var words = doc.Descendants().Where(e => e.Name.LocalName == "t").Select(e => e.Value);
+                    return string.Join(" ", words);
+                }
+            }
+        }
+        catch
+        {
+            // Bỏ qua lỗi đọc file
+        }
+        return string.Empty;
     }
 
     private static string CleanJson(string raw)
@@ -134,7 +194,7 @@ QUY TẮC BẮT BUỘC:
     /// Tự động bóc tách từ khóa chủ đề và sinh ngay 3 câu hỏi chất lượng cao đúng chuẩn:
     /// 1 câu QUIZ (4 lựa chọn, 1 đúng), 1 câu FILL_IN_BLANK (có [...] và từ khóa đồng nghĩa), 1 câu MATCHING (3 cặp A ↔ B).
     /// </summary>
-    public static string GenerateSmartFallbackQuiz(string prompt)
+    public static string GenerateSmartFallbackQuiz(string prompt, int? questionCount = null)
     {
         var lower = (prompt ?? "").ToLowerInvariant();
 

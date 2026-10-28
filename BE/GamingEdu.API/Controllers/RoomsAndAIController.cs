@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using System.IdentityModel.Tokens.Jwt;
+using System.Text;
 using GamingEdu.API.Data;
 using GamingEdu.API.DTOs;
 using GamingEdu.API.Models;
@@ -370,7 +371,7 @@ public class RoomsController : ControllerBase
 /// <summary>
 /// AI Job endpoints: POST /api/aijobs (queue), GET /api/aijobs/{id} (status check)
 /// </summary>
-public record QuickParseAIRequest(string Text, string? Topic = null);
+public record QuickParseAIRequest(string? Text, string? FileUrl = null, int? QuestionCount = null, string? Topic = null);
 
 [ApiController]
 [Route("api/aijobs")]
@@ -395,14 +396,85 @@ public class AIJobsController : ControllerBase
     [AllowAnonymous]
     public async Task<IActionResult> QuickParseText([FromBody] QuickParseAIRequest request)
     {
-        if (string.IsNullOrWhiteSpace(request.Text))
-            return BadRequest(new ApiResponse<string>(false, "Vui lòng cung cấp nội dung văn bản để phân tích.", null));
+        string text = request.Text ?? "";
+        if (!string.IsNullOrWhiteSpace(request.FileUrl))
+        {
+            var webRoot = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+            var localPath = Path.Combine(webRoot, request.FileUrl.TrimStart('/', '\\'));
+            var fileText = GeminiApiService.ExtractTextFromFile(localPath);
+            if (!string.IsNullOrWhiteSpace(fileText))
+            {
+                text = $"{text}\n\n--- NỘI DUNG TÀI LIỆU ---\n{fileText}";
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(text))
+            return BadRequest(new ApiResponse<string>(false, "Vui lòng cung cấp nội dung văn bản hoặc file tài liệu để phân tích.", null));
 
         try
         {
-            var prompt = $"Vui lòng phân tích nội dung tài liệu sau và trích xuất thành danh sách các câu hỏi đa dạng (Trắc nghiệm QUIZ 4 lựa chọn, Điền khuyết FILL_IN_BLANK và Ghép cặp MATCHING):\n\n{request.Text}";
-            var json = await _geminiService.GenerateQuizJsonAsync(prompt, null);
+            var json = await _geminiService.GenerateQuizJsonAsync(text, request.FileUrl, request.QuestionCount);
             return Ok(new ApiResponse<string>(true, "Phân tích tài liệu thành công.", json));
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new ApiResponse<string>(false, ex.Message, null));
+        }
+    }
+
+    // POST /api/aijobs/parse-document
+    /// <summary>Phân tích trực tiếp file tài liệu (PDF, DOCX, TXT) hoặc prompt văn bản với số lượng câu hỏi tùy chọn.</summary>
+    [HttpPost("parse-document")]
+    [AllowAnonymous]
+    [RequestSizeLimit(30 * 1024 * 1024)]
+    [Consumes("multipart/form-data")]
+    public async Task<IActionResult> ParseDocument([FromForm] IFormFile? file, [FromForm] string? prompt, [FromForm] int? questionCount)
+    {
+        try
+        {
+            string extractedText = string.Empty;
+            string? fileUrl = null;
+
+            if (file != null && file.Length > 0)
+            {
+                var webRoot = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+                var uploadsFolder = Path.Combine(webRoot, "uploads");
+                if (!Directory.Exists(uploadsFolder)) Directory.CreateDirectory(uploadsFolder);
+
+                var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
+                var savedName = $"{Guid.NewGuid():N}_{Path.GetFileNameWithoutExtension(file.FileName)}{extension}";
+                var physicalPath = Path.Combine(uploadsFolder, savedName);
+
+                await using (var stream = new FileStream(physicalPath, FileMode.Create))
+                {
+                    await file.CopyToAsync(stream);
+                }
+
+                fileUrl = $"/uploads/{savedName}";
+                extractedText = GeminiApiService.ExtractTextFromFile(physicalPath);
+            }
+
+            var combinedPrompt = new StringBuilder();
+            if (!string.IsNullOrWhiteSpace(prompt))
+            {
+                combinedPrompt.AppendLine(prompt.Trim());
+            }
+
+            if (!string.IsNullOrWhiteSpace(extractedText))
+            {
+                if (extractedText.Length > 100000) extractedText = extractedText[..100000];
+                combinedPrompt.AppendLine();
+                combinedPrompt.AppendLine("--- NỘI DUNG TÀI LIỆU CẦN PHÂN TÍCH ---");
+                combinedPrompt.AppendLine(extractedText);
+            }
+
+            if (combinedPrompt.Length == 0)
+            {
+                return BadRequest(new ApiResponse<string>(false, "Vui lòng nhập chủ đề hoặc tải file tài liệu để AI phân tích.", null));
+            }
+
+            var json = await _geminiService.GenerateQuizJsonAsync(combinedPrompt.ToString(), fileUrl, questionCount);
+            return Ok(new ApiResponse<string>(true, "Phân tích tài liệu và sinh đề thành công.", json));
         }
         catch (Exception ex)
         {
