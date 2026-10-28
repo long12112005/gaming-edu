@@ -149,6 +149,16 @@ export default function CreateRoomModal({
     return d.toISOString();
   }, [tournamentDurationHours, tournamentCustomEndTime]);
 
+  const handleNavigateToCreateQuiz = () => {
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem("quiz_create_source", "create_room");
+      sessionStorage.setItem("quiz_create_return_url", window.location.pathname);
+    }
+    onClose();
+    const returnPath = typeof window !== "undefined" ? window.location.pathname : "/";
+    router.push(`/quiz/create?from=create_room&returnUrl=${encodeURIComponent(returnPath)}`);
+  };
+
   // Cập nhật khi mở modal hoặc đổi initialQuizId / initialTheme
   useEffect(() => {
     if (initialQuizId) {
@@ -208,11 +218,28 @@ export default function CreateRoomModal({
           console.warn("Lỗi tải public quizzes:", e);
         }
 
+        // 3. Nếu có targetId (initialQuizId hoặc selectedQuizId) mà chưa có trong quizMap, fetch riêng để chắc chắn hiển thị
+        const targetId = initialQuizId || selectedQuizId;
+        if (targetId && !quizMap.has(targetId)) {
+          try {
+            const specificRes = await api.get(`/quizzes/${targetId}`);
+            const specificQuiz = specificRes.data?.data || specificRes.data;
+            if (specificQuiz && specificQuiz.id) {
+              quizMap.set(specificQuiz.id, { ...specificQuiz, isMine: true });
+            }
+          } catch (e) {
+            console.warn("Lỗi tải chi tiết bộ đề target:", e);
+          }
+        }
+
         const combinedList = Array.from(quizMap.values());
 
         if (isMounted) {
           setQuizzes(combinedList);
-          if (!selectedQuizId && combinedList.length > 0) {
+          if (targetId && quizMap.has(targetId)) {
+            setSelectedQuizId(targetId);
+            setIsChangingQuiz(false);
+          } else if (!selectedQuizId && combinedList.length > 0) {
             setSelectedQuizId(combinedList[0].id);
           }
         }
@@ -227,7 +254,7 @@ export default function CreateRoomModal({
     return () => {
       isMounted = false;
     };
-  }, [isOpen, selectedQuizId]);
+  }, [isOpen, initialQuizId]);
 
   // Bộ đề đang được chọn
   const currentQuiz = useMemo(() => {
@@ -404,10 +431,7 @@ export default function CreateRoomModal({
                 {/* Nút Tạo đề mới trực tiếp */}
                 <button
                   type="button"
-                  onClick={() => {
-                    onClose();
-                    router.push("/quiz/create");
-                  }}
+                  onClick={handleNavigateToCreateQuiz}
                   className="text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 px-3 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
                   title="Tạo một bộ đề câu hỏi mới"
                 >
@@ -471,10 +495,7 @@ export default function CreateRoomModal({
                 <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
                   <button
                     type="button"
-                    onClick={() => {
-                      onClose();
-                      router.push("/quiz/create");
-                    }}
+                    onClick={handleNavigateToCreateQuiz}
                     className="px-3.5 py-2 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-bold text-xs shadow-xs hover:border-slate-300 transition-all cursor-pointer flex items-center gap-1.5"
                     title="Tạo bộ đề mới"
                   >
@@ -535,10 +556,7 @@ export default function CreateRoomModal({
 
                   <button
                     type="button"
-                    onClick={() => {
-                      onClose();
-                      router.push("/quiz/create");
-                    }}
+                    onClick={handleNavigateToCreateQuiz}
                     className="px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold flex items-center gap-1 cursor-pointer transition-all"
                   >
                     <Plus size={13} />
@@ -654,10 +672,7 @@ export default function CreateRoomModal({
                     </p>
                     <button
                       type="button"
-                      onClick={() => {
-                        onClose();
-                        router.push("/quiz/create");
-                      }}
+                      onClick={handleNavigateToCreateQuiz}
                       className="mt-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl inline-flex items-center gap-1.5 cursor-pointer shadow-xs"
                     >
                       <Plus size={14} /> Tạo bộ đề mới ngay
@@ -670,10 +685,7 @@ export default function CreateRoomModal({
                   <span>💡 Muốn dùng một bộ đề riêng chưa có trong danh sách?</span>
                   <button
                     type="button"
-                    onClick={() => {
-                      onClose();
-                      router.push("/quiz/create");
-                    }}
+                    onClick={handleNavigateToCreateQuiz}
                     className="font-bold text-indigo-600 hover:text-indigo-800 hover:underline cursor-pointer flex items-center gap-1"
                   >
                     <Plus size={13} />

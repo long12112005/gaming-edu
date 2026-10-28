@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useMemo } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Cookies from "js-cookie";
 import {
@@ -117,6 +117,17 @@ const createDefaultSlide = (type: SlideType = "QUIZ"): SlideDraft => {
 
 export default function SlideBuilder3Column({ quizId }: { quizId: string }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const fromParam = searchParams.get("from");
+  const returnUrlParam = searchParams.get("returnUrl");
+
+  const fromRoom =
+    fromParam === "create_room" ||
+    (typeof window !== "undefined" && sessionStorage.getItem("quiz_create_source") === "create_room");
+  const returnUrl =
+    returnUrlParam ||
+    (typeof window !== "undefined" ? sessionStorage.getItem("quiz_create_return_url") : null) ||
+    "/";
 
   const [quizTitle, setQuizTitle] = useState("Bộ Đề Học Tập Mới");
   const [slides, setSlides] = useState<SlideDraft[]>([createDefaultSlide("QUIZ")]);
@@ -278,7 +289,34 @@ export default function SlideBuilder3Column({ quizId }: { quizId: string }) {
         })),
       });
       setSaveStatus("saved");
-      setToastMsg({ text: "Đã lưu bộ đề và xuất bản thành công!", type: "success" });
+      const targetQuizId = String(quizId);
+
+      if (fromRoom) {
+        if (typeof window !== "undefined") {
+          sessionStorage.removeItem("quiz_create_source");
+          sessionStorage.removeItem("quiz_create_return_url");
+        }
+        setToastMsg({
+          text: "🎉 Đã lưu bộ đề thành công! Đang quay lại phần tạo phòng...",
+          type: "success",
+        });
+        setTimeout(() => {
+          const cleanReturn = returnUrl && returnUrl.startsWith("/") ? returnUrl.split("?")[0] : "/";
+          router.push(`${cleanReturn}?openCreateRoom=true&selectedQuiz=${targetQuizId}`);
+        }, 700);
+      } else {
+        if (typeof window !== "undefined") {
+          sessionStorage.removeItem("quiz_create_source");
+          sessionStorage.removeItem("quiz_create_return_url");
+        }
+        setToastMsg({
+          text: "🎉 Đã lưu bộ đề thành công! Đang chuyển về danh sách bộ đề...",
+          type: "success",
+        });
+        setTimeout(() => {
+          router.push("/quizzes");
+        }, 700);
+      }
     } catch (err: any) {
       setSaveStatus("unsaved");
       setToastMsg({
@@ -428,13 +466,25 @@ export default function SlideBuilder3Column({ quizId }: { quizId: string }) {
       {/* ── TOP HEADER ── */}
       <header className="h-16 bg-white border-b border-[#E2E8F0] px-4 md:px-6 flex items-center justify-between z-30 shrink-0">
         <div className="flex items-center gap-3">
-          <Link
-            href="/library"
-            className="p-2 rounded-[10px] text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors"
-            title="Quay lại Thư viện"
+          <button
+            type="button"
+            onClick={() => {
+              if (fromRoom) {
+                if (typeof window !== "undefined") {
+                  sessionStorage.removeItem("quiz_create_source");
+                  sessionStorage.removeItem("quiz_create_return_url");
+                }
+                const cleanReturn = returnUrl && returnUrl.startsWith("/") ? returnUrl.split("?")[0] : "/";
+                router.push(`${cleanReturn}?openCreateRoom=true&selectedQuiz=${quizId}`);
+              } else {
+                router.push("/quizzes");
+              }
+            }}
+            className="p-2 rounded-[10px] text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer"
+            title={fromRoom ? "Quay lại phần Tạo phòng" : "Quay lại Danh sách bộ đề"}
           >
             <ArrowLeft size={18} />
-          </Link>
+          </button>
 
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-indigo-500" />
