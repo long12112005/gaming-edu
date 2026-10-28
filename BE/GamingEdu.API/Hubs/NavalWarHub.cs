@@ -95,11 +95,12 @@ public class NavalWarHub : Hub
                 userId = parsedUserId;
             }
 
-            bool isHost = (teamSide?.Trim().ToUpper() == "HOST") || (userId.HasValue && userId.Value == room.HostId);
+            bool isHostUser = (userId.HasValue && userId.Value == room.HostId);
+            bool isObserverMode = (teamSide?.Trim().ToUpper() == "HOST") || (isHostUser && string.IsNullOrWhiteSpace(teamSide));
             string roomGroup = $"naval_{pinCode}";
 
             // ── NẾU LÀ CHỦ PHÒNG (TRỌNG TÀI QUAN SÁT TRUNG LẬP) ──
-            if (isHost)
+            if (isObserverMode)
             {
                 string hostGroup = $"naval_{pinCode}_HOST";
                 await Groups.AddToGroupAsync(Context.ConnectionId, roomGroup);
@@ -217,11 +218,12 @@ public class NavalWarHub : Hub
             Context.Items["PlayerId"] = player.Id;
             Context.Items["PlayerNickname"] = player.Nickname;
             Context.Items["TeamSide"] = normalizedTeam;
+            Context.Items["IsHost"] = isHostUser;
             Context.Items["RoomGroup"] = roomGroup;
             Context.Items["TeamGroup"] = teamGroup;
 
-            _logger.LogInformation("Người chơi '{Nickname}' đã tham gia phòng Hải Chiến {PinCode} vào phe {TeamSide}",
-                player.Nickname, pinCode, normalizedTeam);
+            _logger.LogInformation("Người chơi '{Nickname}' (Host={IsHost}) đã tham gia phòng Hải Chiến {PinCode} vào phe {TeamSide}",
+                player.Nickname, isHostUser, pinCode, normalizedTeam);
 
             // Phản hồi riêng cho người chơi
             await Clients.Caller.SendAsync("NavalRoomJoined", new
@@ -231,7 +233,7 @@ public class NavalWarHub : Hub
                 PlayerId = player.Id,
                 Nickname = player.Nickname,
                 TeamSide = normalizedTeam,
-                IsHost = false,
+                IsHost = isHostUser,
                 MapSize = room.MapSize
             });
 
@@ -725,17 +727,42 @@ public class NavalWarHub : Hub
                 .Where(rp => rp.RoomId == room.Id && rp.TeamSide == "TEAM_B")
                 .ToListAsync();
 
-            // Yêu cầu mỗi đội ít nhất 1 người chơi
-            if (teamAPlayers.Count < 1 || teamBPlayers.Count < 1)
+            // Nếu chưa có người chơi tham gia phe nào (chủ phòng bấm bắt đầu trực tiếp để chơi 1 mình)
+            if (teamAPlayers.Count == 0 && teamBPlayers.Count == 0)
             {
-                throw new InvalidOperationException($"Mỗi đội phải có ít nhất 1 người chơi mới có thể bắt đầu trận đấu. Hiện tại Hạm Đội Lam: {teamAPlayers.Count}, Hạm Đội Xích: {teamBPlayers.Count}.");
+                var hostUser = userId.HasValue ? await _db.Users.FindAsync(userId.Value) : null;
+                var hostPlayer = new RoomPlayer
+                {
+                    Id = Guid.NewGuid(),
+                    RoomId = room.Id,
+                    UserId = userId,
+                    Nickname = hostUser?.Nickname ?? "Chủ Phòng (Solo)",
+                    TeamSide = "TEAM_A",
+                    TotalScore = 0,
+                    JoinedAt = DateTime.UtcNow
+                };
+                _db.RoomPlayers.Add(hostPlayer);
+                await _db.SaveChangesAsync();
+                teamAPlayers.Add(hostPlayer);
+
+                _playerConnections[hostPlayer.Id] = Context.ConnectionId;
+                Context.Items["PlayerId"] = hostPlayer.Id;
+                Context.Items["PlayerNickname"] = hostPlayer.Nickname;
+                Context.Items["TeamSide"] = "TEAM_A";
+                await Groups.AddToGroupAsync(Context.ConnectionId, $"naval_{pinCode}_TEAM_A");
+            }
+
+            int totalPlayers = teamAPlayers.Count + teamBPlayers.Count;
+            if (totalPlayers < 1)
+            {
+                throw new InvalidOperationException("Phải có ít nhất 1 người chơi để bắt đầu trận đấu.");
             }
 
             var rnd = new Random();
 
-            // 1. Nếu một bên đông hơn từ 2 người trở lên -> Tự động chia đều người chơi
+            // 1. Nếu cả 2 đội đều có người VÀ một bên đông hơn từ 2 người trở lên -> Tự động chia đều người chơi
             int diff = Math.Abs(teamAPlayers.Count - teamBPlayers.Count);
-            if (diff >= 2)
+            if (teamAPlayers.Count > 0 && teamBPlayers.Count > 0 && diff >= 2)
             {
                 if (teamAPlayers.Count > teamBPlayers.Count)
                 {
@@ -794,22 +821,25 @@ public class NavalWarHub : Hub
                 await BroadcastLobbyStateAsync(room.Id, pinCode);
             }
 
-            // 2. Nếu sau khi chia (hoặc ban đầu) chênh lệch đúng 1 người -> 1 người ngẫu nhiên bên ít người hơn được x2 lượt bắn
+            // 2. Nếu cả 2 phe đều có người và chênh lệch đúng 1 người -> 1 người ngẫu nhiên bên ít người hơn được x2 lượt bắn
             int newDiff = Math.Abs(teamAPlayers.Count - teamBPlayers.Count);
             Guid? doubleShotPlayerId = null;
             string? doubleShotPlayerNickname = null;
             string? doubleShotTeam = null;
 
-            if (newDiff == 1)
+            if (newDiff == 1 && teamAPlayers.Count > 0 && teamBPlayers.Count > 0)
             {
                 var smallerTeam = teamAPlayers.Count < teamBPlayers.Count ? teamAPlayers : teamBPlayers;
-                var buffedPlayer = smallerTeam[rnd.Next(smallerTeam.Count)];
-                doubleShotPlayerId = buffedPlayer.Id;
-                doubleShotPlayerNickname = buffedPlayer.Nickname;
-                doubleShotTeam = buffedPlayer.TeamSide;
+                if (smallerTeam.Count > 0)
+                {
+                    var buffedPlayer = smallerTeam[rnd.Next(smallerTeam.Count)];
+                    doubleShotPlayerId = buffedPlayer.Id;
+                    doubleShotPlayerNickname = buffedPlayer.Nickname;
+                    doubleShotTeam = buffedPlayer.TeamSide;
 
-                _logger.LogInformation("Phòng {PinCode}: Người chơi '{Nickname}' ({TeamSide}) nhận hiệu ứng X2 Bắn Pháo.",
-                    pinCode, doubleShotPlayerNickname, doubleShotTeam);
+                    _logger.LogInformation("Phòng {PinCode}: Người chơi '{Nickname}' ({TeamSide}) nhận hiệu ứng X2 Bắn Pháo.",
+                        pinCode, doubleShotPlayerNickname, doubleShotTeam);
+                }
             }
 
             var settingsDict = new Dictionary<string, object>();

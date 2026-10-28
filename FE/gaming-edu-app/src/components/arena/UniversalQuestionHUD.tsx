@@ -356,13 +356,13 @@ export default function UniversalQuestionHUD({
               </>
             )}
 
-            {isPacedMode && onPacedNext && (
+            {onPacedNext && (
               <button
                 type="button"
                 onClick={onPacedNext}
                 className="w-full mt-2 py-2.5 rounded-xl btn-3d btn-3d-amber text-slate-950 font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer shadow-md shrink-0"
               >
-                <span>{isLastQuestion ? "Hoàn Thành Bài Thi" : "Câu Tiếp Theo"}</span>
+                <span>{isLastQuestion ? "Hoàn Thành Bài Thi" : "Câu Tiếp Theo ➔"}</span>
                 <ChevronRight size={15} />
               </button>
             )}

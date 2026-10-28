@@ -312,9 +312,8 @@ public class GameHub : Hub
 
     // ═══════════════════════════════════════════════════════════════════
     // ── START GAME (HOST_PACED) ────────────────────────────────────────
-    // Host calls this to transition room status from WAITING → PLAYING
+    // Host or Solo Player calls this to transition room status from WAITING → PLAYING
     // ═══════════════════════════════════════════════════════════════════
-    [Authorize]
     public async Task StartGame(Guid roomId)
     {
         try
@@ -489,9 +488,8 @@ public class GameHub : Hub
 
     // ═══════════════════════════════════════════════════════════════════
     // ── NEXT SLIDE (HOST_PACED) ────────────────────────────────────────
-    // Host advances to the next question
+    // Host or Solo Player advances to the next question
     // ═══════════════════════════════════════════════════════════════════
-    [Authorize]
     public async Task NextSlide(Guid roomId)
     {
         try
@@ -759,7 +757,6 @@ public class GameHub : Hub
     // ═══════════════════════════════════════════════════════════════════
     // ── END GAME ───────────────────────────────────────────────────────
     // ═══════════════════════════════════════════════════════════════════
-    [Authorize]
     public async Task EndGame(Guid roomId)
     {
         try

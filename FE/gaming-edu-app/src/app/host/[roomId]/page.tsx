@@ -1042,6 +1042,16 @@ export default function HostLobbyPage() {
 
               <div className="flex flex-wrap items-center gap-3">
                 <ActionButton
+                  variant="secondary"
+                  onClick={() => {
+                    window.open(`/play/${pinCode}`, "_blank");
+                  }}
+                  icon={ExternalLink}
+                  label="🎮 Vào Chơi Ngay (Chơi 1 Mình)"
+                  className="bg-amber-400 hover:bg-amber-300 border-amber-600 text-amber-950 font-black"
+                />
+
+                <ActionButton
                   variant="outline"
                   onClick={openInviteModal}
                   icon={Users}

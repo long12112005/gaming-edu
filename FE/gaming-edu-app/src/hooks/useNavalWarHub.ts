@@ -196,20 +196,21 @@ export function useNavalWarHub(pinCode?: string) {
     // ── REGISTER SIGNALR EVENTS ──────────────────────────────────────────
 
     conn.on("NavalRoomJoined", (data) => {
-      if (data.isHost || data.teamSide === "HOST") {
+      if (data.isHost) {
         setIsHost(true);
+      }
+      if (data.teamSide === "HOST") {
         setMyTeamSide("HOST");
         setMyNickname(data.nickname || "Chủ Phòng (Trọng Tài)");
       } else {
-        setIsHost(false);
         setMyTeamSide(data.teamSide);
-        setMyPlayerId(data.playerId);
-        setMyNickname(data.nickname);
+        if (data.playerId) setMyPlayerId(data.playerId);
+        if (data.nickname) setMyNickname(data.nickname);
       }
       if (data.mapSize) setMapSize(data.mapSize);
       if (data.isMatchStarted !== undefined) setIsMatchStarted(data.isMatchStarted);
       addCombatLog(
-        data.isHost ? "Đã tham gia với tư cách Trọng tài quan sát trung lập!" : `Gia nhập ${data.teamSide === "TEAM_A" ? "Hạm Đội Lam" : "Hạm Đội Xích"} thành công!`,
+        data.teamSide === "HOST" ? "Đã tham gia với tư cách Trọng tài quan sát trung lập!" : `Gia nhập ${data.teamSide === "TEAM_A" ? "Hạm Đội Lam" : "Hạm Đội Xích"} thành công!`,
         "INFO"
       );
     });
