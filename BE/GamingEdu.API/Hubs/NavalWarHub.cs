@@ -467,6 +467,8 @@ public class NavalWarHub : Hub
                     matchResultHost = await _combatService.EvaluateMatchResultAsync(room.Id, room.IsEarlyFinished);
                 }
 
+                var (hostTurnTeam, hostTurnNum, _) = ReadTurnState(room);
+
                 await Clients.Caller.SendAsync("NavalReconnected", new
                 {
                     RoomId = room.Id,
@@ -477,6 +479,8 @@ public class NavalWarHub : Hub
                     MapSize = room.MapSize,
                     IsMatchStarted = room.Status == "PLAYING" || room.Status == "FINISHED",
                     IsGameOver = room.Status == "FINISHED",
+                    CurrentTurnTeam = hostTurnTeam,
+                    TurnNumber = hostTurnNum,
                     SpectatorState = hostSpectator,
                     Leaderboard = leaderboardHost,
                     MatchResult = matchResultHost
@@ -649,6 +653,8 @@ public class NavalWarHub : Hub
                 catch {}
             }
 
+            var (currentTurnTeam, turnNumber, _) = ReadTurnState(room);
+
             await Clients.Caller.SendAsync("NavalReconnected", new
             {
                 RoomId = room.Id,
@@ -659,6 +665,8 @@ public class NavalWarHub : Hub
                 MapSize = room.MapSize,
                 IsMatchStarted = room.Status == "PLAYING" || room.Status == "FINISHED",
                 IsGameOver = room.Status == "FINISHED",
+                CurrentTurnTeam = currentTurnTeam,
+                TurnNumber = turnNumber,
                 MyShips = myShipsDto,
                 EnemyShots = enemyShotsDto,
                 ShotsEarned = player.ShotsEarned,
@@ -864,7 +872,29 @@ public class NavalWarHub : Hub
                 settingsDict.Remove("doubleShotPlayerNickname");
                 settingsDict.Remove("doubleShotTeam");
             }
+
+            // Khởi tạo lượt bắn đầu tiên (Mặc định Hạm Đội Lam - TEAM_A đi trước nếu có người)
+            string initialTurnTeam = teamAPlayers.Count > 0 ? "TEAM_A" : "TEAM_B";
+            int initialTurnNumber = 1;
+            settingsDict["currentTurnTeam"] = initialTurnTeam;
+            settingsDict["turnNumber"] = initialTurnNumber;
+            settingsDict["turnAnsweredPlayers"] = "";
+
             room.GameSettings = JsonSerializer.Serialize(settingsDict);
+
+            // Reset quyền bắn và xóa lịch sử trả lời cũ nếu có
+            var allRoomPlayers = teamAPlayers.Concat(teamBPlayers).ToList();
+            foreach (var rp in allRoomPlayers)
+            {
+                rp.ShotsEarned = 0;
+                rp.CurrentCombo = 0;
+            }
+            var oldPlayerIds = allRoomPlayers.Select(p => p.Id).ToList();
+            var oldResponses = await _db.PlayerResponses.Where(pr => oldPlayerIds.Contains(pr.RoomPlayerId)).ToListAsync();
+            if (oldResponses.Count > 0)
+            {
+                _db.PlayerResponses.RemoveRange(oldResponses);
+            }
 
             int mapSize = room.MapSize > 0 ? room.MapSize : 15;
 
@@ -901,6 +931,8 @@ public class NavalWarHub : Hub
                 PinCode = pinCode,
                 MapSize = mapSize,
                 MyTeamSide = "TEAM_A",
+                CurrentTurnTeam = initialTurnTeam,
+                TurnNumber = initialTurnNumber,
                 DoubleShotPlayerId = doubleShotPlayerId,
                 DoubleShotPlayerNickname = doubleShotPlayerNickname,
                 DoubleShotTeam = doubleShotTeam,
@@ -922,6 +954,8 @@ public class NavalWarHub : Hub
                 PinCode = pinCode,
                 MapSize = mapSize,
                 MyTeamSide = "TEAM_B",
+                CurrentTurnTeam = initialTurnTeam,
+                TurnNumber = initialTurnNumber,
                 DoubleShotPlayerId = doubleShotPlayerId,
                 DoubleShotPlayerNickname = doubleShotPlayerNickname,
                 DoubleShotTeam = doubleShotTeam,
@@ -948,6 +982,8 @@ public class NavalWarHub : Hub
                 MapSize = mapSize,
                 Status = "PLAYING",
                 StartedAt = room.StartTime,
+                CurrentTurnTeam = initialTurnTeam,
+                TurnNumber = initialTurnNumber,
                 DoubleShotPlayerId = doubleShotPlayerId,
                 DoubleShotPlayerNickname = doubleShotPlayerNickname,
                 DoubleShotTeam = doubleShotTeam
@@ -964,12 +1000,20 @@ public class NavalWarHub : Hub
 
     /// <summary>
     /// Gửi câu trả lời Slide: Chấm điểm trên Server, cập nhật combo, năng lượng và cấp quyền bắn hoặc mở khóa kỹ năng.
+    /// Bắt buộc trả lời theo lượt của đội (currentTurnTeam).
     /// </summary>
     public async Task SubmitAnswer(string pinCode, Guid slideId, string answerData, int timeMs)
     {
         try
         {
             var (room, player) = await ResolveContextAsync(pinCode);
+
+            var (currentTurnTeam, turnNumber, answeredPlayers) = ReadTurnState(room);
+            if (!string.IsNullOrEmpty(currentTurnTeam) && player.TeamSide != currentTurnTeam)
+            {
+                string turnTeamName = currentTurnTeam == "TEAM_A" ? "Hạm Đội Lam (Phe A)" : "Hạm Đội Xích (Phe B)";
+                throw new InvalidOperationException($"Chưa đến lượt của đội bạn! Hiện tại đang là lượt trả lời và bắn của {turnTeamName}.");
+            }
 
             var result = await _combatService.ProcessAnswerAsync(
                 room.Id, player.Id, slideId, answerData, timeMs);
@@ -1004,6 +1048,25 @@ public class NavalWarHub : Hub
                 ShotsEarned = result.ShotsEarned,
                 IsDoubleShot = result.IsDoubleShot
             });
+
+            // Ghi nhận người chơi đã trả lời trong lượt này
+            answeredPlayers.Add(player.Id);
+            await SaveTurnStateAsync(room, currentTurnTeam, turnNumber, answeredPlayers);
+
+            // Nếu tất cả thuyền viên đang kết nối của đội đương nhiệm đã trả lời và không còn quyền bắn nào (trả lời sai) -> Chuyển lượt ngay!
+            var teamPlayers = await _db.RoomPlayers
+                .Where(rp => rp.RoomId == room.Id && rp.TeamSide == currentTurnTeam)
+                .ToListAsync();
+            var activeTeamPlayers = teamPlayers.Where(p => _playerConnections.ContainsKey(p.Id)).ToList();
+            if (activeTeamPlayers.Count == 0) activeTeamPlayers = teamPlayers;
+
+            bool allAnswered = activeTeamPlayers.Count == 0 || activeTeamPlayers.All(p => answeredPlayers.Contains(p.Id));
+            int totalTeamShots = activeTeamPlayers.Sum(p => p.ShotsEarned);
+
+            if (allAnswered && totalTeamShots <= 0)
+            {
+                await AdvanceTurnAsync(room, pinCode, "WRONG_ANSWER");
+            }
         }
         catch (Exception ex)
         {
@@ -1013,14 +1076,62 @@ public class NavalWarHub : Hub
     }
 
     /// <summary>
+    /// Xử lý khi hết thời gian trả lời câu hỏi của lượt hiện tại mà người chơi chưa trả lời:
+    /// Không tính điểm câu đó, reset combo và chuyển lượt bắn sang đội đối phương.
+    /// </summary>
+    public async Task TimeoutTurn(string pinCode)
+    {
+        try
+        {
+            var (room, player) = await ResolveContextAsync(pinCode);
+            if (room.Status != "PLAYING") return;
+
+            var (currentTurnTeam, turnNumber, answeredPlayers) = ReadTurnState(room);
+            if (!string.IsNullOrEmpty(currentTurnTeam) && player.TeamSide != currentTurnTeam)
+            {
+                return; // Đã chuyển lượt trước đó
+            }
+
+            player.CurrentCombo = 0;
+            answeredPlayers.Add(player.Id);
+            await SaveTurnStateAsync(room, currentTurnTeam, turnNumber, answeredPlayers);
+
+            var teamPlayers = await _db.RoomPlayers
+                .Where(rp => rp.RoomId == room.Id && rp.TeamSide == currentTurnTeam)
+                .ToListAsync();
+            var activeTeamPlayers = teamPlayers.Where(p => _playerConnections.ContainsKey(p.Id)).ToList();
+            if (activeTeamPlayers.Count == 0) activeTeamPlayers = teamPlayers;
+
+            bool allAnswered = activeTeamPlayers.Count == 0 || activeTeamPlayers.All(p => answeredPlayers.Contains(p.Id));
+            int totalTeamShots = activeTeamPlayers.Sum(p => p.ShotsEarned);
+
+            if (allAnswered && totalTeamShots <= 0)
+            {
+                await AdvanceTurnAsync(room, pinCode, "TIMEOUT");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Lỗi TimeoutTurn tại phòng {PinCode}", pinCode);
+        }
+    }
+
+    /// <summary>
     /// Thực hiện phát bắn vào tọa độ (targetRow, targetCol) trên bản đồ đối phương.
-    /// Hỗ trợ Bắn chính xác (isPrecision).
+    /// Hỗ trợ Bắn chính xác (isPrecision). Sau khi bắn hết lượt đạn của đội trong lượt hiện tại sẽ tự động chuyển lượt cho đội đối phương.
     /// </summary>
     public async Task FireShot(string pinCode, int targetRow, int targetCol, bool isPrecision)
     {
         try
         {
             var (room, player) = await ResolveContextAsync(pinCode);
+
+            var (currentTurnTeam, _, answeredPlayers) = ReadTurnState(room);
+            if (!string.IsNullOrEmpty(currentTurnTeam) && player.TeamSide != currentTurnTeam)
+            {
+                string turnTeamName = currentTurnTeam == "TEAM_A" ? "Hạm Đội Lam (Phe A)" : "Hạm Đội Xích (Phe B)";
+                throw new InvalidOperationException($"Chưa đến lượt bắn của đội bạn! Hiện tại đang là lượt của {turnTeamName}.");
+            }
 
             string actionType = isPrecision ? "PRECISION_SHOT" : "NORMAL_SHOT";
             var result = await _combatService.FireShotAsync(
@@ -1058,10 +1169,6 @@ public class NavalWarHub : Hub
                 })
             });
 
-            // Cập nhật toàn cảnh 2 bên cho Host quan sát trực tiếp
-            var hostUpdate = await GetHostSpectatorStateAsync(room.Id, pinCode, room.MapSize);
-            await Clients.Group($"naval_{pinCode}_HOST").SendAsync("NavalHostSpectatorUpdated", hostUpdate);
-
             // Nếu toàn bộ 5 tàu của đối phương bị đánh chìm -> Kết thúc trận đấu
             if (result.IsGameOver)
             {
@@ -1078,6 +1185,27 @@ public class NavalWarHub : Hub
                     Leaderboard = leaderboard
                 });
             }
+            else
+            {
+                // Kiểm tra nếu đội hiện tại đã bắn hết quyền bắn trong lượt này -> Chuyển lượt cho đội đối phương!
+                var teamPlayers = await _db.RoomPlayers
+                    .Where(rp => rp.RoomId == room.Id && rp.TeamSide == currentTurnTeam)
+                    .ToListAsync();
+                var activeTeamPlayers = teamPlayers.Where(p => _playerConnections.ContainsKey(p.Id)).ToList();
+                if (activeTeamPlayers.Count == 0) activeTeamPlayers = teamPlayers;
+
+                bool allAnswered = activeTeamPlayers.Count == 0 || activeTeamPlayers.All(p => answeredPlayers.Contains(p.Id));
+                int totalTeamShots = activeTeamPlayers.Sum(p => p.ShotsEarned);
+
+                if (totalTeamShots <= 0 && allAnswered)
+                {
+                    await AdvanceTurnAsync(room, pinCode, "SHOT_COMPLETED");
+                }
+            }
+
+            // Cập nhật toàn cảnh 2 bên cho Host quan sát trực tiếp
+            var hostUpdate = await GetHostSpectatorStateAsync(room.Id, pinCode, room.MapSize);
+            await Clients.Group($"naval_{pinCode}_HOST").SendAsync("NavalHostSpectatorUpdated", hostUpdate);
         }
         catch (Exception ex)
         {
@@ -1283,7 +1411,14 @@ public class NavalWarHub : Hub
                 p.TotalScore = 0;
             }
 
-            // Xóa cấu hình doubleShot trong GameSettings
+            var resetPlayerIds = players.Select(p => p.Id).ToList();
+            var oldResponses = await _db.PlayerResponses.Where(pr => resetPlayerIds.Contains(pr.RoomPlayerId)).ToListAsync();
+            if (oldResponses.Count > 0)
+            {
+                _db.PlayerResponses.RemoveRange(oldResponses);
+            }
+
+            // Xóa cấu hình doubleShot và trạng thái lượt bắn trong GameSettings
             if (!string.IsNullOrEmpty(room.GameSettings))
             {
                 try
@@ -1292,6 +1427,9 @@ public class NavalWarHub : Hub
                     dict.Remove("doubleShotPlayerId");
                     dict.Remove("doubleShotPlayerNickname");
                     dict.Remove("doubleShotTeam");
+                    dict.Remove("currentTurnTeam");
+                    dict.Remove("turnNumber");
+                    dict.Remove("turnAnsweredPlayers");
                     room.GameSettings = JsonSerializer.Serialize(dict);
                 }
                 catch {}
@@ -1384,11 +1522,16 @@ public class NavalWarHub : Hub
             Time = a.CreatedAt.ToString("HH:mm:ss")
         }).ToList();
 
+        var roomEntity = await _db.Rooms.FindAsync(roomId);
+        var (currentTurnTeam, turnNumber, _) = roomEntity != null ? ReadTurnState(roomEntity) : ("TEAM_A", 1, new HashSet<Guid>());
+
         return new
         {
             RoomId = roomId,
             PinCode = pinCode,
             MapSize = mapSize,
+            CurrentTurnTeam = currentTurnTeam,
+            TurnNumber = turnNumber,
             TeamAShips = teamAShips,
             TeamBShips = teamBShips,
             TeamAShotsAgainstB = teamAShotsAgainstB,
@@ -1407,6 +1550,117 @@ public class NavalWarHub : Hub
     }
 
     // ─── Private Helpers ─────────────────────────────────────────────────────
+
+    private static (string currentTurnTeam, int turnNumber, HashSet<Guid> answeredPlayers) ReadTurnState(Room room)
+    {
+        string currentTurnTeam = "TEAM_A";
+        int turnNumber = 1;
+        var answeredPlayers = new HashSet<Guid>();
+
+        if (!string.IsNullOrEmpty(room.GameSettings))
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(room.GameSettings);
+                if (doc.RootElement.TryGetProperty("currentTurnTeam", out var tProp) && tProp.ValueKind == JsonValueKind.String)
+                {
+                    var val = tProp.GetString();
+                    if (!string.IsNullOrEmpty(val)) currentTurnTeam = val;
+                }
+                if (doc.RootElement.TryGetProperty("turnNumber", out var nProp))
+                {
+                    if (nProp.ValueKind == JsonValueKind.Number && nProp.TryGetInt32(out var num))
+                        turnNumber = num;
+                    else if (nProp.ValueKind == JsonValueKind.String && int.TryParse(nProp.GetString(), out var sNum))
+                        turnNumber = sNum;
+                }
+                if (doc.RootElement.TryGetProperty("turnAnsweredPlayers", out var aProp) && aProp.ValueKind == JsonValueKind.String)
+                {
+                    var raw = aProp.GetString() ?? "";
+                    foreach (var part in raw.Split(',', StringSplitOptions.RemoveEmptyEntries))
+                    {
+                        if (Guid.TryParse(part.Trim(), out var gid))
+                        {
+                            answeredPlayers.Add(gid);
+                        }
+                    }
+                }
+            }
+            catch {}
+        }
+
+        return (currentTurnTeam, turnNumber, answeredPlayers);
+    }
+
+    private async Task SaveTurnStateAsync(Room room, string currentTurnTeam, int turnNumber, HashSet<Guid> answeredPlayers)
+    {
+        var dict = new Dictionary<string, object>();
+        if (!string.IsNullOrEmpty(room.GameSettings))
+        {
+            try
+            {
+                dict = JsonSerializer.Deserialize<Dictionary<string, object>>(room.GameSettings) ?? new();
+            }
+            catch {}
+        }
+
+        dict["currentTurnTeam"] = currentTurnTeam;
+        dict["turnNumber"] = turnNumber;
+        dict["turnAnsweredPlayers"] = string.Join(",", answeredPlayers);
+        room.GameSettings = JsonSerializer.Serialize(dict);
+        await _db.SaveChangesAsync();
+    }
+
+    private async Task AdvanceTurnAsync(Room room, string pinCode, string reason)
+    {
+        var (currentTurnTeam, turnNumber, _) = ReadTurnState(room);
+
+        int teamACount = await _db.RoomPlayers.CountAsync(rp => rp.RoomId == room.Id && rp.TeamSide == "TEAM_A");
+        int teamBCount = await _db.RoomPlayers.CountAsync(rp => rp.RoomId == room.Id && rp.TeamSide == "TEAM_B");
+
+        string nextTeam;
+        if (teamACount > 0 && teamBCount > 0)
+        {
+            nextTeam = currentTurnTeam == "TEAM_A" ? "TEAM_B" : "TEAM_A";
+        }
+        else if (teamACount > 0)
+        {
+            nextTeam = "TEAM_A";
+        }
+        else if (teamBCount > 0)
+        {
+            nextTeam = "TEAM_B";
+        }
+        else
+        {
+            nextTeam = "TEAM_A";
+        }
+
+        int nextTurnNumber = turnNumber + 1;
+
+        // Đảm bảo xóa quyền bắn tồn đọng (nếu có) trước khi sang lượt mới
+        var currentTeamPlayers = await _db.RoomPlayers
+            .Where(rp => rp.RoomId == room.Id && rp.TeamSide == currentTurnTeam && rp.ShotsEarned > 0)
+            .ToListAsync();
+        foreach (var p in currentTeamPlayers)
+        {
+            p.ShotsEarned = 0;
+        }
+
+        await SaveTurnStateAsync(room, nextTeam, nextTurnNumber, new HashSet<Guid>());
+
+        await Clients.Group($"naval_{pinCode}").SendAsync("NavalTurnChanged", new
+        {
+            CurrentTurnTeam = nextTeam,
+            PreviousTurnTeam = currentTurnTeam,
+            TurnNumber = nextTurnNumber,
+            Reason = reason
+        });
+
+        _logger.LogInformation(
+            "Phòng Hải Chiến {PinCode}: Chuyển sang lượt #{TurnNumber} - Đội {NextTeam} (Lý do: {Reason})",
+            pinCode, nextTurnNumber, nextTeam, reason);
+    }
 
     private async Task<(Room room, RoomPlayer player)> ResolveContextAsync(string pinCode)
     {

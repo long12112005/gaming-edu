@@ -25,6 +25,9 @@ export function useQAHub(roomId: string | null) {
   useEffect(() => {
     if (!roomId) return;
 
+    let isCancelled = false;
+    let startPromise: Promise<void> | null = null;
+
     const token = Cookies.get("token");
     const newConnection = new signalR.HubConnectionBuilder()
       .withUrl(QA_HUB_URL, {
@@ -32,20 +35,37 @@ export function useQAHub(roomId: string | null) {
         transport: signalR.HttpTransportType.WebSockets,
       })
       .withAutomaticReconnect()
-      .configureLogging(signalR.LogLevel.Information)
+      .configureLogging(signalR.LogLevel.None)
       .build();
 
     connectionRef.current = newConnection;
 
-    newConnection.start()
-      .then(() => {
-        setError(null);
-        newConnection.invoke("JoinRoom", roomId);
-      })
-      .catch((err) => {
-        console.error("QA Hub Connection Error: ", err);
-        setError("Không thể kết nối đến máy chủ Hỏi Đáp.");
-      });
+    const startTimer = setTimeout(() => {
+      if (isCancelled) return;
+      startPromise = newConnection.start();
+      startPromise
+        .then(() => {
+          if (isCancelled) {
+            newConnection.stop().catch(() => {});
+            return;
+          }
+          setError(null);
+          newConnection.invoke("JoinRoom", roomId).catch(() => {});
+        })
+        .catch((err) => {
+          const msg = String(err?.message || err || "");
+          if (
+            isCancelled ||
+            err?.name === "AbortError" ||
+            msg.includes("stopped during negotiation") ||
+            msg.includes("stopped before the invocation")
+          ) {
+            return;
+          }
+          console.warn("QA Hub Connection Warning: ", err);
+          setError("Không thể kết nối đến máy chủ Hỏi Đáp.");
+        });
+    }, 0);
 
     // ── Events ──
     newConnection.on("LoadQuestions", (loadedQuestions: QAQuestion[]) => {
@@ -83,7 +103,15 @@ export function useQAHub(roomId: string | null) {
     });
 
     return () => {
-      newConnection.stop();
+      isCancelled = true;
+      clearTimeout(startTimer);
+      if (startPromise) {
+        startPromise
+          .then(() => newConnection.stop().catch(() => {}))
+          .catch(() => {});
+      } else if (newConnection.state !== signalR.HubConnectionState.Disconnected) {
+        newConnection.stop().catch(() => {});
+      }
     };
   }, [roomId]);
 

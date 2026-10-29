@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Cookies from "js-cookie";
 import { useGameHub, PlayerArenaProgress } from "@/hooks/useGameHub";
@@ -342,12 +342,21 @@ export default function PlayerGameRoom() {
   };
 
   const handlePacedNext = () => {
-    const addPts = (answerResult && !answerResult.isTournamentLocked) ? (answerResult.scoreAwarded ?? 0) : 0;
+    // Nếu hết giờ mà chưa trả lời (hasAnswered === false), câu đó tính 0 điểm
+    const addPts = (hasAnswered && answerResult && !answerResult.isTournamentLocked)
+      ? (answerResult.scoreAwarded ?? 0)
+      : 0;
     const newScore = pacedScore + addPts;
     setPacedScore(newScore);
 
     if (pacedSlideIndex < allQuizSlides.length - 1) {
       const nextIdx = pacedSlideIndex + 1;
+      const nextSlide = allQuizSlides[nextIdx];
+      const nextLimit =
+        roomDetails?.questionTimeLimit ||
+        (roomInfo as any)?.questionTimeLimit ||
+        (nextSlide?.timeLimit > 0 ? nextSlide.timeLimit : 30);
+      setSlideTimeRemaining(nextLimit);
       setPacedSlideIndex(nextIdx);
       setHasAnswered(false);
       setSelectedQuizOptionId(null);
@@ -362,6 +371,31 @@ export default function PlayerGameRoom() {
       updateProgress(allQuizSlides.length, allQuizSlides.length, newScore);
     }
   };
+
+  const isPlaying =
+    (isPacedMode ? isTournamentStarted : gameState === "PLAYING") &&
+    Boolean(displaySlide) &&
+    !viewLobbyWhilePacedFinished;
+
+  const activeSlideTimeLeft = isPacedMode ? slideTimeRemaining : slideTimeLeft;
+  const isSlideTimeUp = activeSlideTimeLeft !== null && activeSlideTimeLeft <= 0;
+  const currentSlideKey = isPacedMode
+    ? `paced-${pacedSlideIndex}-${displaySlide?.slideId || displaySlide?.id || ""}`
+    : `sync-${displaySlide?.index ?? ""}-${displaySlide?.slideId || displaySlide?.id || ""}`;
+
+  const handleAdvanceSlideRef = useRef(handleAdvanceSlide);
+  handleAdvanceSlideRef.current = handleAdvanceSlide;
+
+  // Tự động chuyển sang câu hỏi tiếp theo khi hết thời gian trả lời (không tính điểm câu hết giờ)
+  useEffect(() => {
+    if (!isPlaying || !isSlideTimeUp || isPacedFinished) return;
+
+    const timer = setTimeout(() => {
+      handleAdvanceSlideRef.current();
+    }, 1500);
+
+    return () => clearTimeout(timer);
+  }, [isPlaying, isSlideTimeUp, isPacedFinished, currentSlideKey]);
 
   // Tự động kết nối hoặc khôi phục phiên (Rejoin)
   useEffect(() => {
@@ -663,8 +697,6 @@ export default function PlayerGameRoom() {
       </div>
     );
   }
-
-  const isPlaying = (isPacedMode ? isTournamentStarted : gameState === "PLAYING") && Boolean(displaySlide) && !viewLobbyWhilePacedFinished;
 
   const isTournamentEnded =
     roomDetails?.status === "FINISHED" ||
@@ -1089,7 +1121,7 @@ export default function PlayerGameRoom() {
                 setBlankAnswer(answer);
                 const targetSlide = displaySlide;
                 const targetSlideId = targetSlide?.slideId || targetSlide?.id;
-                if (!answer.trim() || hasAnswered || !targetSlide || !targetSlideId) return;
+                if (!answer.trim() || hasAnswered || isSlideTimeUp || !targetSlide || !targetSlideId) return;
                 setHasAnswered(true);
                 const timeLimit = targetSlide.timeLimit || 30;
                 const elapsedMs = isPacedMode ? 1500 : Math.max(0, (timeLimit - (slideTimeLeft || 0)) * 1000);
@@ -1101,7 +1133,7 @@ export default function PlayerGameRoom() {
               onSubmitMatching={(pairs) => {
                 const targetSlide = displaySlide;
                 const targetSlideId = targetSlide?.slideId || targetSlide?.id;
-                if (hasAnswered || !targetSlide || !targetSlideId) return;
+                if (hasAnswered || isSlideTimeUp || !targetSlide || !targetSlideId) return;
                 setHasAnswered(true);
                 const timeLimit = targetSlide.timeLimit || 30;
                 const elapsedMs = isPacedMode ? 1500 : Math.max(0, (timeLimit - (slideTimeLeft || 0)) * 1000);
@@ -1113,7 +1145,7 @@ export default function PlayerGameRoom() {
               onSubmitWordCloud={(word) => {
                 const targetSlide = displaySlide;
                 const targetSlideId = targetSlide?.slideId || targetSlide?.id;
-                if (!word.trim() || hasAnswered || !targetSlide || !targetSlideId) return;
+                if (!word.trim() || hasAnswered || isSlideTimeUp || !targetSlide || !targetSlideId) return;
                 setHasAnswered(true);
                 const timeLimit = targetSlide.timeLimit || 30;
                 const elapsedMs = isPacedMode ? 1500 : Math.max(0, (timeLimit - (slideTimeLeft || 0)) * 1000);
@@ -1123,7 +1155,7 @@ export default function PlayerGameRoom() {
                 });
               }}
               isPacedMode={isPacedMode}
-              onPacedNext={isPacedMode || isSoloPlay ? handleAdvanceSlide : undefined}
+              onPacedNext={isPacedMode || isSoloPlay || isSlideTimeUp ? handleAdvanceSlide : undefined}
               isLastQuestion={isLastSlide}
               pinCode={pinCode}
               playerNickname={roomInfo?.playerNickname || "Bạn"}

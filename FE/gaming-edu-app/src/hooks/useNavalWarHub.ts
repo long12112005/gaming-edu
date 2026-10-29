@@ -143,11 +143,22 @@ export function useNavalWarHub(pinCode?: string) {
   // Game battle states
   const [mapSize, setMapSize] = useState<number>(15);
   const [isMatchStarted, setIsMatchStarted] = useState<boolean>(false);
+  const [currentTurnTeam, setCurrentTurnTeam] = useState<"TEAM_A" | "TEAM_B" | null>("TEAM_A");
+  const [turnNumber, setTurnNumber] = useState<number>(1);
   const [myShips, setMyShips] = useState<NavalShipModel[]>([]);
   const [enemyShots, setEnemyShots] = useState<ShotHistoryItem[]>([]);
   const [shotsEarned, setShotsEarned] = useState<number>(0);
   const [currentCombo, setCurrentCombo] = useState<number>(0);
   const [energyPoints, setEnergyPoints] = useState<number>(0);
+
+  const myTeamSideRef = useRef<"TEAM_A" | "TEAM_B" | "HOST" | null>(null);
+  const myPlayerIdRef = useRef<string>("");
+  useEffect(() => {
+    myTeamSideRef.current = myTeamSide;
+  }, [myTeamSide]);
+  useEffect(() => {
+    myPlayerIdRef.current = myPlayerId;
+  }, [myPlayerId]);
 
   // Teams fleet states
   const [teamAShipsRemaining, setTeamAShipsRemaining] = useState<number>(5);
@@ -181,6 +192,9 @@ export function useNavalWarHub(pinCode?: string) {
 
   // Connect to Naval SignalR Hub
   useEffect(() => {
+    let isCancelled = false;
+    let startPromise: Promise<void> | null = null;
+
     const token = Cookies.get("token");
     const conn = new signalR.HubConnectionBuilder()
       .withUrl(NAVAL_HUB_URL, {
@@ -188,7 +202,7 @@ export function useNavalWarHub(pinCode?: string) {
         transport: signalR.HttpTransportType.WebSockets | signalR.HttpTransportType.LongPolling,
       })
       .withAutomaticReconnect([0, 1000, 3000, 5000])
-      .configureLogging(signalR.LogLevel.Information)
+      .configureLogging(signalR.LogLevel.None)
       .build();
 
     connectionRef.current = conn;
@@ -221,6 +235,8 @@ export function useNavalWarHub(pinCode?: string) {
 
     conn.on("NavalHostSpectatorState", (data: HostSpectatorState) => {
       setHostSpectatorState(data);
+      if ((data as any).currentTurnTeam) setCurrentTurnTeam((data as any).currentTurnTeam);
+      if ((data as any).turnNumber !== undefined) setTurnNumber((data as any).turnNumber);
       if (data.teamAShipsRemaining !== undefined) setTeamAShipsRemaining(data.teamAShipsRemaining);
       if (data.teamBShipsRemaining !== undefined) setTeamBShipsRemaining(data.teamBShipsRemaining);
       if (data.leaderboard) setLeaderboard(data.leaderboard);
@@ -231,6 +247,8 @@ export function useNavalWarHub(pinCode?: string) {
 
     conn.on("NavalHostSpectatorUpdated", (data: HostSpectatorState) => {
       setHostSpectatorState(data);
+      if ((data as any).currentTurnTeam) setCurrentTurnTeam((data as any).currentTurnTeam);
+      if ((data as any).turnNumber !== undefined) setTurnNumber((data as any).turnNumber);
       if (data.teamAShipsRemaining !== undefined) setTeamAShipsRemaining(data.teamAShipsRemaining);
       if (data.teamBShipsRemaining !== undefined) setTeamBShipsRemaining(data.teamBShipsRemaining);
       if (data.leaderboard) setLeaderboard(data.leaderboard);
@@ -242,6 +260,8 @@ export function useNavalWarHub(pinCode?: string) {
     conn.on("NavalMatchReset", () => {
       setIsMatchStarted(false);
       setMatchResult(null);
+      setCurrentTurnTeam("TEAM_A");
+      setTurnNumber(1);
       setIsDoubleShot(false);
       setDoubleShotInfo(null);
       setMyShips([]);
@@ -281,6 +301,8 @@ export function useNavalWarHub(pinCode?: string) {
     conn.on("NavalMatchStarted", (data) => {
       setIsMatchStarted(true);
       if (data.mapSize) setMapSize(data.mapSize);
+      if (data.currentTurnTeam) setCurrentTurnTeam(data.currentTurnTeam);
+      if (data.turnNumber !== undefined) setTurnNumber(data.turnNumber);
 
       if (data.doubleShotPlayerId) {
         setDoubleShotInfo({
@@ -307,6 +329,8 @@ export function useNavalWarHub(pinCode?: string) {
 
     conn.on("NavalMapState", (data) => {
       if (data.myTeamSide) setMyTeamSide(data.myTeamSide);
+      if (data.currentTurnTeam) setCurrentTurnTeam(data.currentTurnTeam);
+      if (data.turnNumber !== undefined) setTurnNumber(data.turnNumber);
       setMyShips(data.myShips || []);
       setEnemyShots(data.enemyShotsHistory || []);
       if (data.mapSize) setMapSize(data.mapSize);
@@ -314,6 +338,17 @@ export function useNavalWarHub(pinCode?: string) {
         const currentPid = myPlayerId || Cookies.get("guest_player_id") || Cookies.get("player_id");
         setIsDoubleShot(Boolean(currentPid && currentPid.toLowerCase() === data.doubleShotPlayerId.toLowerCase()));
       }
+    });
+
+    conn.on("NavalTurnChanged", (data) => {
+      if (data.currentTurnTeam) {
+        setCurrentTurnTeam(data.currentTurnTeam);
+      }
+      if (data.turnNumber !== undefined) {
+        setTurnNumber(data.turnNumber);
+      }
+      const teamLabel = data.currentTurnTeam === "TEAM_A" ? "Hạm Đội Lam (Phe A)" : "Hạm Đội Xích (Phe B)";
+      addCombatLog(`🔄 CHUYỂN LƯỢT #${data.turnNumber ?? ""}: Đến lượt trả lời và khai hỏa của ${teamLabel}!`, "INFO");
     });
 
     conn.on("NavalAnswerResult", (data) => {
@@ -343,19 +378,29 @@ export function useNavalWarHub(pinCode?: string) {
     conn.on("NavalShotFired", (data) => {
       navalSounds.playCannon();
 
-      // Cập nhật các ô bắn trúng / bắn trượt trên bản đồ đối phương
-      setEnemyShots((prev) => {
-        const filtered = prev.filter((s) => !(s.targetRow === data.targetRow && s.targetCol === data.targetCol));
-        return [
-          ...filtered,
-          {
-            targetRow: data.targetRow,
-            targetCol: data.targetCol,
-            result: data.result,
-            sunkShipType: data.sunkShipType,
-          },
-        ];
-      });
+      // Cập nhật quyền bắn còn lại nếu chính người chơi này vừa bắn
+      const currentPid = myPlayerIdRef.current || Cookies.get("guest_player_id") || Cookies.get("player_id") || "";
+      if (data.playerId && currentPid && data.playerId.toLowerCase() === currentPid.toLowerCase()) {
+        if (data.shotsEarnedRemaining !== undefined) {
+          setShotsEarned(data.shotsEarnedRemaining);
+        }
+      }
+
+      // Chỉ cập nhật các ô bắn trúng / bắn trượt trên bản đồ đối phương khi đội của mình là phe tấn công
+      if (!data.attackerTeam || !myTeamSideRef.current || data.attackerTeam === myTeamSideRef.current) {
+        setEnemyShots((prev) => {
+          const filtered = prev.filter((s) => !(s.targetRow === data.targetRow && s.targetCol === data.targetCol));
+          return [
+            ...filtered,
+            {
+              targetRow: data.targetRow,
+              targetCol: data.targetCol,
+              result: data.result,
+              sunkShipType: data.sunkShipType,
+            },
+          ];
+        });
+      }
 
       if (data.result === "BLOCKED_BY_SHIELD") {
         navalSounds.playShieldActivate();
@@ -443,6 +488,8 @@ export function useNavalWarHub(pinCode?: string) {
       }
 
       if (data.mapSize) setMapSize(data.mapSize);
+      if (data.currentTurnTeam) setCurrentTurnTeam(data.currentTurnTeam);
+      if (data.turnNumber !== undefined) setTurnNumber(data.turnNumber);
       setIsMatchStarted(data.isMatchStarted);
       setTeamAShipsRemaining(data.teamAShipsRemaining ?? 5);
       setTeamBShipsRemaining(data.teamBShipsRemaining ?? 5);
@@ -471,33 +518,57 @@ export function useNavalWarHub(pinCode?: string) {
     });
 
     // Start connection
-    conn
-      .start()
-      .then(() => {
-        setIsConnected(true);
-        setConnection(conn);
+    const startTimer = setTimeout(() => {
+      if (isCancelled) return;
+      startPromise = conn.start();
+      startPromise
+        .then(() => {
+          if (isCancelled) {
+            conn.stop().catch(() => {});
+            return;
+          }
+          setIsConnected(true);
+          setConnection(conn);
 
-        // Gia nhập nhóm sảnh chờ của phòng để nhận danh sách thuyền viên tức thì
-        if (pinCode) {
-          conn.invoke("EnterNavalLobby", pinCode).catch((err) => {
-            console.warn("EnterNavalLobby failed:", err);
-          });
-        }
+          // Gia nhập nhóm sảnh chờ của phòng để nhận danh sách thuyền viên tức thì
+          if (pinCode) {
+            conn.invoke("EnterNavalLobby", pinCode).catch((err) => {
+              console.warn("EnterNavalLobby failed:", err);
+            });
+          }
 
-        // Tự động khôi phục trạng thái tác chiến nếu đã có thông tin người chơi (F5)
-        const storedPlayerId = Cookies.get("guest_player_id") || Cookies.get("player_id");
-        if (pinCode && storedPlayerId) {
-          conn.invoke("ReconnectRoom", pinCode, storedPlayerId).catch((err) => {
-            console.warn("Auto-reconnect failed:", err);
-          });
-        }
-      })
-      .catch((err) => {
-        console.error("SignalR NavalWarHub Connection Error:", err);
-      });
+          // Tự động khôi phục trạng thái tác chiến nếu đã có thông tin người chơi (F5)
+          const storedPlayerId = Cookies.get("guest_player_id") || Cookies.get("player_id");
+          if (pinCode && storedPlayerId) {
+            conn.invoke("ReconnectRoom", pinCode, storedPlayerId).catch((err) => {
+              console.warn("Auto-reconnect failed:", err);
+            });
+          }
+        })
+        .catch((err) => {
+          const msg = String(err?.message || err || "");
+          if (
+            isCancelled ||
+            err?.name === "AbortError" ||
+            msg.includes("stopped during negotiation") ||
+            msg.includes("stopped before the invocation")
+          ) {
+            return;
+          }
+          console.warn("SignalR NavalWarHub Connection Warning:", err);
+        });
+    }, 0);
 
     return () => {
-      conn.stop();
+      isCancelled = true;
+      clearTimeout(startTimer);
+      if (startPromise) {
+        startPromise
+          .then(() => conn.stop().catch(() => {}))
+          .catch(() => {});
+      } else if (conn.state !== signalR.HubConnectionState.Disconnected) {
+        conn.stop().catch(() => {});
+      }
     };
   }, [pinCode, addCombatLog, triggerScreenShake]);
 
@@ -559,6 +630,12 @@ export function useNavalWarHub(pinCode?: string) {
     }
   }, []);
 
+  const timeoutTurn = useCallback(async (pin: string) => {
+    if (connectionRef.current && connectionRef.current.state === signalR.HubConnectionState.Connected) {
+      await connectionRef.current.invoke("TimeoutTurn", pin);
+    }
+  }, []);
+
   const fireShot = useCallback(async (pin: string, targetRow: number, targetCol: number, isPrecision: boolean = false) => {
     if (connectionRef.current && connectionRef.current.state === signalR.HubConnectionState.Connected) {
       await connectionRef.current.invoke("FireShot", pin, targetRow, targetCol, isPrecision);
@@ -591,6 +668,8 @@ export function useNavalWarHub(pinCode?: string) {
     hostSpectatorState,
     mapSize,
     isMatchStarted,
+    currentTurnTeam,
+    turnNumber,
     myShips,
     enemyShots,
     shotsEarned,
@@ -614,6 +693,7 @@ export function useNavalWarHub(pinCode?: string) {
     startMatch,
     resetMatch,
     submitAnswer,
+    timeoutTurn,
     fireShot,
     useSkill,
     endMatchEarly,

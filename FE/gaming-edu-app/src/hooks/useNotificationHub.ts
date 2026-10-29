@@ -26,20 +26,36 @@ export function useNotificationHub() {
     const token = Cookies.get("token");
     if (!token) return;
 
+    let isCancelled = false;
+    let startPromise: Promise<void> | null = null;
+
     const connection = new signalR.HubConnectionBuilder()
       .withUrl(NOTIF_HUB_URL, {
         accessTokenFactory: () => token,
         transport: signalR.HttpTransportType.WebSockets,
       })
       .withAutomaticReconnect()
-      .configureLogging(signalR.LogLevel.Warning)
+      .configureLogging(signalR.LogLevel.None)
       .build();
 
     connectionRef.current = connection;
 
-    connection.start().catch((err) => {
-      console.warn("Notification Hub Connection Error (silent):", err);
-    });
+    const startTimer = setTimeout(() => {
+      if (isCancelled) return;
+      startPromise = connection.start();
+      startPromise.catch((err) => {
+        const msg = String(err?.message || err || "");
+        if (
+          isCancelled ||
+          err?.name === "AbortError" ||
+          msg.includes("stopped during negotiation") ||
+          msg.includes("stopped before the invocation")
+        ) {
+          return;
+        }
+        console.warn("Notification Hub Connection Warning (silent):", err);
+      });
+    }, 0);
 
     connection.on("NotificationReceived", (payload: any) => {
       const newNotif: AppNotification = {
@@ -64,7 +80,15 @@ export function useNotificationHub() {
     });
 
     return () => {
-      connection.stop();
+      isCancelled = true;
+      clearTimeout(startTimer);
+      if (startPromise) {
+        startPromise
+          .then(() => connection.stop().catch(() => {}))
+          .catch(() => {});
+      } else if (connection.state !== signalR.HubConnectionState.Disconnected) {
+        connection.stop().catch(() => {});
+      }
     };
   }, []);
 

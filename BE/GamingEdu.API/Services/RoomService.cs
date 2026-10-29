@@ -1615,7 +1615,6 @@ public class RoomService : IRoomService
     public async Task ApplyBattleRoyaleTimeoutPenaltyAsync(Guid roomId, Guid slideId)
     {
         var theme = await GetRoomThemeAsync(roomId);
-        if (theme != "BATTLE_ROYALE") return;
 
         var allPlayers = await _db.RoomPlayers
             .Where(rp => rp.RoomId == roomId)
@@ -1630,12 +1629,18 @@ public class RoomService : IRoomService
         {
             if (!answeredPlayerIds.Contains(p.Id))
             {
-                // Người chơi hết giờ không trả lời: trừ 35 HP
-                int hp = await GetPlayerHpAsync(roomId, p.Id);
-                if (hp > 0)
+                // Hết giờ không trả lời: không tính điểm câu đó và reset chuỗi đúng (streak = 0)
+                await _cacheStore.SetStringAsync($"room_streak:{p.Id}", "0", TimeSpan.FromHours(4));
+
+                // Riêng chế độ Battle Royale: trừ thêm 35 HP
+                if (theme == "BATTLE_ROYALE")
                 {
-                    int newHp = Math.Max(0, hp - 35);
-                    await SetPlayerHpAsync(roomId, p.Id, newHp);
+                    int hp = await GetPlayerHpAsync(roomId, p.Id);
+                    if (hp > 0)
+                    {
+                        int newHp = Math.Max(0, hp - 35);
+                        await SetPlayerHpAsync(roomId, p.Id, newHp);
+                    }
                 }
             }
         }

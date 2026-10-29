@@ -400,3 +400,106 @@ h1, h2, h3, h4, h5, h6, .font-heading {
   background-size: 100% 100%, 28px 28px, 28px 28px;
 }
 
+/* ===========================
+   GLOBAL DARK MODE OVERRIDES
+=========================== */
+html.dark {
+  color-scheme: dark;
+}
+
+html.dark body {
+  background-color: #0B0F19 !important;
+  color: #F1F5F9 !important;
+}
+
+html.dark .bg-\[\#F8FAFC\],
+html.dark .bg-\[\#F4F6FB\],
+html.dark .bg-\[\#F1F5F9\] {
+  background-color: #0B0F19 !important;
+}
+
+html.dark .bg-white,
+html.dark .bento-card {
+  background-color: #151C2C !important;
+  border-color: #263147 !important;
+  color: #F1F5F9;
+}
+
+html.dark .bg-white\/95,
+html.dark .bg-white\/90,
+html.dark .bg-white\/85,
+html.dark .bg-white\/80 {
+  background-color: rgba(21, 28, 44, 0.92) !important;
+  border-color: rgba(51, 65, 85, 0.75) !important;
+}
+
+html.dark .bg-slate-50,
+html.dark .bg-slate-50\/80,
+html.dark .bg-slate-50\/50,
+html.dark .bg-gray-50 {
+  background-color: #1E293B !important;
+}
+
+html.dark .bg-slate-100,
+html.dark .bg-slate-100\/70,
+html.dark .bg-gray-100 {
+  background-color: #26334D !important;
+}
+
+html.dark .text-slate-900,
+html.dark .text-slate-800,
+html.dark .text-gray-900,
+html.dark .text-gray-800,
+html.dark .text-\[\#0F172A\],
+html.dark .text-\[\#1E1B4B\] {
+  color: #F8FAFC !important;
+}
+
+html.dark .text-slate-700,
+html.dark .text-slate-600,
+html.dark .text-gray-700,
+html.dark .text-gray-600 {
+  color: #CBD5E1 !important;
+}
+
+html.dark .text-slate-500,
+html.dark .text-slate-400,
+html.dark .text-gray-500 {
+  color: #94A3B8 !important;
+}
+
+html.dark .border-slate-200,
+html.dark .border-slate-200\/90,
+html.dark .border-slate-200\/80,
+html.dark .border-slate-200\/60,
+html.dark .border-slate-300,
+html.dark .border-slate-100,
+html.dark .border-gray-200,
+html.dark .border-gray-100,
+html.dark .border-\[\#E2E8F0\] {
+  border-color: #263147 !important;
+}
+
+html.dark .divide-slate-100 > :not(:last-child),
+html.dark .divide-slate-200 > :not(:last-child) {
+  border-color: #263147 !important;
+}
+
+html.dark .bg-purple-50,
+html.dark .bg-indigo-50 {
+  background-color: rgba(124, 58, 237, 0.18) !important;
+}
+
+html.dark .text-purple-700,
+html.dark .text-indigo-700 {
+  color: #C4B5FD !important;
+}
+
+html.dark input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+html.dark textarea,
+html.dark select {
+  background-color: #0F172A;
+  color: #F8FAFC;
+  border-color: #334155;
+}
+

@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useState, useCallback } from "react";
+import { use, useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Cookies from "js-cookie";
 import confetti from "canvas-confetti";
@@ -69,6 +69,8 @@ export default function NavalWarGamePage({ params }: { params: Promise<{ pin: st
   const [slides, setSlides] = useState<QuestionSlide[]>([]);
   const [currentSlideIndex, setCurrentSlideIndex] = useState<number>(0);
   const [hasAnsweredCurrentSlide, setHasAnsweredCurrentSlide] = useState<boolean>(false);
+  const prevTurnNumberRef = useRef<number>(1);
+  const didParticipateInTurnRef = useRef<boolean>(false);
 
   // Connect to Naval SignalR Hub
   const {
@@ -79,6 +81,8 @@ export default function NavalWarGamePage({ params }: { params: Promise<{ pin: st
     hostSpectatorState,
     mapSize,
     isMatchStarted,
+    currentTurnTeam,
+    turnNumber,
     myShips,
     enemyShots,
     shotsEarned,
@@ -103,6 +107,7 @@ export default function NavalWarGamePage({ params }: { params: Promise<{ pin: st
     startMatch,
     resetMatch,
     submitAnswer,
+    timeoutTurn,
     fireShot,
     useSkill,
     endMatchEarly,
@@ -276,19 +281,53 @@ export default function NavalWarGamePage({ params }: { params: Promise<{ pin: st
 
   // Replay match (Host resets match back to lobby for everyone)
   const handleResetMatch = () => {
+    setCurrentSlideIndex(0);
+    setHasAnsweredCurrentSlide(false);
+    prevTurnNumberRef.current = 1;
+    didParticipateInTurnRef.current = false;
     resetMatch(pin);
   };
 
+  // Reset slide state when match is reset to lobby
+  useEffect(() => {
+    if (!isMatchStarted) {
+      setCurrentSlideIndex(0);
+      setHasAnsweredCurrentSlide(false);
+      prevTurnNumberRef.current = 1;
+      didParticipateInTurnRef.current = false;
+    }
+  }, [isMatchStarted]);
+
+  // Advance question slide when turn changes after our team completed its turn
+  useEffect(() => {
+    if (!isMatchStarted) return;
+    if (turnNumber !== prevTurnNumberRef.current) {
+      prevTurnNumberRef.current = turnNumber;
+      if (didParticipateInTurnRef.current) {
+        setCurrentSlideIndex((prev) => (slides.length > 0 ? (prev + 1) % slides.length : 0));
+        didParticipateInTurnRef.current = false;
+      }
+      setHasAnsweredCurrentSlide(false);
+    }
+  }, [turnNumber, isMatchStarted, slides.length]);
+
   // Submit Answer
   const handleAnswerSubmit = (slideId: string, answerData: string, timeMs: number) => {
+    didParticipateInTurnRef.current = true;
     setHasAnsweredCurrentSlide(true);
     submitAnswer(pin, slideId, answerData, timeMs);
   };
 
+  // Handle Turn Timeout (0s without answering)
+  const handleTurnTimeout = useCallback(() => {
+    didParticipateInTurnRef.current = true;
+    timeoutTurn(pin);
+  }, [pin, timeoutTurn]);
+
   // Next Question
   const handleNextQuestion = () => {
-    if (currentSlideIndex + 1 < slides.length) {
-      setCurrentSlideIndex((prev) => prev + 1);
+    if (slides.length > 0) {
+      setCurrentSlideIndex((prev) => (prev + 1) % slides.length);
       setHasAnsweredCurrentSlide(false);
     }
   };
@@ -325,6 +364,7 @@ export default function NavalWarGamePage({ params }: { params: Promise<{ pin: st
   const canStartMatch = isHost || totalJoinedPlayers >= 1;
   const teamDiff = Math.abs(lobbyState.teamACount - lobbyState.teamBCount);
   const isSpectatorMode = isHost && myTeamSide !== "TEAM_A" && myTeamSide !== "TEAM_B";
+  const isMyTeamTurn = Boolean(!currentTurnTeam || myTeamSide === currentTurnTeam);
 
   return (
     <div
@@ -802,6 +842,8 @@ export default function NavalWarGamePage({ params }: { params: Promise<{ pin: st
             {/* Top Tactical Status Bar */}
             <NavalStatusBar
               myTeamSide={myTeamSide}
+              currentTurnTeam={currentTurnTeam}
+              turnNumber={turnNumber}
               teamAShipsRemaining={teamAShipsRemaining}
               teamBShipsRemaining={teamBShipsRemaining}
               currentCombo={currentCombo}
@@ -934,7 +976,7 @@ export default function NavalWarGamePage({ params }: { params: Promise<{ pin: st
                     isEnemy={true}
                     mapSize={mapSize}
                     enemyShots={enemyShots}
-                    shotsEarned={shotsEarned}
+                    shotsEarned={isMyTeamTurn ? shotsEarned : 0}
                     radarScanWave={radarScanWave}
                     skillMode={skillMode}
                     teamTheme={myTeamSide === "TEAM_A" ? "red" : "blue"}
@@ -956,6 +998,11 @@ export default function NavalWarGamePage({ params }: { params: Promise<{ pin: st
                     currentQuestionIndex={currentSlideIndex}
                     totalQuestions={slides.length > 0 ? slides.length : 1}
                     isDoubleShot={isDoubleShot}
+                    isMyTeamTurn={isMyTeamTurn}
+                    currentTurnTeam={currentTurnTeam}
+                    myTeamSide={myTeamSide}
+                    turnNumber={turnNumber}
+                    onTimeout={handleTurnTimeout}
                   />
 
                   {/* Combat Log & Leaderboard */}

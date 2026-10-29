@@ -31,6 +31,7 @@ public class GameHub : Hub
     private static readonly Dictionary<string, int> RoomSlideIndex = new();
     private static readonly Dictionary<string, DateTime> LastSlideTransitionTime = new();
     private static readonly HashSet<string> LockedRooms = new();
+    private static readonly object SlideTransitionLock = new();
 
     public GameHub(
         IRoomService roomService,
@@ -512,13 +513,16 @@ public class GameHub : Hub
             Context.Items["RoomId"]    = room.Id;
             Context.Items["GroupName"] = groupName;
 
-            // Chống gọi NextSlide liên tiếp trong vòng 1.5 giây gây nhảy cóc câu hỏi
-            if (LastSlideTransitionTime.TryGetValue(pinCode, out var lastTime) && (DateTime.UtcNow - lastTime).TotalMilliseconds < 1500)
+            // Chống gọi NextSlide liên tiếp trong vòng 2.5 giây gây nhảy cóc câu hỏi (an toàn đa luồng khi cả Host & Player auto-advance)
+            lock (SlideTransitionLock)
             {
-                _logger.LogWarning("NextSlide ignored due to rapid successive trigger in room {PinCode}", pinCode);
-                return;
+                if (LastSlideTransitionTime.TryGetValue(pinCode, out var lastTime) && (DateTime.UtcNow - lastTime).TotalMilliseconds < 2500)
+                {
+                    _logger.LogWarning("NextSlide ignored due to rapid successive trigger in room {PinCode}", pinCode);
+                    return;
+                }
+                LastSlideTransitionTime[pinCode] = DateTime.UtcNow;
             }
-            LastSlideTransitionTime[pinCode] = DateTime.UtcNow;
 
             // Xử lý phạt timeout cho những người không nộp ở câu hỏi trước (cho Battle Royale)
             var prevSlide = await GetCurrentSlideAsync(roomId, pinCode);
@@ -959,9 +963,11 @@ public class GameHub : Hub
                 o.Id, o.Content, o.MatchingPair, o.OrderIndex, blankLength, wordLengths);
         });
 
+        int effectiveTimeLimit = slide.TimeLimit > 0 ? slide.TimeLimit : 30;
+
         return new SlideStartedDto(
             idx, slide.Id, slide.Type, slide.QuestionText,
-            slide.TimeLimit, slide.Points, publicOptions, slides.Count);
+            effectiveTimeLimit, slide.Points, publicOptions, slides.Count);
     }
 
     private async Task SendErrorAsync(string message)

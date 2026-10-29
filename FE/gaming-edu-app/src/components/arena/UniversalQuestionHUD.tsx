@@ -101,8 +101,10 @@ export default function UniversalQuestionHUD({
     });
   };
 
+  const isTimeUp = slideTimeLeft !== null && slideTimeLeft <= 0;
+
   const handleSelectQuiz = (optId: string, e: React.MouseEvent) => {
-    if (hasAnswered) return;
+    if (hasAnswered || isTimeUp) return;
     triggerParticles(e);
     setSelectedQuizId(optId);
     onSubmitQuiz(optId);
@@ -115,14 +117,14 @@ export default function UniversalQuestionHUD({
 
   const handleSubmitBlank = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!blankText.trim() || hasAnswered) return;
+    if (!blankText.trim() || hasAnswered || isTimeUp) return;
     onSubmitBlank(blankText.trim());
   };
 
   // ── LOGIC NỐI DÂY MATCHING CẶP GHÉP ────────────────────────────────────────
 
   const handleLeftClick = (item: { id: string; content: string }) => {
-    if (hasAnswered) return;
+    if (hasAnswered || isTimeUp) return;
     if (matchingPairs[item.id]) {
       // Bỏ liên kết
       setMatchingPairs((prev) => {
@@ -143,7 +145,7 @@ export default function UniversalQuestionHUD({
   };
 
   const handleRightClick = (rightContent: string) => {
-    if (hasAnswered) return;
+    if (hasAnswered || isTimeUp) return;
     // Kiểm tra nếu ô bên phải đã được nối
     const existingLeft = Object.keys(matchingPairs).find(
       (k) => matchingPairs[k] === rightContent
@@ -168,6 +170,7 @@ export default function UniversalQuestionHUD({
 
   const handleUnlinkPair = (leftId: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    if (hasAnswered || isTimeUp) return;
     setMatchingPairs((prev) => {
       const next = { ...prev };
       delete next[leftId];
@@ -176,7 +179,7 @@ export default function UniversalQuestionHUD({
   };
 
   const handleSubmitMatchingPairs = (e: React.MouseEvent) => {
-    if (hasAnswered) return;
+    if (hasAnswered || isTimeUp) return;
     triggerParticles(e);
     const list = Object.entries(matchingPairs).map(([leftId, rightContent]) => ({
       leftId,
@@ -293,10 +296,29 @@ export default function UniversalQuestionHUD({
 
       {/* ── INTERACTIVE BODY (TACTILE 3D HUD) ── */}
       <div className="flex-1 flex flex-col justify-center my-1 max-w-2xl w-full mx-auto">
-        {hasAnswered ? (
-          /* TRẠNG THÁI ĐÃ NỘP BÀI */
+        {hasAnswered || isTimeUp ? (
+          /* TRẠNG THÁI ĐÃ NỘP BÀI HOẶC HẾT THỜI GIAN */
           <div className="py-4 px-4 rounded-2xl bg-white/[0.04] border border-white/15 text-center space-y-2.5 animate-in zoom-in-95 backdrop-blur-md">
-            {answerResult ? (
+            {!hasAnswered && isTimeUp ? (
+              <>
+                <div className="w-14 h-14 rounded-2xl bg-rose-500/20 border-2 border-rose-400 text-rose-400 flex items-center justify-center mx-auto shadow-[0_0_20px_rgba(251,113,133,0.3)] animate-pulse">
+                  <Clock size={30} className="stroke-[2.5px]" />
+                </div>
+                <h3 className="text-xl sm:text-2xl font-heading font-black text-rose-400">
+                  ĐÃ HẾT THỜI GIAN!
+                </h3>
+                <div className="flex items-center justify-center gap-2">
+                  <span className="px-3 py-1 rounded-xl bg-slate-800/80 border border-slate-600/60 text-slate-300 font-black text-xs sm:text-sm">
+                    +0 pts (Không tính điểm câu này)
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400">
+                  {isLastQuestion
+                    ? "Đang tự động tổng kết bài thi..."
+                    : "Đang tự động chuyển sang câu hỏi tiếp theo..."}
+                </p>
+              </>
+            ) : answerResult ? (
               <>
                 <div
                   className={`w-14 h-14 rounded-2xl border-2 flex items-center justify-center mx-auto shadow-lg ${

@@ -29,9 +29,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="vi" className="h-full">
+    <html lang="vi" className="h-full" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{var t=localStorage.getItem("theme");if(t==="dark"){document.documentElement.classList.add("dark");document.documentElement.setAttribute("data-theme","dark");}}catch(e){}`,
+          }}
+        />
+      </head>
       <body
-        className={`${plusJakartaSans.variable} ${beVietnamPro.variable} font-sans min-h-full antialiased bg-[#F8FAFC] text-slate-900`}
+        className={`${plusJakartaSans.variable} ${beVietnamPro.variable} font-sans min-h-full antialiased bg-[#F8FAFC] text-slate-900 transition-colors duration-200`}
         suppressHydrationWarning
       >
         <QueryProvider>{children}</QueryProvider>

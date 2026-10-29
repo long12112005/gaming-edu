@@ -450,66 +450,69 @@ export default function HostLobbyPage() {
     }
   }, [gameState, roomId]);
 
-  // ── Tự Động Chuyển Câu Hỏi (Phòng Thường: Xong câu sẽ tự động chuyển câu khác) ──
+  // ── Tự Động Chuyển Câu Hỏi (Phòng Thường: Xong câu hoặc hết giờ sẽ tự động chuyển câu khác) ──
+  const isHostSlideFinished = useMemo(() => {
+    if (gameState !== "PLAYING" || !currentSlide || roomMode === "ASYNC_TOURNAMENT") {
+      return false;
+    }
+    const hasPlayers = players.length > 0;
+    const allAnswered =
+      hasPlayers &&
+      effectiveArenaPlayers.length > 0 &&
+      effectiveArenaPlayers.every((p) => p.isAnswered);
+    const isTimeUp = slideTimeLeft !== null && slideTimeLeft <= 0;
+    return isTimeUp || allAnswered;
+  }, [gameState, currentSlide, roomMode, players.length, effectiveArenaPlayers, slideTimeLeft]);
+
   useEffect(() => {
     // Chỉ áp dụng khi đang chơi và có câu hỏi hiện tại (cho Phòng Thường / HOST_PACED)
-    if (gameState !== "PLAYING" || !currentSlide || roomMode === "ASYNC_TOURNAMENT") {
+    if (gameState !== "PLAYING" || !currentSlide || roomMode === "ASYNC_TOURNAMENT" || !isHostSlideFinished) {
       setAutoAdvanceCountdown(null);
       return;
     }
 
     const currentSlideId = currentSlide.slideId;
-    const hasPlayers = players.length > 0;
-    const allAnswered = hasPlayers && effectiveArenaPlayers.length > 0 && effectiveArenaPlayers.every((p) => p.isAnswered);
-    const isSlideFinished = (slideTimeLeft !== null && slideTimeLeft <= 0) || allAnswered;
-
-    if (isSlideFinished) {
-      if (autoAdvanceSlideIdRef.current === currentSlideId) {
-        return;
-      }
-
-      autoAdvanceSlideIdRef.current = currentSlideId;
-      setAutoAdvanceCountdown(3);
-
-      let count = 3;
-      const timer = setInterval(() => {
-        count -= 1;
-        if (count > 0) {
-          setAutoAdvanceCountdown(count);
-        } else {
-          clearInterval(timer);
-          setAutoAdvanceCountdown(null);
-
-          const isLastQuestion =
-            Boolean(currentSlide.totalSlides && currentSlide.index + 1 >= currentSlide.totalSlides) ||
-            Boolean(slideCount !== null && currentSlide.index + 1 >= slideCount);
-
-          if (isLastQuestion) {
-            api.post(`/rooms/${roomId}/finish`).catch(() => {});
-            hubEndGame(roomId);
-          } else {
-            hubNextSlide(roomId);
-          }
-        }
-      }, 1000);
-
-      return () => {
-        clearInterval(timer);
-      };
-    } else {
-      if (autoAdvanceSlideIdRef.current && autoAdvanceSlideIdRef.current !== currentSlideId) {
-        autoAdvanceSlideIdRef.current = null;
-        setAutoAdvanceCountdown(null);
-      }
+    if (autoAdvanceSlideIdRef.current === currentSlideId) {
+      return;
     }
+
+    autoAdvanceSlideIdRef.current = currentSlideId;
+    setAutoAdvanceCountdown(2);
+
+    let count = 2;
+    const timer = setInterval(() => {
+      count -= 1;
+      if (count > 0) {
+        setAutoAdvanceCountdown(count);
+      } else {
+        clearInterval(timer);
+        setAutoAdvanceCountdown(null);
+
+        const isLastQuestion =
+          Boolean(currentSlide.totalSlides && currentSlide.index + 1 >= currentSlide.totalSlides) ||
+          Boolean(slideCount !== null && currentSlide.index + 1 >= slideCount);
+
+        if (isLastQuestion) {
+          api.post(`/rooms/${roomId}/finish`).catch(() => {});
+          hubEndGame(roomId);
+        } else {
+          hubNextSlide(roomId);
+        }
+      }
+    }, 1000);
+
+    return () => {
+      clearInterval(timer);
+      if (autoAdvanceSlideIdRef.current === currentSlideId) {
+        autoAdvanceSlideIdRef.current = null;
+      }
+    };
   }, [
     gameState,
     currentSlide?.slideId,
     currentSlide?.index,
     currentSlide?.totalSlides,
-    slideTimeLeft,
-    effectiveArenaPlayers,
-    players.length,
+    isHostSlideFinished,
     roomMode,
     roomId,
     slideCount,

@@ -13,6 +13,7 @@ import {
   Zap,
 } from "lucide-react";
 import Button from "@/components/ui/Button";
+import ThemeToggleButton from "@/components/common/ThemeToggleButton";
 import { NavbarUser } from "@/types/database";
 
 interface NavbarProps {
@@ -147,6 +148,9 @@ export default function Navbar({ user }: NavbarProps) {
                 Đăng Nhập
               </Button>
             )}
+
+            {/* Nút đổi giao diện Sáng / Tối bên cạnh ảnh đại diện */}
+            <ThemeToggleButton />
           </div>
         </div>
       </div>
