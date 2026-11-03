@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState, useCallback, useMemo, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Cookies from "js-cookie";
 import {
@@ -26,6 +26,7 @@ import {
   Star,
   Flame,
   ArrowRight,
+  Loader2,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAuthStore } from "@/store/useAuthStore";
@@ -59,8 +60,12 @@ const TOPIC_OPTIONS = [
   "Kỹ Năng Sống",
 ];
 
-export default function LibraryPage() {
+function LibraryContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const openCreateRoomParam = searchParams.get("openCreateRoom");
+  const selectedQuizParam = searchParams.get("selectedQuiz");
+
   const { isAuthenticated, user } = useAuthStore();
 
   const [activeTab, setActiveTab] = useState<"community" | "mine">("community");
@@ -77,6 +82,18 @@ export default function LibraryPage() {
     isOpen: boolean;
     quizId?: string;
   }>({ isOpen: false });
+
+  useEffect(() => {
+    if (openCreateRoomParam === "true") {
+      setCreateRoomModal({
+        isOpen: true,
+        quizId: selectedQuizParam || undefined,
+      });
+      if (typeof window !== "undefined") {
+        window.history.replaceState({}, "", window.location.pathname);
+      }
+    }
+  }, [openCreateRoomParam, selectedQuizParam]);
 
   const [deleteConfirm, setDeleteConfirm] = useState<{
     isOpen: boolean;
@@ -489,5 +506,19 @@ export default function LibraryPage() {
         initialQuizId={createRoomModal.quizId}
       />
     </div>
+  );
+}
+
+export default function LibraryPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center">
+          <Loader2 className="animate-spin text-indigo-600" size={32} />
+        </div>
+      }
+    >
+      <LibraryContent />
+    </Suspense>
   );
 }

@@ -7,6 +7,8 @@ import { navalSounds } from "@/lib/navalSoundEffects";
 
 interface NavalStatusBarProps {
   myTeamSide: "TEAM_A" | "TEAM_B" | "HOST" | null;
+  currentTurnTeam?: "TEAM_A" | "TEAM_B" | null;
+  turnNumber?: number;
   teamAShipsRemaining: number;
   teamBShipsRemaining: number;
   currentCombo: number;
@@ -26,6 +28,8 @@ interface NavalStatusBarProps {
 
 export const NavalStatusBar: React.FC<NavalStatusBarProps> = ({
   myTeamSide,
+  currentTurnTeam = "TEAM_A",
+  turnNumber = 1,
   teamAShipsRemaining,
   teamBShipsRemaining,
   currentCombo,
@@ -42,6 +46,8 @@ export const NavalStatusBar: React.FC<NavalStatusBarProps> = ({
   isMuted,
   onToggleMute,
 }) => {
+  const isMyTeamTurn = !currentTurnTeam || myTeamSide === currentTurnTeam;
+  const turnTeamName = currentTurnTeam === "TEAM_A" ? "Hạm Đội Lam (A)" : "Hạm Đội Xích (B)";
   return (
     <div className="w-full bg-slate-900/90 border border-slate-700/80 rounded-2xl p-4 shadow-xl backdrop-blur-md flex flex-wrap items-center justify-between gap-4">
       {/* Fleet health with ship thumbnails: TEAM_A vs TEAM_B */}
@@ -110,6 +116,35 @@ export const NavalStatusBar: React.FC<NavalStatusBarProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Active Turn Indicator */}
+      {isMatchStarted && (
+        <div
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl border font-bold text-xs transition-all ${
+            isHost
+              ? currentTurnTeam === "TEAM_A"
+                ? "bg-cyan-950/90 border-cyan-400 text-cyan-200 shadow-[0_0_12px_rgba(6,182,212,0.4)]"
+                : "bg-rose-950/90 border-rose-400 text-rose-200 shadow-[0_0_12px_rgba(244,63,94,0.4)]"
+              : isMyTeamTurn
+              ? "bg-emerald-950/90 border-emerald-400 text-emerald-200 shadow-[0_0_15px_rgba(16,185,129,0.5)] animate-pulse"
+              : "bg-slate-800/90 border-amber-500/40 text-amber-300"
+          }`}
+        >
+          <span className="w-2.5 h-2.5 rounded-full bg-current animate-ping shrink-0" />
+          <div className="flex flex-col leading-tight">
+            <span className="text-[10px] uppercase tracking-wider opacity-80">
+              Lượt Bắn #{turnNumber}
+            </span>
+            <span className="text-xs font-extrabold">
+              {isHost
+                ? `Lượt của ${turnTeamName}`
+                : isMyTeamTurn
+                ? `ĐẾN LƯỢT ĐỘI BẠN (${turnTeamName})`
+                : `CHỜ LƯỢT: ${turnTeamName}`}
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* If HOST: Neutral Referee Controls */}
       {isHost ? (

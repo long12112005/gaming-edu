@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Cookies from "js-cookie";
 import { useGameHub, PlayerArenaProgress } from "@/hooks/useGameHub";
@@ -29,6 +29,7 @@ import {
   LogOut,
   ArrowLeft,
   ChevronRight,
+  Play,
 } from "lucide-react";
 
 type ActionButtonProps = {
@@ -103,6 +104,9 @@ export default function PlayerGameRoom() {
     updateProgress,
     playersProgress,
     requestPlayersProgress,
+    startGame: hubStartGame,
+    nextSlide: hubNextSlide,
+    endGame: hubEndGame,
   } = useGameHub();
 
   const {
@@ -193,6 +197,53 @@ export default function PlayerGameRoom() {
 
   const isPacedMode = roomMode === "ASYNC_TOURNAMENT";
   const displaySlide = (isPacedMode && allQuizSlides.length > 0 ? allQuizSlides[pacedSlideIndex] : currentSlide) || currentSlide;
+
+  // Hỗ trợ kiểm tra chơi 1 mình (Solo) hoặc Host đang trực tiếp tham chiến
+  const currentUserId = useMemo(() => {
+    const userStr = Cookies.get("user");
+    if (!userStr) return null;
+    try {
+      return JSON.parse(userStr).id || null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const isHostUser = useMemo(() => {
+    return Boolean(
+      roomDetails?.hostId &&
+      currentUserId &&
+      roomDetails.hostId.toLowerCase() === currentUserId.toLowerCase()
+    );
+  }, [roomDetails?.hostId, currentUserId]);
+
+  const isSoloPlay = players.length <= 1 || isHostUser;
+
+  const isLastSlide = useMemo(() => {
+    if (isPacedMode) {
+      return pacedSlideIndex >= allQuizSlides.length - 1;
+    }
+    return Boolean(
+      currentSlide?.index != null &&
+      currentSlide?.totalSlides != null &&
+      currentSlide.index >= currentSlide.totalSlides - 1
+    );
+  }, [isPacedMode, pacedSlideIndex, allQuizSlides.length, currentSlide?.index, currentSlide?.totalSlides]);
+
+  const handleAdvanceSlide = () => {
+    if (isPacedMode) {
+      handlePacedNext();
+    } else {
+      const targetRoomId = roomDetails?.id || (roomInfo as any)?.roomId;
+      if (targetRoomId) {
+        if (isLastSlide) {
+          hubEndGame(targetRoomId);
+        } else {
+          hubNextSlide(targetRoomId);
+        }
+      }
+    }
+  };
 
   const effectiveQuestionTimeLimit = useMemo(() => {
     return (
@@ -291,12 +342,21 @@ export default function PlayerGameRoom() {
   };
 
   const handlePacedNext = () => {
-    const addPts = (answerResult && !answerResult.isTournamentLocked) ? (answerResult.scoreAwarded ?? 0) : 0;
+    // Nếu hết giờ mà chưa trả lời (hasAnswered === false), câu đó tính 0 điểm
+    const addPts = (hasAnswered && answerResult && !answerResult.isTournamentLocked)
+      ? (answerResult.scoreAwarded ?? 0)
+      : 0;
     const newScore = pacedScore + addPts;
     setPacedScore(newScore);
 
     if (pacedSlideIndex < allQuizSlides.length - 1) {
       const nextIdx = pacedSlideIndex + 1;
+      const nextSlide = allQuizSlides[nextIdx];
+      const nextLimit =
+        roomDetails?.questionTimeLimit ||
+        (roomInfo as any)?.questionTimeLimit ||
+        (nextSlide?.timeLimit > 0 ? nextSlide.timeLimit : 30);
+      setSlideTimeRemaining(nextLimit);
       setPacedSlideIndex(nextIdx);
       setHasAnswered(false);
       setSelectedQuizOptionId(null);
@@ -311,6 +371,31 @@ export default function PlayerGameRoom() {
       updateProgress(allQuizSlides.length, allQuizSlides.length, newScore);
     }
   };
+
+  const isPlaying =
+    (isPacedMode ? isTournamentStarted : gameState === "PLAYING") &&
+    Boolean(displaySlide) &&
+    !viewLobbyWhilePacedFinished;
+
+  const activeSlideTimeLeft = isPacedMode ? slideTimeRemaining : slideTimeLeft;
+  const isSlideTimeUp = activeSlideTimeLeft !== null && activeSlideTimeLeft <= 0;
+  const currentSlideKey = isPacedMode
+    ? `paced-${pacedSlideIndex}-${displaySlide?.slideId || displaySlide?.id || ""}`
+    : `sync-${displaySlide?.index ?? ""}-${displaySlide?.slideId || displaySlide?.id || ""}`;
+
+  const handleAdvanceSlideRef = useRef(handleAdvanceSlide);
+  handleAdvanceSlideRef.current = handleAdvanceSlide;
+
+  // Tự động chuyển sang câu hỏi tiếp theo khi hết thời gian trả lời (không tính điểm câu hết giờ)
+  useEffect(() => {
+    if (!isPlaying || !isSlideTimeUp || isPacedFinished) return;
+
+    const timer = setTimeout(() => {
+      handleAdvanceSlideRef.current();
+    }, 1500);
+
+    return () => clearTimeout(timer);
+  }, [isPlaying, isSlideTimeUp, isPacedFinished, currentSlideKey]);
 
   // Tự động kết nối hoặc khôi phục phiên (Rejoin)
   useEffect(() => {
@@ -613,8 +698,6 @@ export default function PlayerGameRoom() {
     );
   }
 
-  const isPlaying = (isPacedMode ? isTournamentStarted : gameState === "PLAYING") && Boolean(displaySlide) && !viewLobbyWhilePacedFinished;
-
   const isTournamentEnded =
     roomDetails?.status === "FINISHED" ||
     roomInfo?.status === "FINISHED" ||
@@ -869,8 +952,8 @@ export default function PlayerGameRoom() {
               </p>
             </div>
 
-            {/* Nút Sẵn Sàng (Ready Toggle) */}
-            <div className="w-full max-w-md">
+            {/* Nút Sẵn Sàng (Ready Toggle) & Nút Bắt đầu chơi ngay nếu solo */}
+            <div className="w-full max-w-md space-y-3">
               {!isSelfReady ? (
                 <button
                   type="button"
@@ -878,7 +961,7 @@ export default function PlayerGameRoom() {
                     setIsSelfReady(true);
                     toggleReady(true);
                   }}
-                  className="w-full py-5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-black text-xl rounded-[24px] border-4 border-emerald-700 shadow-[0_8px_0_0_#065f46] active:translate-y-2 active:shadow-none transition-all flex items-center justify-center gap-3"
+                  className="w-full py-5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-black text-xl rounded-[24px] border-4 border-emerald-700 shadow-[0_8px_0_0_#065f46] active:translate-y-2 active:shadow-none transition-all flex items-center justify-center gap-3 cursor-pointer"
                 >
                   <Zap size={26} className="fill-current text-amber-300" />
                   <span>TÔI ĐÃ SẴN SÀNG! ⚡</span>
@@ -898,11 +981,32 @@ export default function PlayerGameRoom() {
                       setIsSelfReady(false);
                       toggleReady(false);
                     }}
-                    className="text-xs font-black text-rose-500 hover:text-rose-700 underline"
+                    className="text-xs font-black text-rose-500 hover:text-rose-700 underline cursor-pointer"
                   >
                     Nhấn vào đây nếu muốn hủy sẵn sàng
                   </button>
                 </div>
+              )}
+
+              {/* Nút Chơi 1 Mình / Bắt Đầu Trận Đấu nếu là Host hoặc phòng chỉ có 1 người */}
+              {(isSoloPlay || isHostUser) && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const targetId = roomDetails?.id || (roomInfo as any)?.roomId;
+                    if (targetId) {
+                      try {
+                        await hubStartGame(targetId);
+                      } catch (e) {
+                        console.error("Lỗi khởi động phòng solo:", e);
+                      }
+                    }
+                  }}
+                  className="w-full py-4 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-400 hover:to-orange-400 text-white font-black text-base rounded-[20px] border-4 border-amber-700 shadow-[0_6px_0_0_#b45309] active:translate-y-2 active:shadow-none transition-all flex items-center justify-center gap-2.5 cursor-pointer animate-pulse"
+                >
+                  <Play size={22} className="fill-current text-yellow-200" />
+                  <span>🚀 BẮT ĐẦU CHƠI NGAY (CHƠI 1 MÌNH)</span>
+                </button>
               )}
             </div>
 
@@ -1017,7 +1121,7 @@ export default function PlayerGameRoom() {
                 setBlankAnswer(answer);
                 const targetSlide = displaySlide;
                 const targetSlideId = targetSlide?.slideId || targetSlide?.id;
-                if (!answer.trim() || hasAnswered || !targetSlide || !targetSlideId) return;
+                if (!answer.trim() || hasAnswered || isSlideTimeUp || !targetSlide || !targetSlideId) return;
                 setHasAnswered(true);
                 const timeLimit = targetSlide.timeLimit || 30;
                 const elapsedMs = isPacedMode ? 1500 : Math.max(0, (timeLimit - (slideTimeLeft || 0)) * 1000);
@@ -1029,7 +1133,7 @@ export default function PlayerGameRoom() {
               onSubmitMatching={(pairs) => {
                 const targetSlide = displaySlide;
                 const targetSlideId = targetSlide?.slideId || targetSlide?.id;
-                if (hasAnswered || !targetSlide || !targetSlideId) return;
+                if (hasAnswered || isSlideTimeUp || !targetSlide || !targetSlideId) return;
                 setHasAnswered(true);
                 const timeLimit = targetSlide.timeLimit || 30;
                 const elapsedMs = isPacedMode ? 1500 : Math.max(0, (timeLimit - (slideTimeLeft || 0)) * 1000);
@@ -1041,7 +1145,7 @@ export default function PlayerGameRoom() {
               onSubmitWordCloud={(word) => {
                 const targetSlide = displaySlide;
                 const targetSlideId = targetSlide?.slideId || targetSlide?.id;
-                if (!word.trim() || hasAnswered || !targetSlide || !targetSlideId) return;
+                if (!word.trim() || hasAnswered || isSlideTimeUp || !targetSlide || !targetSlideId) return;
                 setHasAnswered(true);
                 const timeLimit = targetSlide.timeLimit || 30;
                 const elapsedMs = isPacedMode ? 1500 : Math.max(0, (timeLimit - (slideTimeLeft || 0)) * 1000);
@@ -1051,8 +1155,8 @@ export default function PlayerGameRoom() {
                 });
               }}
               isPacedMode={isPacedMode}
-              onPacedNext={handlePacedNext}
-              isLastQuestion={isPacedMode && pacedSlideIndex >= allQuizSlides.length - 1}
+              onPacedNext={isPacedMode || isSoloPlay || isSlideTimeUp ? handleAdvanceSlide : undefined}
+              isLastQuestion={isLastSlide}
               pinCode={pinCode}
               playerNickname={roomInfo?.playerNickname || "Bạn"}
               roomMode={roomMode}

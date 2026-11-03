@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState, useCallback, useMemo, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Cookies from "js-cookie";
 import {
@@ -23,6 +23,7 @@ import {
   Layers,
   Sparkles,
   Gamepad2,
+  Loader2,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAuthStore } from "@/store/useAuthStore";
@@ -54,8 +55,12 @@ const TOPIC_OPTIONS = [
   "Khác",
 ];
 
-export default function MyQuizzesPage() {
+function MyQuizzesContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const openCreateRoomParam = searchParams.get("openCreateRoom");
+  const selectedQuizParam = searchParams.get("selectedQuiz");
+
   const { isAuthenticated } = useAuthStore();
 
   const [quizzes, setQuizzes] = useState<QuizItem[]>([]);
@@ -157,6 +162,18 @@ export default function MyQuizzesPage() {
     isOpen: boolean;
     quizId?: string;
   }>({ isOpen: false });
+
+  useEffect(() => {
+    if (openCreateRoomParam === "true") {
+      setCreateRoomModal({
+        isOpen: true,
+        quizId: selectedQuizParam || undefined,
+      });
+      if (typeof window !== "undefined") {
+        window.history.replaceState({}, "", window.location.pathname);
+      }
+    }
+  }, [openCreateRoomParam, selectedQuizParam]);
 
   // Mở modal tạo phòng thi với đề được chọn
   const handleCreateRoom = (quiz?: QuizItem) => {
@@ -467,5 +484,19 @@ export default function MyQuizzesPage() {
         initialQuizId={createRoomModal.quizId}
       />
     </div>
+  );
+}
+
+export default function MyQuizzesPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center">
+          <Loader2 className="animate-spin text-indigo-600" size={32} />
+        </div>
+      }
+    >
+      <MyQuizzesContent />
+    </Suspense>
   );
 }

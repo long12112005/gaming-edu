@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   Users,
@@ -12,6 +12,7 @@ import {
   PlusCircle,
   Gamepad2,
   Anchor,
+  Loader2,
 } from "lucide-react";
 import SiteHeader from "@/components/layout/SiteHeader";
 import Footer from "@/components/layout/Footer";
@@ -21,8 +22,12 @@ import GameModesSection from "@/components/home/GameModesSection";
 import QuizGallerySection from "@/components/home/QuizGallerySection";
 import { useAuthStore } from "@/store/useAuthStore";
 
-export default function HomePage() {
+function HomeContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const openCreateRoomParam = searchParams.get("openCreateRoom");
+  const selectedQuizParam = searchParams.get("selectedQuiz");
+
   const { user } = useAuthStore();
   const [pin, setPin] = useState("");
   const [isJoining, setIsJoining] = useState(false);
@@ -31,6 +36,18 @@ export default function HomePage() {
   const [createRoomMode, setCreateRoomMode] = useState<"HOST_PACED" | "ASYNC_TOURNAMENT">("HOST_PACED");
   const [createRoomTheme, setCreateRoomTheme] = useState<string>("CLASSIC");
   const [selectedQuizForRoom, setSelectedQuizForRoom] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    if (openCreateRoomParam === "true") {
+      if (selectedQuizParam) {
+        setSelectedQuizForRoom(selectedQuizParam);
+      }
+      setIsCreateRoomOpen(true);
+      if (typeof window !== "undefined") {
+        window.history.replaceState({}, "", window.location.pathname);
+      }
+    }
+  }, [openCreateRoomParam, selectedQuizParam]);
 
   const formatPin = (value: string) => {
     const digits = value.replace(/\D/g, "").slice(0, 6);
@@ -206,5 +223,19 @@ export default function HomePage() {
 
       <Footer />
     </div>
+  );
+}
+
+export default function HomePage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center">
+          <Loader2 className="animate-spin text-indigo-600" size={32} />
+        </div>
+      }
+    >
+      <HomeContent />
+    </Suspense>
   );
 }

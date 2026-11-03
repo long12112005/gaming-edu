@@ -179,6 +179,170 @@ namespace GamingEdu.API.Migrations
                     b.ToTable("group_members", (string)null);
                 });
 
+            modelBuilder.Entity("GamingEdu.API.Models.NavalAction", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ActionType")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)")
+                        .HasColumnName("action_type");
+
+                    b.Property<string>("AttackerTeam")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)")
+                        .HasColumnName("attacker_team");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("GETUTCDATE()");
+
+                    b.Property<Guid>("PlayerId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("player_id");
+
+                    b.Property<string>("Result")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)")
+                        .HasColumnName("result");
+
+                    b.Property<Guid>("RoomId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("room_id");
+
+                    b.Property<int?>("SunkShipType")
+                        .HasColumnType("int")
+                        .HasColumnName("sunk_ship_type");
+
+                    b.Property<int>("TargetCol")
+                        .HasColumnType("int")
+                        .HasColumnName("target_col");
+
+                    b.Property<int>("TargetRow")
+                        .HasColumnType("int")
+                        .HasColumnName("target_row");
+
+                    b.Property<string>("TargetTeam")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)")
+                        .HasColumnName("target_team");
+
+                    b.HasKey("Id")
+                        .HasName("pk_naval_actions");
+
+                    b.HasIndex("PlayerId")
+                        .HasDatabaseName("ix_naval_actions_player_id");
+
+                    b.HasIndex("RoomId", "TargetTeam", "TargetRow", "TargetCol")
+                        .HasDatabaseName("idx_naval_actions_room");
+
+                    b.ToTable("naval_actions", (string)null);
+                });
+
+            modelBuilder.Entity("GamingEdu.API.Models.NavalShip", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Coordinates")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)")
+                        .HasColumnName("coordinates");
+
+                    b.Property<bool>("IsSunk")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_sunk");
+
+                    b.Property<Guid>("RoomId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("room_id");
+
+                    b.Property<int>("ShipType")
+                        .HasColumnType("int")
+                        .HasColumnName("ship_type");
+
+                    b.Property<string>("TeamSide")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)")
+                        .HasColumnName("team_side");
+
+                    b.HasKey("Id")
+                        .HasName("pk_naval_ships");
+
+                    b.HasIndex("RoomId", "TeamSide")
+                        .HasDatabaseName("idx_naval_ships_room");
+
+                    b.ToTable("naval_ships", (string)null);
+                });
+
+            modelBuilder.Entity("GamingEdu.API.Models.NavalTeam", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("id");
+
+                    b.Property<int>("PrecisionShotRemaining")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1)
+                        .HasColumnName("precision_shot_remaining");
+
+                    b.Property<int>("RadarRemaining")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(2)
+                        .HasColumnName("radar_remaining");
+
+                    b.Property<Guid>("RoomId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("room_id");
+
+                    b.Property<int>("ShieldRemaining")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(2)
+                        .HasColumnName("shield_remaining");
+
+                    b.Property<int>("ShipsRemaining")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(5)
+                        .HasColumnName("ships_remaining");
+
+                    b.Property<int>("TeamCombo")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0)
+                        .HasColumnName("team_combo");
+
+                    b.Property<string>("TeamSide")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)")
+                        .HasColumnName("team_side");
+
+                    b.HasKey("Id")
+                        .HasName("pk_naval_teams");
+
+                    b.HasIndex("RoomId", "TeamSide")
+                        .IsUnique()
+                        .HasDatabaseName("ix_naval_teams_room_id_team_side");
+
+                    b.ToTable("naval_teams", (string)null);
+                });
+
             modelBuilder.Entity("GamingEdu.API.Models.PlayerResponse", b =>
                 {
                     b.Property<Guid>("Id")
@@ -356,9 +520,23 @@ namespace GamingEdu.API.Migrations
                         .HasColumnType("datetime2")
                         .HasColumnName("end_time");
 
+                    b.Property<string>("GameSettings")
+                        .HasColumnType("nvarchar(max)")
+                        .HasColumnName("game_settings");
+
                     b.Property<Guid>("HostId")
                         .HasColumnType("uniqueidentifier")
                         .HasColumnName("host_id");
+
+                    b.Property<bool>("IsEarlyFinished")
+                        .HasColumnType("bit")
+                        .HasColumnName("is_early_finished");
+
+                    b.Property<int>("MapSize")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(15)
+                        .HasColumnName("map_size");
 
                     b.Property<string>("Mode")
                         .IsRequired()
@@ -388,6 +566,11 @@ namespace GamingEdu.API.Migrations
                         .HasDefaultValue("WAITING")
                         .HasColumnName("status");
 
+                    b.Property<string>("WinnerTeam")
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)")
+                        .HasColumnName("winner_team");
+
                     b.HasKey("Id")
                         .HasName("pk_rooms");
 
@@ -415,11 +598,35 @@ namespace GamingEdu.API.Migrations
                         .HasColumnType("nvarchar(500)")
                         .HasColumnName("avatar_url");
 
+                    b.Property<int>("CurrentCombo")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0)
+                        .HasColumnName("current_combo");
+
+                    b.Property<int>("EnergyPoints")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0)
+                        .HasColumnName("energy_points");
+
+                    b.Property<int>("HitsCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0)
+                        .HasColumnName("hits_count");
+
                     b.Property<DateTime>("JoinedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("datetime2")
                         .HasColumnName("joined_at")
                         .HasDefaultValueSql("GETUTCDATE()");
+
+                    b.Property<int>("MaxCombo")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0)
+                        .HasColumnName("max_combo");
 
                     b.Property<string>("Nickname")
                         .IsRequired()
@@ -435,6 +642,29 @@ namespace GamingEdu.API.Migrations
                         .HasColumnType("uniqueidentifier")
                         .HasColumnName("room_id");
 
+                    b.Property<int>("ShipsSunkContribution")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0)
+                        .HasColumnName("ships_sunk_contribution");
+
+                    b.Property<int>("ShotsEarned")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0)
+                        .HasColumnName("shots_earned");
+
+                    b.Property<int>("SkillsUsedCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0)
+                        .HasColumnName("skills_used_count");
+
+                    b.Property<string>("TeamSide")
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)")
+                        .HasColumnName("team_side");
+
                     b.Property<int>("TotalScore")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("int")
@@ -444,6 +674,12 @@ namespace GamingEdu.API.Migrations
                     b.Property<Guid?>("UserId")
                         .HasColumnType("uniqueidentifier")
                         .HasColumnName("user_id");
+
+                    b.Property<int>("ValidShotsCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0)
+                        .HasColumnName("valid_shots_count");
 
                     b.HasKey("Id")
                         .HasName("pk_room_players");
@@ -574,6 +810,11 @@ namespace GamingEdu.API.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uniqueidentifier")
                         .HasColumnName("id");
+
+                    b.Property<string>("AvatarFrame")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)")
+                        .HasColumnName("avatar_frame");
 
                     b.Property<string>("AvatarUrl")
                         .HasMaxLength(500)
@@ -733,6 +974,51 @@ namespace GamingEdu.API.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("GamingEdu.API.Models.NavalAction", b =>
+                {
+                    b.HasOne("GamingEdu.API.Models.RoomPlayer", "Player")
+                        .WithMany("NavalActions")
+                        .HasForeignKey("PlayerId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired()
+                        .HasConstraintName("fk_naval_actions_room_players_player_id");
+
+                    b.HasOne("GamingEdu.API.Models.Room", "Room")
+                        .WithMany("NavalActions")
+                        .HasForeignKey("RoomId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_naval_actions_rooms_room_id");
+
+                    b.Navigation("Player");
+
+                    b.Navigation("Room");
+                });
+
+            modelBuilder.Entity("GamingEdu.API.Models.NavalShip", b =>
+                {
+                    b.HasOne("GamingEdu.API.Models.Room", "Room")
+                        .WithMany("NavalShips")
+                        .HasForeignKey("RoomId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_naval_ships_rooms_room_id");
+
+                    b.Navigation("Room");
+                });
+
+            modelBuilder.Entity("GamingEdu.API.Models.NavalTeam", b =>
+                {
+                    b.HasOne("GamingEdu.API.Models.Room", "Room")
+                        .WithMany("NavalTeams")
+                        .HasForeignKey("RoomId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_naval_teams_rooms_room_id");
+
+                    b.Navigation("Room");
+                });
+
             modelBuilder.Entity("GamingEdu.API.Models.PlayerResponse", b =>
                 {
                     b.HasOne("GamingEdu.API.Models.RoomPlayer", "RoomPlayer")
@@ -880,6 +1166,12 @@ namespace GamingEdu.API.Migrations
 
             modelBuilder.Entity("GamingEdu.API.Models.Room", b =>
                 {
+                    b.Navigation("NavalActions");
+
+                    b.Navigation("NavalShips");
+
+                    b.Navigation("NavalTeams");
+
                     b.Navigation("Players");
 
                     b.Navigation("Questions");
@@ -887,6 +1179,8 @@ namespace GamingEdu.API.Migrations
 
             modelBuilder.Entity("GamingEdu.API.Models.RoomPlayer", b =>
                 {
+                    b.Navigation("NavalActions");
+
                     b.Navigation("Questions");
 
                     b.Navigation("Responses");

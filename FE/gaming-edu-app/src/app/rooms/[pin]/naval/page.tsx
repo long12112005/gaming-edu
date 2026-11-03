@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useState, useCallback } from "react";
+import { use, useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Cookies from "js-cookie";
 import confetti from "canvas-confetti";
@@ -69,6 +69,8 @@ export default function NavalWarGamePage({ params }: { params: Promise<{ pin: st
   const [slides, setSlides] = useState<QuestionSlide[]>([]);
   const [currentSlideIndex, setCurrentSlideIndex] = useState<number>(0);
   const [hasAnsweredCurrentSlide, setHasAnsweredCurrentSlide] = useState<boolean>(false);
+  const prevTurnNumberRef = useRef<number>(1);
+  const didParticipateInTurnRef = useRef<boolean>(false);
 
   // Connect to Naval SignalR Hub
   const {
@@ -79,6 +81,8 @@ export default function NavalWarGamePage({ params }: { params: Promise<{ pin: st
     hostSpectatorState,
     mapSize,
     isMatchStarted,
+    currentTurnTeam,
+    turnNumber,
     myShips,
     enemyShots,
     shotsEarned,
@@ -103,6 +107,7 @@ export default function NavalWarGamePage({ params }: { params: Promise<{ pin: st
     startMatch,
     resetMatch,
     submitAnswer,
+    timeoutTurn,
     fireShot,
     useSkill,
     endMatchEarly,
@@ -145,7 +150,6 @@ export default function NavalWarGamePage({ params }: { params: Promise<{ pin: st
 
           if (hostMatch) {
             setIsHost(true);
-            setHasJoinedTeam(true);
           }
 
           // Fetch full quiz slides with options
@@ -182,12 +186,12 @@ export default function NavalWarGamePage({ params }: { params: Promise<{ pin: st
       });
   }, [pin]);
 
-  // Host auto-joins SignalR as HOST referee once connected
+  // Host auto-joins SignalR as HOST referee once connected (nếu chưa chọn phe tham chiến)
   useEffect(() => {
-    if (isConnected && isHost) {
+    if (isConnected && isHost && !hasJoinedTeam) {
       joinNavalRoom(pin, playerId || crypto.randomUUID(), "HOST", nickname);
     }
-  }, [isConnected, isHost, pin, playerId, nickname, joinNavalRoom]);
+  }, [isConnected, isHost, hasJoinedTeam, pin, playerId, nickname, joinNavalRoom]);
 
   // Player enters lobby group immediately to receive real-time rosters
   useEffect(() => {
@@ -277,19 +281,53 @@ export default function NavalWarGamePage({ params }: { params: Promise<{ pin: st
 
   // Replay match (Host resets match back to lobby for everyone)
   const handleResetMatch = () => {
+    setCurrentSlideIndex(0);
+    setHasAnsweredCurrentSlide(false);
+    prevTurnNumberRef.current = 1;
+    didParticipateInTurnRef.current = false;
     resetMatch(pin);
   };
 
+  // Reset slide state when match is reset to lobby
+  useEffect(() => {
+    if (!isMatchStarted) {
+      setCurrentSlideIndex(0);
+      setHasAnsweredCurrentSlide(false);
+      prevTurnNumberRef.current = 1;
+      didParticipateInTurnRef.current = false;
+    }
+  }, [isMatchStarted]);
+
+  // Advance question slide when turn changes after our team completed its turn
+  useEffect(() => {
+    if (!isMatchStarted) return;
+    if (turnNumber !== prevTurnNumberRef.current) {
+      prevTurnNumberRef.current = turnNumber;
+      if (didParticipateInTurnRef.current) {
+        setCurrentSlideIndex((prev) => (slides.length > 0 ? (prev + 1) % slides.length : 0));
+        didParticipateInTurnRef.current = false;
+      }
+      setHasAnsweredCurrentSlide(false);
+    }
+  }, [turnNumber, isMatchStarted, slides.length]);
+
   // Submit Answer
   const handleAnswerSubmit = (slideId: string, answerData: string, timeMs: number) => {
+    didParticipateInTurnRef.current = true;
     setHasAnsweredCurrentSlide(true);
     submitAnswer(pin, slideId, answerData, timeMs);
   };
 
+  // Handle Turn Timeout (0s without answering)
+  const handleTurnTimeout = useCallback(() => {
+    didParticipateInTurnRef.current = true;
+    timeoutTurn(pin);
+  }, [pin, timeoutTurn]);
+
   // Next Question
   const handleNextQuestion = () => {
-    if (currentSlideIndex + 1 < slides.length) {
-      setCurrentSlideIndex((prev) => prev + 1);
+    if (slides.length > 0) {
+      setCurrentSlideIndex((prev) => (prev + 1) % slides.length);
       setHasAnsweredCurrentSlide(false);
     }
   };
@@ -322,8 +360,11 @@ export default function NavalWarGamePage({ params }: { params: Promise<{ pin: st
   };
 
   const currentSlide = slides[currentSlideIndex] || null;
-  const canStartMatch = lobbyState.teamACount >= 1 && lobbyState.teamBCount >= 1;
+  const totalJoinedPlayers = lobbyState.teamACount + lobbyState.teamBCount;
+  const canStartMatch = isHost || totalJoinedPlayers >= 1;
   const teamDiff = Math.abs(lobbyState.teamACount - lobbyState.teamBCount);
+  const isSpectatorMode = isHost && myTeamSide !== "TEAM_A" && myTeamSide !== "TEAM_B";
+  const isMyTeamTurn = Boolean(!currentTurnTeam || myTeamSide === currentTurnTeam);
 
   return (
     <div
@@ -476,6 +517,9 @@ export default function NavalWarGamePage({ params }: { params: Promise<{ pin: st
                         disabled={!canStartMatch}
                         onClick={() => {
                           if (canStartMatch) {
+                            if (totalJoinedPlayers === 0 && myTeamSide !== "TEAM_A" && myTeamSide !== "TEAM_B") {
+                              handleJoinTeam("TEAM_A");
+                            }
                             startMatch(pin);
                           }
                         }}
@@ -487,16 +531,27 @@ export default function NavalWarGamePage({ params }: { params: Promise<{ pin: st
                       >
                         <Play className="w-6 h-6 fill-current" />
                         <span>
-                          BẮT ĐẦU TRẬN ĐẤU {canStartMatch ? `(${lobbyState.teamACount} vs ${lobbyState.teamBCount})` : ""}
+                          {totalJoinedPlayers === 0
+                            ? "BẮT ĐẦU TRẬN ĐẤU (CHƠI 1 MÌNH / TEST)"
+                            : totalJoinedPlayers === 1
+                            ? "BẮT ĐẦU TRẬN ĐẤU (SOLO CHIẾN HẠM)"
+                            : `BẮT ĐẦU TRẬN ĐẤU (${lobbyState.teamACount} vs ${lobbyState.teamBCount})`}
                         </span>
                       </button>
 
                       {/* Status / Balance hints */}
-                      {!canStartMatch ? (
-                        <div className="flex items-center gap-1.5 text-xs text-amber-400 font-semibold bg-amber-500/10 border border-amber-500/30 px-3 py-1.5 rounded-xl">
-                          <AlertTriangle className="w-4 h-4 shrink-0" />
+                      {totalJoinedPlayers === 0 ? (
+                        <div className="flex items-center gap-1.5 text-xs text-cyan-300 font-semibold bg-cyan-500/10 border border-cyan-500/30 px-3 py-1.5 rounded-xl">
+                          <Swords className="w-4 h-4 text-cyan-400 shrink-0" />
                           <span>
-                            Cần ít nhất 1 người chơi mỗi phe để bắt đầu (Lam: {lobbyState.teamACount}/1, Xích: {lobbyState.teamBCount}/1)
+                            Chế độ Chơi 1 Mình: Bạn sẽ tự động chỉ huy Hạm Đội Lam để săn lùng và tiêu diệt 5 chiến hạm ẩn của đối phương!
+                          </span>
+                        </div>
+                      ) : (lobbyState.teamACount === 0 || lobbyState.teamBCount === 0) ? (
+                        <div className="flex items-center gap-1.5 text-xs text-amber-300 font-semibold bg-amber-500/10 border border-amber-500/30 px-3 py-1.5 rounded-xl">
+                          <Zap className="w-4 h-4 text-amber-400 shrink-0" />
+                          <span>
+                            Đang chơi Solo ({totalJoinedPlayers} người chơi): Khai hỏa các câu hỏi để bắn hạ toàn bộ 5 tàu chiến phe địch!
                           </span>
                         </div>
                       ) : teamDiff >= 2 ? (
@@ -520,19 +575,35 @@ export default function NavalWarGamePage({ params }: { params: Promise<{ pin: st
                   </div>
                 </div>
 
-                {/* Neutral Referee Notice */}
-                <div className="mt-4 px-4 py-3 rounded-xl bg-indigo-950/60 border border-indigo-500/30 text-indigo-200 text-xs flex items-center justify-between">
+                {/* Neutral Referee Notice & Solo Play Toggle */}
+                <div className="mt-4 px-4 py-3 rounded-xl bg-indigo-950/60 border border-indigo-500/30 text-indigo-200 text-xs flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
                     <Radio className="w-4 h-4 text-cyan-400 animate-pulse" />
                     <span>
-                      <strong>Quyền của Chủ Phòng:</strong> Bạn giữ vai trò <em>Trọng Tài Trung Lập</em> quan sát hai bên chiến tuyến, có toàn quyền bắt đầu, kết thúc sớm và xuất báo cáo kết quả chi tiết.
+                      <strong>Quyền của Chủ Phòng:</strong>{" "}
+                      {myTeamSide === "TEAM_A" || myTeamSide === "TEAM_B" ? (
+                        <span>Bạn đang tham chiến trực tiếp với tư cách <em>Thuyền Trưởng ({myTeamSide === "TEAM_A" ? "Phe Lam" : "Phe Xích"})</em>.</span>
+                      ) : (
+                        <span>Bạn đang giữ vai trò <em>Trọng Tài Quan Sát</em>. Bạn có thể bấm tham chiến trực tiếp để tự mình chơi.</span>
+                      )}
                     </span>
                   </div>
-                  {roomData?.title && (
-                    <span className="font-semibold text-cyan-300">
-                      Bộ đề: {roomData.title} ({slides.length} câu)
-                    </span>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {myTeamSide !== "TEAM_A" && (
+                      <button
+                        type="button"
+                        onClick={() => handleJoinTeam("TEAM_A")}
+                        className="px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-black text-xs transition-all shadow cursor-pointer"
+                      >
+                        ⚔️ Vào Tham Chiến Phe Lam
+                      </button>
+                    )}
+                    {roomData?.title && (
+                      <span className="font-semibold text-cyan-300 hidden md:inline">
+                        Bộ đề: {roomData.title} ({slides.length} câu)
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
@@ -771,6 +842,8 @@ export default function NavalWarGamePage({ params }: { params: Promise<{ pin: st
             {/* Top Tactical Status Bar */}
             <NavalStatusBar
               myTeamSide={myTeamSide}
+              currentTurnTeam={currentTurnTeam}
+              turnNumber={turnNumber}
               teamAShipsRemaining={teamAShipsRemaining}
               teamBShipsRemaining={teamBShipsRemaining}
               currentCombo={currentCombo}
@@ -789,7 +862,7 @@ export default function NavalWarGamePage({ params }: { params: Promise<{ pin: st
             />
 
             {/* 2.1: HOST SPECTATOR ARENA (Live view of both fleets) */}
-            {isHost ? (
+            {isSpectatorMode ? (
               <div className="flex flex-col gap-4 w-full">
                 {/* Host notice if doubleShot buff active */}
                 {doubleShotInfo && (
@@ -903,7 +976,7 @@ export default function NavalWarGamePage({ params }: { params: Promise<{ pin: st
                     isEnemy={true}
                     mapSize={mapSize}
                     enemyShots={enemyShots}
-                    shotsEarned={shotsEarned}
+                    shotsEarned={isMyTeamTurn ? shotsEarned : 0}
                     radarScanWave={radarScanWave}
                     skillMode={skillMode}
                     teamTheme={myTeamSide === "TEAM_A" ? "red" : "blue"}
@@ -925,6 +998,11 @@ export default function NavalWarGamePage({ params }: { params: Promise<{ pin: st
                     currentQuestionIndex={currentSlideIndex}
                     totalQuestions={slides.length > 0 ? slides.length : 1}
                     isDoubleShot={isDoubleShot}
+                    isMyTeamTurn={isMyTeamTurn}
+                    currentTurnTeam={currentTurnTeam}
+                    myTeamSide={myTeamSide}
+                    turnNumber={turnNumber}
+                    onTimeout={handleTurnTimeout}
                   />
 
                   {/* Combat Log & Leaderboard */}

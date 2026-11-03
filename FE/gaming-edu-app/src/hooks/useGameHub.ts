@@ -295,27 +295,47 @@ export function useGameHub() {
   roomInfoRef.current = roomInfo;
 
   useEffect(() => {
+    let isCancelled = false;
+    let startPromise: Promise<void> | null = null;
+
     const token = Cookies.get("token");
     const newConnection = new signalR.HubConnectionBuilder()
       .withUrl(HUB_URL, {
         accessTokenFactory: () => token || "",
       })
       .withAutomaticReconnect()
-      .configureLogging(signalR.LogLevel.Information)
+      .configureLogging(signalR.LogLevel.None)
       .build();
 
     connectionRef.current = newConnection;
 
-    newConnection.start()
-      .then(() => {
-        setIsConnected(true);
-        setError(null);
-        setConnection(newConnection);
-      })
-      .catch((err) => {
-        console.error("SignalR Connection Error: ", err);
-        setError("Không thể kết nối đến máy chủ game.");
-      });
+    const startTimer = setTimeout(() => {
+      if (isCancelled) return;
+      startPromise = newConnection.start();
+      startPromise
+        .then(() => {
+          if (isCancelled) {
+            newConnection.stop().catch(() => {});
+            return;
+          }
+          setIsConnected(true);
+          setError(null);
+          setConnection(newConnection);
+        })
+        .catch((err) => {
+          const msg = String(err?.message || err || "");
+          if (
+            isCancelled ||
+            err?.name === "AbortError" ||
+            msg.includes("stopped during negotiation") ||
+            msg.includes("stopped before the invocation")
+          ) {
+            return;
+          }
+          console.warn("SignalR Connection Warning: ", err);
+          setError("Không thể kết nối đến máy chủ game.");
+        });
+    }, 0);
 
     // ── Events ──
     newConnection.on("Error", (err: { message: string }) => {
@@ -566,7 +586,15 @@ export function useGameHub() {
     });
 
     return () => {
-      newConnection.stop();
+      isCancelled = true;
+      clearTimeout(startTimer);
+      if (startPromise) {
+        startPromise
+          .then(() => newConnection.stop().catch(() => {}))
+          .catch(() => {});
+      } else if (newConnection.state !== signalR.HubConnectionState.Disconnected) {
+        newConnection.stop().catch(() => {});
+      }
     };
   }, []);
 
@@ -640,6 +668,8 @@ export function useGameHub() {
   }, []);
 
   const startSlideTimer = useCallback(async (timeLimitSeconds: number, slideId: string) => {
+    setAnswerResult(null);
+    setAnswerRejected(null);
     if (connectionRef.current?.state === signalR.HubConnectionState.Connected) {
       // Chế độ Async: gọi StartPlayerSlide
       await connectionRef.current.invoke("StartPlayerSlide", slideId).catch(() => {

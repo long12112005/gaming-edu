@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
-import { BookOpen, Sparkles, ArrowRight, Globe, Lock, Layers, Zap, CheckCircle2 } from "lucide-react";
+import { BookOpen, Sparkles, ArrowRight, Globe, Lock, Layers, Zap, CheckCircle2, Loader2 } from "lucide-react";
 import SiteHeader from "@/components/layout/SiteHeader";
 import BulkImportModal from "@/components/modals/BulkImportModal";
 import { ParsedSlide } from "@/lib/quizParser";
@@ -19,8 +19,12 @@ const TOPICS = [
   { value: "KHÁC", label: "Tổng Hợp", icon: "✨", desc: "Kiến thức chung & đố vui" },
 ];
 
-export default function CreateQuizPage() {
+function CreateQuizContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const fromParam = searchParams.get("from");
+  const returnUrlParam = searchParams.get("returnUrl");
+
   const [title, setTitle] = useState("");
   const [topic, setTopic] = useState("KHOA HỌC");
   const [isPublic, setIsPublic] = useState(true);
@@ -29,6 +33,22 @@ export default function CreateQuizPage() {
 
   const [bulkModalOpen, setBulkModalOpen] = useState(false);
   const [importedCount, setImportedCount] = useState(0);
+
+  const isFromRoom =
+    fromParam === "create_room" ||
+    (typeof window !== "undefined" && sessionStorage.getItem("quiz_create_source") === "create_room");
+  const returnUrl =
+    returnUrlParam ||
+    (typeof window !== "undefined" ? sessionStorage.getItem("quiz_create_return_url") : null) ||
+    "/";
+
+  useEffect(() => {
+    if (fromParam !== "create_room" && typeof window !== "undefined") {
+      // Nếu vào trực tiếp không có cờ from=create_room thì dọn dẹp sessionStorage cũ
+      sessionStorage.removeItem("quiz_create_source");
+      sessionStorage.removeItem("quiz_create_return_url");
+    }
+  }, [fromParam]);
 
   const handleImportQuestions = (list: ParsedSlide[]) => {
     if (list.length === 0) return;
@@ -71,7 +91,11 @@ export default function CreateQuizPage() {
       });
       if (res.data?.success || res.data?.data?.id) {
         const quizId = res.data?.data?.id || res.data?.id;
-        router.push(`/quiz/${quizId}/edit`);
+        let nextUrl = `/quiz/${quizId}/edit`;
+        if (isFromRoom) {
+          nextUrl += `?from=create_room${returnUrl ? `&returnUrl=${encodeURIComponent(returnUrl)}` : ""}`;
+        }
+        router.push(nextUrl);
       }
     } catch (err: unknown) {
       const errorObj = err as { response?: { data?: { message?: string } } };
@@ -251,7 +275,18 @@ export default function CreateQuizPage() {
             <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row items-center gap-3">
               <button
                 type="button"
-                onClick={() => router.push("/library")}
+                onClick={() => {
+                  if (isFromRoom) {
+                    if (typeof window !== "undefined") {
+                      sessionStorage.removeItem("quiz_create_source");
+                      sessionStorage.removeItem("quiz_create_return_url");
+                    }
+                    const cleanReturn = returnUrl && returnUrl.startsWith("/") ? returnUrl.split("?")[0] : "/";
+                    router.push(`${cleanReturn}?openCreateRoom=true`);
+                  } else {
+                    router.push("/quizzes");
+                  }
+                }}
                 className="w-full sm:w-auto px-5 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-heading font-bold text-xs sm:text-sm border border-slate-200 transition-all cursor-pointer"
               >
                 Quay Lại
@@ -276,5 +311,19 @@ export default function CreateQuizPage() {
         onImport={handleImportQuestions}
       />
     </div>
+  );
+}
+
+export default function CreateQuizPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center">
+          <Loader2 className="animate-spin text-indigo-600" size={32} />
+        </div>
+      }
+    >
+      <CreateQuizContent />
+    </Suspense>
   );
 }

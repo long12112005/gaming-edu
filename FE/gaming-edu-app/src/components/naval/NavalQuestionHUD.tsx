@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { Clock, Send, CheckCircle2, Sparkles, Flame, HelpCircle, Link2, Check, ArrowRight, Zap } from "lucide-react";
+import React, { useState, useEffect, useRef } from "react";
+import { Clock, Send, CheckCircle2, Sparkles, Flame, HelpCircle, Link2, Check, ArrowRight, Zap, Crosshair, ShieldAlert } from "lucide-react";
 
 export interface QuestionSlideOption {
   id: string;
@@ -31,6 +31,11 @@ interface NavalQuestionHUDProps {
   currentQuestionIndex?: number;
   totalQuestions?: number;
   isDoubleShot?: boolean;
+  isMyTeamTurn?: boolean;
+  currentTurnTeam?: "TEAM_A" | "TEAM_B" | null;
+  myTeamSide?: "TEAM_A" | "TEAM_B" | "HOST" | null;
+  turnNumber?: number;
+  onTimeout?: () => void;
 }
 
 const OPTION_COLORS = [
@@ -50,50 +55,55 @@ export const NavalQuestionHUD: React.FC<NavalQuestionHUDProps> = ({
   currentQuestionIndex = 0,
   totalQuestions = 1,
   isDoubleShot = false,
+  isMyTeamTurn = true,
+  currentTurnTeam = "TEAM_A",
+  turnNumber = 1,
+  onTimeout,
 }) => {
   const [timeLeft, setTimeLeft] = useState<number>(30);
   const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
   const [textAnswer, setTextAnswer] = useState<string>("");
   const [startTime, setStartTime] = useState<number>(Date.now());
+  const timeoutReportedRef = useRef<boolean>(false);
 
   // Trạng thái cho dạng MATCHING (Ghép cặp tự động)
   const [selectedLeftId, setSelectedLeftId] = useState<string | null>(null);
   const [userMatches, setUserMatches] = useState<Record<string, string>>({}); // leftId -> rightText
 
-  const timeLimit = currentSlide?.timeLimit || 30;
+  const timeLimit = currentSlide?.timeLimit && currentSlide.timeLimit > 0 ? currentSlide.timeLimit : 30;
+  const isTimeUp = isMyTeamTurn && timeLeft <= 0;
 
-  // Auto-advance sau khi trả lời 3.5s nếu có câu hỏi tiếp theo
+  // Báo cáo hết giờ để chuyển lượt bắn sang đội đối phương
   useEffect(() => {
-    if (hasAnswered && onNextQuestion && currentQuestionIndex + 1 < totalQuestions) {
-      const timer = setTimeout(() => {
-        onNextQuestion();
-      }, 3500);
-      return () => clearTimeout(timer);
+    if (isMyTeamTurn && isTimeUp && !hasAnswered && !timeoutReportedRef.current) {
+      timeoutReportedRef.current = true;
+      onTimeout?.();
     }
-  }, [hasAnswered, onNextQuestion, currentQuestionIndex, totalQuestions]);
+  }, [isMyTeamTurn, isTimeUp, hasAnswered, onTimeout]);
 
-  // Reset timer và state khi sang slide mới
+  // Reset timer và state khi sang slide mới hoặc khi chuyển sang lượt của đội mình
   useEffect(() => {
-    if (currentSlide) {
-      setTimeLeft(currentSlide.timeLimit);
+    if (currentSlide && isMyTeamTurn) {
+      setTimeLeft(currentSlide.timeLimit && currentSlide.timeLimit > 0 ? currentSlide.timeLimit : 30);
       setSelectedOptionId(null);
       setTextAnswer("");
       setSelectedLeftId(null);
       setUserMatches({});
       setStartTime(Date.now());
+      timeoutReportedRef.current = false;
     }
-  }, [currentSlide]);
+  }, [currentSlide, isMyTeamTurn, turnNumber]);
 
-  // Đếm ngược thời gian
+  // Đếm ngược thời gian (chỉ đếm ngược khi ĐANG LÀ LƯỢT CỦA ĐỘI MÌNH)
   useEffect(() => {
-    if (!currentSlide || hasAnswered || timeLeft <= 0) return;
+    if (!currentSlide || !isMyTeamTurn || hasAnswered || timeLeft <= 0) return;
 
     const timer = setInterval(() => {
       setTimeLeft((prev) => Math.max(0, prev - 1));
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [currentSlide, hasAnswered, timeLeft]);
+  }, [currentSlide, isMyTeamTurn, hasAnswered, timeLeft]);
 
   // Xử lý chọn đáp án trắc nghiệm QUIZ
   const handleSelectQuizOption = (optId: string) => {
@@ -147,6 +157,49 @@ export const NavalQuestionHUD: React.FC<NavalQuestionHUDProps> = ({
       ? "from-amber-500 to-orange-500"
       : "from-red-500 to-rose-600 animate-pulse";
 
+  if (!isMyTeamTurn) {
+    const enemyTeamName = currentTurnTeam === "TEAM_A" ? "HẠM ĐỘI LAM (PHE A)" : "HẠM ĐỘI XÍCH (PHE B)";
+    const isEnemyBlue = currentTurnTeam === "TEAM_A";
+
+    return (
+      <div className="w-full bg-slate-900/90 border-2 border-slate-700/80 rounded-2xl p-6 text-center flex flex-col items-center justify-center min-h-[250px] backdrop-blur-md shadow-2xl relative overflow-hidden">
+        <div
+          className={`absolute inset-0 opacity-10 pointer-events-none ${
+            isEnemyBlue
+              ? "bg-gradient-to-br from-cyan-500 via-transparent to-blue-600"
+              : "bg-gradient-to-br from-rose-500 via-transparent to-red-600"
+          }`}
+        />
+        <div className="relative z-10 flex flex-col items-center max-w-md">
+          <span className="px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-wider bg-slate-800 text-amber-300 border border-amber-500/30 mb-3 flex items-center gap-1.5">
+            <Clock className="w-3.5 h-3.5 text-amber-400 animate-spin" style={{ animationDuration: "6s" }} />
+            <span>Lượt Bắn #{turnNumber} — Chờ Lượt Đội Bạn</span>
+          </span>
+
+          <ShieldAlert
+            className={`w-12 h-12 mb-3 animate-pulse ${
+              isEnemyBlue ? "text-cyan-400" : "text-rose-400"
+            }`}
+          />
+
+          <h3 className="text-base sm:text-lg font-extrabold text-white uppercase tracking-wide">
+            Đang Là Lượt Của{" "}
+            <span className={isEnemyBlue ? "text-cyan-400" : "text-rose-400"}>
+              {enemyTeamName}
+            </span>
+          </h3>
+
+          <p className="text-xs sm:text-sm text-slate-300 mt-2 leading-relaxed">
+            Trong chế độ <strong>Hải Tặc Tri Thức</strong>, hai hạm đội trả lời và khai hỏa theo lượt.{" "}
+            <span className="text-amber-300 font-semibold">
+              Câu hỏi sẽ xuất hiện ngay khi đến lượt bắn của đội bạn!
+            </span>
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   if (!currentSlide) {
     return (
       <div className="w-full bg-slate-900/90 border border-slate-700/80 rounded-2xl p-6 text-center text-slate-400 flex flex-col items-center justify-center min-h-[220px] backdrop-blur-md">
@@ -163,7 +216,7 @@ export const NavalQuestionHUD: React.FC<NavalQuestionHUDProps> = ({
     .filter((mp): mp is string => Boolean(mp && mp.trim()));
 
   return (
-    <div className="w-full bg-slate-900/90 border border-slate-700/80 rounded-2xl p-5 shadow-2xl backdrop-blur-md relative overflow-hidden flex flex-col justify-between">
+    <div className="w-full bg-slate-900/90 border-2 border-emerald-500/50 rounded-2xl p-5 shadow-2xl backdrop-blur-md relative overflow-hidden flex flex-col justify-between">
       {/* Thanh đếm ngược thời gian */}
       <div className="w-full bg-slate-950 h-2.5 rounded-full overflow-hidden mb-4 border border-slate-800">
         <div
@@ -174,7 +227,10 @@ export const NavalQuestionHUD: React.FC<NavalQuestionHUDProps> = ({
 
       {/* Thông tin câu hỏi */}
       <div className="flex items-center justify-between pb-3 mb-2 border-b border-slate-800">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 animate-pulse">
+            🎯 LƯỢT ĐỘI BẠN (#{turnNumber})
+          </span>
           <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
             Câu {currentQuestionIndex + 1}/{totalQuestions}
           </span>
@@ -342,30 +398,43 @@ export const NavalQuestionHUD: React.FC<NavalQuestionHUDProps> = ({
         )}
       </div>
 
-      {/* Phản hồi trạng thái nộp câu trả lời */}
-      {hasAnswered && (
-        <div className="mt-3 p-2.5 rounded-xl bg-slate-800/80 border border-cyan-500/30 flex flex-wrap items-center justify-between gap-2 text-xs text-cyan-300">
+      {/* Phản hồi trạng thái nộp câu trả lời hoặc hết thời gian */}
+      {(hasAnswered || isTimeUp) && (
+        <div
+          className={`mt-3 p-3 rounded-xl bg-slate-800/90 border flex flex-wrap items-center justify-between gap-2 text-xs ${
+            !hasAnswered && isTimeUp
+              ? "border-rose-500/40 text-rose-300"
+              : shotsEarned > 0
+              ? "border-amber-400/60 text-amber-200 bg-amber-950/30"
+              : "border-cyan-500/30 text-cyan-300"
+          }`}
+        >
           <div className="flex items-center gap-1.5">
-            <CheckCircle2 className="w-4 h-4 text-cyan-400" />
-            <span>Đã ghi nhận câu trả lời!</span>
+            {!hasAnswered && isTimeUp ? (
+              <>
+                <Clock className="w-4 h-4 text-rose-400 shrink-0" />
+                <span>Đã hết thời gian! (0 điểm — Đang chuyển lượt bắn sang đối phương...)</span>
+              </>
+            ) : shotsEarned > 0 ? (
+              <>
+                <Crosshair className="w-4 h-4 text-amber-400 animate-spin shrink-0" style={{ animationDuration: "4s" }} />
+                <span className="font-bold">
+                  Chính xác! Hãy nhấp vào ô trên bản đồ <strong>Hải Phận Đối Phương</strong> để bắn đại bác ({shotsEarned} lượt bắn còn lại)!
+                </span>
+              </>
+            ) : (
+              <>
+                <CheckCircle2 className="w-4 h-4 text-cyan-400 shrink-0" />
+                <span>Đã ghi nhận câu trả lời! Đang chuyển lượt sang đối phương...</span>
+              </>
+            )}
           </div>
 
           <div className="flex items-center gap-3">
             {shotsEarned > 0 && (
-              <div className="font-bold text-orange-400 flex items-center gap-1 animate-pulse">
-                <Sparkles className="w-3.5 h-3.5" /> Có {shotsEarned} quyền bắn sẵn sàng!
+              <div className="font-extrabold text-amber-300 flex items-center gap-1 animate-pulse px-2.5 py-1 rounded-lg bg-amber-500/20 border border-amber-400/40">
+                <Sparkles className="w-3.5 h-3.5" /> Còn {shotsEarned} phát bắn!
               </div>
-            )}
-
-            {onNextQuestion && currentQuestionIndex + 1 < totalQuestions && (
-              <button
-                type="button"
-                onClick={onNextQuestion}
-                className="px-3 py-1 rounded-lg text-xs font-bold bg-cyan-500 hover:bg-cyan-400 text-slate-950 flex items-center gap-1 shadow-md hover:scale-105 transition-all cursor-pointer"
-              >
-                <span>Câu tiếp theo</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
             )}
           </div>
         </div>

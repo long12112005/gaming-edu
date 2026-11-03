@@ -28,6 +28,7 @@ import { useAuthStore } from "@/store/useAuthStore";
 import CreateRoomModal from "@/components/modals/CreateRoomModal";
 import { useNotificationHub } from "@/hooks/useNotificationHub";
 import AvatarWithFrame from "@/components/common/AvatarWithFrame";
+import ThemeToggleButton from "@/components/common/ThemeToggleButton";
 
 const NAV_ITEMS = [
   { label: "Trang Chủ", href: "/" },
@@ -385,9 +386,13 @@ export default function SiteHeader() {
                     </div>
                   )}
                 </div>
+
+                {/* Nút đổi giao diện Sáng / Tối bên cạnh ảnh đại diện */}
+                <ThemeToggleButton />
               </div>
             ) : (
               <div className="flex items-center gap-2 shrink-0">
+                <ThemeToggleButton />
                 <Link
                   href="/auth"
                   className="px-3.5 sm:px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs shadow-sm shadow-purple-600/20 active:translate-y-0.5 transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0"

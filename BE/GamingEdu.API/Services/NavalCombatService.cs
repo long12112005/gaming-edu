@@ -89,9 +89,9 @@ public class NavalCombatService : INavalCombatService
             .FirstOrDefaultAsync(s => s.Id == slideId)
             ?? throw new KeyNotFoundException("Không tìm thấy slide câu hỏi.");
 
-        // Chống trả lời trùng câu hỏi
+        // Chống trả lời trùng câu hỏi liên tiếp (debounce 3 giây, cho phép vòng lặp lại câu hỏi hoặc chơi lại)
         bool alreadyAnswered = await _db.PlayerResponses
-            .AnyAsync(pr => pr.RoomPlayerId == playerId && pr.SlideId == slideId);
+            .AnyAsync(pr => pr.RoomPlayerId == playerId && pr.SlideId == slideId && pr.AnsweredAt > DateTime.UtcNow.AddSeconds(-3));
         if (alreadyAnswered)
             throw new InvalidOperationException("Bạn đã gửi câu trả lời cho câu hỏi này rồi.");
 
