@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { Trophy, Medal, X, Play, Clock, Users, ShieldCheck } from "lucide-react";

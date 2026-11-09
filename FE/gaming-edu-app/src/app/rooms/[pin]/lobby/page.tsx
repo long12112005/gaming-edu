@@ -96,9 +96,12 @@ export default function RoomLobbyPage({ params }: { params: Promise<{ pin: strin
   useEffect(() => {
     if (pin) {
       api.get(`/rooms/pin/${pin}`).then((res) => {
-        const theme = res.data?.data?.theme || res.data?.data?.gameModeTheme;
+        const theme = res.data?.data?.gameType || res.data?.data?.theme || res.data?.data?.gameModeTheme;
+        const multiGames = ["HEX_CONQUEST", "TOWER_DEFENSE", "DRAGON_BOAT", "RUNAWAY_TRAIN", "ARTILLERY_DUEL", "EDU_AMONG_US", "QUIZ_BOMBERMAN"];
         if (theme === "NAVAL_WAR") {
           router.replace(`/rooms/${pin}/naval`);
+        } else if (multiGames.includes(theme)) {
+          router.replace(`/rooms/${pin}/multi-game`);
         }
       }).catch(() => {});
     }
@@ -111,9 +114,13 @@ export default function RoomLobbyPage({ params }: { params: Promise<{ pin: strin
       return () => clearTimeout(timer);
     } else if (countdown === 0) {
       if (triggerStartGame) triggerStartGame(roomInfo?.roomId || pin);
-      const isNaval = (roomInfo as any)?.theme === "NAVAL_WAR" || (roomInfo as any)?.gameModeTheme === "NAVAL_WAR";
+      const roomTheme = (roomInfo as any)?.gameType || (roomInfo as any)?.theme || (roomInfo as any)?.gameModeTheme;
+      const isNaval = roomTheme === "NAVAL_WAR";
+      const isMulti = ["HEX_CONQUEST", "TOWER_DEFENSE", "DRAGON_BOAT", "RUNAWAY_TRAIN", "ARTILLERY_DUEL", "EDU_AMONG_US", "QUIZ_BOMBERMAN"].includes(roomTheme);
       if (isNaval) {
         router.push(`/rooms/${pin}/naval`);
+      } else if (isMulti) {
+        router.push(`/rooms/${pin}/multi-game`);
       } else {
         router.push(`/rooms/${pin}/host-live`);
       }

@@ -190,7 +190,8 @@ public record CreateRoomRequest(
     [Required] string Mode,   // HOST_PACED | PLAYER_PACED | ASYNC_TOURNAMENT
     string? GameModeTheme = "CLASSIC",
     DateTime? EndTime = null,
-    int? QuestionTimeLimit = null
+    int? QuestionTimeLimit = null,
+    string? GameType = null
 );
 
 public record UpdateTournamentSettingsRequest(
@@ -212,7 +213,8 @@ public record RoomDto(
     Guid? HostId = null,
     DateTime? EndTime = null,
     int? QuestionTimeLimit = null,
-    bool IsEarlyFinished = false
+    bool IsEarlyFinished = false,
+    string? GameType = "NAVAL_WAR"
 );
 
 public record JoinRoomRequest(

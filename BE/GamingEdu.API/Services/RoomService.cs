@@ -104,6 +104,16 @@ public class RoomService : IRoomService
         while (await _db.Rooms.AnyAsync(r => r.PinCode == pin && r.Status != "FINISHED"));
 
         var theme = string.IsNullOrWhiteSpace(request.GameModeTheme) ? "CLASSIC" : request.GameModeTheme.Trim();
+        var gameType = !string.IsNullOrWhiteSpace(request.GameType)
+            ? request.GameType.Trim().ToUpperInvariant()
+            : (theme.Contains("HEX") ? "HEX_CONQUEST" :
+               theme.Contains("TOWER") ? "TOWER_DEFENSE" :
+               theme.Contains("BOAT") ? "DRAGON_BOAT" :
+               theme.Contains("TRAIN") ? "RUNAWAY_TRAIN" :
+               theme.Contains("ARTILLERY") ? "ARTILLERY_DUEL" :
+               theme.Contains("AMONG") ? "EDU_AMONG_US" :
+               theme.Contains("BOMBER") ? "QUIZ_BOMBERMAN" :
+               theme.Contains("NAVAL") ? "NAVAL_WAR" : theme);
 
         var settingsObj = new Dictionary<string, object>
         {
@@ -121,6 +131,7 @@ public class RoomService : IRoomService
             QuizId    = request.QuizId,
             PinCode   = pin,
             Mode      = request.Mode,
+            GameType  = gameType,
             Status    = "WAITING",
             MapSize   = theme == "NAVAL_WAR" ? 15 : 15,
             EndTime   = request.EndTime,
@@ -141,7 +152,7 @@ public class RoomService : IRoomService
 
         return new RoomDto(room.Id, room.PinCode, room.Mode, room.Status,
             room.QuizId, quiz.Title, room.CreatedAt, qrCodeBase64, theme, slideCount, room.HostId,
-            room.EndTime, request.QuestionTimeLimit, room.IsEarlyFinished);
+            room.EndTime, request.QuestionTimeLimit, room.IsEarlyFinished, room.GameType);
     }
 
     public string GenerateQrCodeBase64(string pin)
@@ -162,7 +173,7 @@ public class RoomService : IRoomService
         // Find room by PIN (maps to rooms.pin_code)
         // Cho phép vào phòng nếu đang WAITING hoặc nếu là ASYNC_TOURNAMENT và chưa FINISHED
         var room = await _db.Rooms
-            .FirstOrDefaultAsync(r => r.PinCode == request.PinCode && (r.Status == "WAITING" || (r.Mode == "ASYNC_TOURNAMENT" && r.Status != "FINISHED")))
+            .FirstOrDefaultAsync(r => r.PinCode == request.PinCode && r.Status != "FINISHED")
             ?? throw new KeyNotFoundException(
                 $"Phòng có mã PIN '{request.PinCode}' không tồn tại hoặc đã kết thúc.");
 
@@ -1312,7 +1323,7 @@ public class RoomService : IRoomService
         return new RoomDto(
             room.Id, room.PinCode, room.Mode, room.Status,
             room.QuizId, room.Quiz?.Title ?? "", room.CreatedAt, qrCode, theme, slideCount, room.HostId,
-            room.EndTime, request.QuestionTimeLimit, room.IsEarlyFinished);
+            room.EndTime, request.QuestionTimeLimit, room.IsEarlyFinished, room.GameType);
     }
 
     public async Task<IEnumerable<PlayedRoomHistoryDto>> GetPlayedRoomsHistoryAsync(Guid userId)

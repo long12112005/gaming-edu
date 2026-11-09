@@ -149,7 +149,7 @@ export default function PlayerGameRoom() {
         if (res.data?.success && res.data.data) {
           const rData = res.data.data;
           setRoomDetails(rData);
-          const roomTheme = rData.theme || rData.gameModeTheme;
+          const roomTheme = rData.gameType || rData.theme || rData.gameModeTheme; if (["HEX_CONQUEST", "TOWER_DEFENSE", "DRAGON_BOAT", "RUNAWAY_TRAIN", "ARTILLERY_DUEL", "EDU_AMONG_US", "QUIZ_BOMBERMAN"].includes(roomTheme)) { router.replace(`/rooms/${pinCode}/multi-game`); return; }
           if (roomTheme === "NAVAL_WAR") {
             router.replace(`/rooms/${pinCode}/naval`);
             return;

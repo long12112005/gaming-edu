@@ -42,7 +42,7 @@ function PlayJoinForm() {
           return;
         }
 
-        const roomTheme = res.data.data?.theme || res.data.data?.gameModeTheme;
+        const roomTheme = res.data.data?.gameType || res.data.data?.theme || res.data.data?.gameModeTheme; const isMulti = ["HEX_CONQUEST", "TOWER_DEFENSE", "DRAGON_BOAT", "RUNAWAY_TRAIN", "ARTILLERY_DUEL", "EDU_AMONG_US", "QUIZ_BOMBERMAN"].includes(roomTheme); if (isMulti) { router.push(`/rooms/${pin}/multi-game`); return; }
         if (roomTheme === "NAVAL_WAR") {
           router.push(`/rooms/${pin}/naval`);
         } else {

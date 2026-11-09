@@ -187,6 +187,7 @@ public class Slide
     public Quiz Quiz { get; set; } = null!;
     public ICollection<SlideOption> Options { get; set; } = [];
     public ICollection<PlayerResponse> PlayerResponses { get; set; } = [];
+    public ICollection<RoomGameAction> GameActions { get; set; } = [];
 }
 
 // ============================================================
@@ -269,6 +270,8 @@ public class Room
     public int MapSize { get; set; } = 15;
     public string? GameSettings { get; set; } // JSON configuration: radar, shield, combo mode, etc.
     public bool IsEarlyFinished { get; set; } = false; // Ghi nhận chủ phòng kết thúc sớm
+    [MaxLength(50)]
+    public string GameType { get; set; } = "NAVAL_WAR"; // NAVAL_WAR | HEX_CONQUEST | TOWER_DEFENSE | DRAGON_BOAT | RUNAWAY_TRAIN | ARTILLERY_DUEL | EDU_AMONG_US | QUIZ_BOMBERMAN
     [MaxLength(10)]
     public string? WinnerTeam { get; set; } // 'TEAM_A' | 'TEAM_B' | 'DRAW'
 
@@ -288,6 +291,8 @@ public class Room
     public ICollection<NavalTeam> NavalTeams { get; set; } = [];
     public ICollection<NavalShip> NavalShips { get; set; } = [];
     public ICollection<NavalAction> NavalActions { get; set; } = [];
+    public ICollection<RoomGameState> GameStates { get; set; } = [];
+    public ICollection<RoomGameAction> GameActions { get; set; } = [];
 }
 
 // ============================================================
@@ -322,6 +327,11 @@ public class RoomPlayer
     public int ShipsSunkContribution { get; set; } = 0;
     public int SkillsUsedCount { get; set; } = 0;
 
+    [MaxLength(30)]
+    public string PlayerRole { get; set; } = "MEMBER"; // MEMBER | SCIENTIST | IMPOSTOR | CAPTAIN
+    public int ActionPoints { get; set; } = 0;
+    public bool IsIsolated { get; set; } = false;
+
     public DateTime JoinedAt { get; set; } = DateTime.UtcNow;
 
     // Navigation
@@ -334,6 +344,7 @@ public class RoomPlayer
     public ICollection<PlayerResponse> Responses { get; set; } = [];
     public ICollection<QuestionQA> Questions { get; set; } = [];
     public ICollection<NavalAction> NavalActions { get; set; } = [];
+    public ICollection<RoomGameAction> GameActions { get; set; } = [];
 }
 
 // ============================================================
@@ -494,4 +505,67 @@ public class ShipCoordinate
     [JsonPropertyName("shielded")]
     public bool Shielded { get; set; } = false;
 }
+
+
+// ============================================================
+// maps to: room_game_states table
+// ============================================================
+public class RoomGameState
+{
+    [Key]
+    public Guid Id { get; set; } = Guid.NewGuid();
+
+    public Guid RoomId { get; set; }
+
+    [Required, MaxLength(30)]
+    public string TeamOrGroup { get; set; } = "GLOBAL_MAP"; // 'GLOBAL_MAP' | 'TEAM_A' | 'TEAM_B' | 'TEAM_C' | 'TEAM_D'
+
+    public int HpOrProgress { get; set; } = 100;
+
+    [Required]
+    public string BoardStateJson { get; set; } = "{}";
+
+    public string? SkillsStateJson { get; set; } = "{}";
+
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
+    // Navigation
+    [ForeignKey(nameof(RoomId))]
+    public Room Room { get; set; } = null!;
+}
+
+// ============================================================
+// maps to: room_game_actions table
+// ============================================================
+public class RoomGameAction
+{
+    [Key]
+    public Guid Id { get; set; } = Guid.NewGuid();
+
+    public Guid RoomId { get; set; }
+    public Guid PlayerId { get; set; }
+    public Guid? SlideId { get; set; }
+
+    [Required, MaxLength(50)]
+    public string ActionType { get; set; } = string.Empty;
+
+    [Required]
+    public string ActionPayloadJson { get; set; } = "{}";
+
+    [Required, MaxLength(50)]
+    public string ActionResult { get; set; } = string.Empty;
+
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    // Navigation
+    [ForeignKey(nameof(RoomId))]
+    public Room Room { get; set; } = null!;
+
+    [ForeignKey(nameof(PlayerId))]
+    public RoomPlayer Player { get; set; } = null!;
+
+    [ForeignKey(nameof(SlideId))]
+    public Slide? Slide { get; set; }
+}
+
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import {
   Gamepad2,
   Trophy,
@@ -15,7 +16,81 @@ import {
   Info,
   CheckCircle2,
   Play,
+  Zap,
 } from "lucide-react";
+
+const NEW_SEVEN_GAMES = [
+  {
+    id: "HEX_CONQUEST",
+    name: "Đế Chế Lãnh Thổ",
+    subtitle: "Hex Conquest · Vây Thành Đổi Màu BFS 11×11",
+    badge: "CHIẾN THUẬT VÂY ĐẤT",
+    icon: "👑",
+    iconBg: "bg-amber-50 border-amber-200 text-amber-600",
+    badgeBg: "bg-amber-50 text-amber-700 border-amber-200",
+    desc: "Mở rộng lãnh thổ trên lưới lục giác 11×11 từ góc Tây Bắc & Đông Nam. Bao vây kín cụm ô địch để đồng hóa hàng loạt bằng BFS, bật Tường Thành, Nhảy Dù & Bom Màu.",
+  },
+  {
+    id: "TOWER_DEFENSE",
+    name: "Thủ Thành Tri Thức",
+    subtitle: "Tower Defense · Công Thủ 2 Làn Đường 1000 HP",
+    badge: "CÔNG THỦ 1000 HP",
+    icon: "🛡️",
+    iconBg: "bg-emerald-50 border-emerald-200 text-emerald-600",
+    badgeBg: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    desc: "Trả lời đúng nhận 100 Vàng (+50 Vàng thưởng tốc độ). Xây Tháp Cung, Tháp Băng, Tháp Laser phòng thủ hoặc thả Quái Trinh Sát & Chiến Xa Bọc Thép công phá căn cứ địch.",
+  },
+  {
+    id: "DRAGON_BOAT",
+    name: "Đua Thuyền Vượt Bão",
+    subtitle: "Dragon Boat · Đua Thuyền Rồng 1000m",
+    badge: "ĐUA SÔNG 1000M",
+    icon: "🐉",
+    iconBg: "bg-orange-50 border-orange-200 text-orange-600",
+    badgeBg: "bg-orange-50 text-orange-700 border-orange-200",
+    desc: "Mỗi câu trả lời đúng tạo 1 Nhịp Chèo (+15m) cùng hiệu ứng Đồng Tâm Hiệp Lực (+5m). Né Xoáy Nước & Đá Ngầm ở mốc 250m, 500m, 750m, bật Tăng Tốc Nitro & Phun Mực Đen.",
+  },
+  {
+    id: "RUNAWAY_TRAIN",
+    name: "Chuyến Tàu Sinh Tử",
+    subtitle: "Runaway Train · Ghép Ray Dẫn Đường 12×8",
+    badge: "GHÉP RAY 12×8",
+    icon: "🚂",
+    iconBg: "bg-rose-50 border-rose-200 text-rose-600",
+    badgeBg: "bg-rose-50 text-rose-700 border-rose-200",
+    desc: "Ghép các mảnh ray thẳng & cua 90° trên bản đồ 12×8 dẫn tàu từ Ga Khởi Hành (Cột 1) đến Ga Đích (Cột 12), dùng Bẻ Ghi Đường Ray, Tăng Áp Lò Hơi & Phanh Khẩn Cấp 12s.",
+  },
+  {
+    id: "ARTILLERY_DUEL",
+    name: "Pháo Đài Tri Thức",
+    subtitle: "Artillery Duel · Đấu Pháo Tọa Độ Parabol",
+    badge: "VẬT LÝ PARABOL",
+    icon: "🎯",
+    iconBg: "bg-indigo-50 border-indigo-200 text-indigo-600",
+    badgeBg: "bg-indigo-50 text-indigo-700 border-indigo-200",
+    desc: "Căn chỉnh Góc bắn (15°–80°), Lực bắn (10–100) và Gió (-10 đến +10) vượt ngọn núi giữa bản đồ để bắn sập Pháo đài đối phương (1000 HP), bắn Đạn Phân Mảnh & Xuyên Núi.",
+  },
+  {
+    id: "EDU_AMONG_US",
+    name: "Truy Tìm Nội Gián",
+    subtitle: "Edu Among Us · Trạm Không Gian Ẩn Danh 20%",
+    badge: "ẨN DANH 20%",
+    icon: "🚀",
+    iconBg: "bg-sky-50 border-sky-200 text-sky-600",
+    badgeBg: "bg-sky-50 text-sky-700 border-sky-200",
+    desc: "Nhà Khoa Học (80%) trả lời đúng tự động tăng năng lượng trạm lên 100%, dùng Máy Quét Sinh Trắc & Bỏ phiếu cách ly. Nội Gián (20%) ngụy trang 0% và đánh sập lò phản ứng.",
+  },
+  {
+    id: "QUIZ_BOMBERMAN",
+    name: "Đặt Bom Mê Cung",
+    subtitle: "Quiz Bomberman · Mê Cung 15×15 (5 Tim HP)",
+    badge: "MÊ CUNG 15×15",
+    icon: "💣",
+    iconBg: "bg-purple-50 border-purple-200 text-purple-600",
+    badgeBg: "bg-purple-50 text-purple-700 border-purple-200",
+    desc: "Trả lời đúng nhận 3 Bước Di Chuyển + 1 Quả Bom Hẹn Giờ trên mê cung 15×15. Nổ chữ thập phá tường gạch (+50đ), trúng địch trừ 1 Tim, cướp 200đ, dùng Bom Lửa Dài & Đá Bom.",
+  },
+];
 
 interface GameModesSectionProps {
   onOpenCreateRoom?: (initialMode?: "HOST_PACED" | "ASYNC_TOURNAMENT", initialTheme?: string) => void;
@@ -46,136 +121,66 @@ export default function GameModesSection({
 
           <div className="flex items-center gap-2 shrink-0">
             <span className="text-xs font-bold text-slate-500 bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-full">
-              ⚡ 3 Thể Thức Thi Đấu
+              ⚡ 10 Chế Độ Chơi & Đấu Trường
             </span>
           </div>
         </div>
 
         {/* ══════════════════════════════════════════════════════════════════
-            CHẾ ĐỘ NỔI BẬT NHẤT: HẢI TẶC TRI THỨC (EDU NAVAL WAR)
+            DANH SÁCH CHẾ ĐỘ CHƠI & ĐẤU TRƯỜNG HỌC TẬP ĐỒNG NHẤT
         ══════════════════════════════════════════════════════════════════ */}
-        <div className="mb-6 relative rounded-[28px] sm:rounded-[36px] bg-gradient-to-br from-[#0b192c] via-[#0f284e] to-[#143a6d] border-2 border-cyan-500/40 shadow-xl shadow-cyan-950/20 text-white overflow-hidden p-6 sm:p-8 lg:p-10">
-          {/* Subtle wave ambient glow */}
-          <div className="absolute top-0 right-0 w-96 h-96 bg-cyan-500/15 rounded-full blur-3xl pointer-events-none" />
-          <div className="absolute bottom-0 left-1/3 w-80 h-80 bg-blue-600/15 rounded-full blur-3xl pointer-events-none" />
-
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center relative z-10">
-            {/* Cột trái: Thông tin & Tính năng chiến thuật */}
-            <div className="lg:col-span-7 space-y-5">
-              <div className="flex flex-wrap items-center gap-2.5">
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-400/20 text-cyan-300 border border-cyan-400/40 text-[11px] font-black uppercase tracking-wider font-heading">
-                  <Flame size={13} className="text-amber-400 fill-amber-400" />
-                  CHẾ ĐỘ MỚI & ĐỘC QUYỀN
-                </span>
-                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-white/10 text-slate-200 border border-white/15 text-[11px] font-bold">
-                  <Users size={13} />
-                  Đối Kháng 2 - 50 Người
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {/* Chế độ 1: Hải Tặc Tri Thức (Edu Naval War) */}
+          <div className="bg-white rounded-[28px] border-2 border-slate-200/90 hover:border-cyan-400 p-6 sm:p-7 shadow-xs hover:shadow-md transition-all duration-300 flex flex-col justify-between group">
+            <div>
+              <div className="flex items-start justify-between gap-4 mb-4">
+                <div className="w-14 h-14 rounded-2xl bg-cyan-50 border border-cyan-200 text-cyan-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform shadow-2xs">
+                  <Anchor size={28} />
+                </div>
+                <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full bg-cyan-50 text-cyan-700 border border-cyan-200">
+                  HẢI CHIẾN 15×15
                 </span>
               </div>
 
-              <div>
-                <h3 className="font-heading font-black text-3xl sm:text-4xl text-white tracking-tight flex items-center gap-3">
-                  <span>Hải Tặc Tri Thức</span>
-                  <Anchor size={30} className="text-cyan-400 animate-pulse hidden sm:inline" />
-                </h3>
-                <p className="text-xs sm:text-sm text-cyan-200 font-bold uppercase tracking-wider mt-1">
-                  Edu Naval War · Chiến Hạm Đối Kháng PvP Đồng Đội
-                </p>
-              </div>
-
-              <p className="text-slate-200 text-sm sm:text-base leading-relaxed">
-                Biến buổi học thành cuộc đại chiến hạm đội trên biển cả! Cả lớp chia làm 2 liên minh (Đội Đỏ vs Đội Xanh). Trả lời chính xác các câu hỏi kiến thức để nạp đạn pháo kích, kích hoạt Radar quét sương mù, bật Lá chắn bảo vệ và đánh chìm toàn bộ 5 tàu chiến đối phương.
+              <h3 className="font-heading font-black text-xl text-slate-900 group-hover:text-cyan-600 transition-colors">
+                Hải Tặc Tri Thức
+              </h3>
+              <p className="text-xs text-cyan-600 font-bold uppercase tracking-wider mt-0.5 mb-2.5">
+                Edu Naval War · Chiến Hạm Đối Kháng 2 Phe
               </p>
+              <p className="text-xs sm:text-sm text-slate-500 leading-relaxed">
+                Đại chiến hạm đội Đội Đỏ vs Đội Xanh (2–50 người). Trả lời chính xác câu hỏi để nạp đạn pháo kích, kích hoạt Radar quét 3×3, bật Lá chắn bảo vệ và đánh chìm 5 tàu chiến đối phương.
+              </p>
+            </div>
 
-              {/* Tactical chips */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-2">
-                <div className="flex items-center gap-2 p-2.5 rounded-xl bg-white/10 border border-white/10 backdrop-blur-xs">
-                  <Crosshair size={16} className="text-cyan-300 shrink-0" />
-                  <span className="text-xs font-bold text-slate-200 truncate">
-                    Nạp Đạn Khi Trả Lời Đúng
-                  </span>
-                </div>
-                <div className="flex items-center gap-2 p-2.5 rounded-xl bg-white/10 border border-white/10 backdrop-blur-xs">
-                  <Radio size={16} className="text-cyan-300 shrink-0" />
-                  <span className="text-xs font-bold text-slate-200 truncate">
-                    Radar Dò Tìm 3×3
-                  </span>
-                </div>
-                <div className="flex items-center gap-2 p-2.5 rounded-xl bg-white/10 border border-white/10 backdrop-blur-xs">
-                  <Shield size={16} className="text-cyan-300 shrink-0" />
-                  <span className="text-xs font-bold text-slate-200 truncate">
-                    Lá Chắn Phòng Thủ
-                  </span>
-                </div>
-              </div>
-
-              {/* Action buttons */}
-              <div className="flex flex-wrap items-center gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => onOpenCreateRoom?.("HOST_PACED", "NAVAL_WAR")}
-                  className="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-cyan-400 via-cyan-500 to-blue-500 hover:from-cyan-300 hover:to-blue-400 text-slate-950 font-heading font-black text-sm shadow-lg shadow-cyan-500/25 flex items-center gap-2 cursor-pointer transition-all active:scale-95"
+            <div className="pt-6 border-t border-slate-100 flex items-center justify-between gap-2 mt-6">
+              <div className="flex items-center gap-1.5">
+                <Link
+                  href="/rooms/SOLO/naval"
+                  className="px-3.5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-heading font-bold text-xs transition-colors"
                 >
-                  <Anchor size={18} />
-                  <span>Khởi Tạo Phòng Hải Chiến</span>
-                  <ArrowRight size={16} />
-                </button>
-
+                  Chơi Thử 1 Người
+                </Link>
                 <button
                   type="button"
                   onClick={() => onOpenRulesModal?.()}
-                  className="px-5 py-3.5 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/20 text-white font-heading font-bold text-sm flex items-center gap-2 cursor-pointer transition-all active:scale-95"
+                  title="Xem Luật Chơi & Chiến Thuật"
+                  className="p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors cursor-pointer"
                 >
-                  <Info size={16} className="text-cyan-300" />
-                  <span>Xem Luật Chơi & Chiến Thuật</span>
+                  <Info size={14} />
                 </button>
               </div>
-            </div>
-
-            {/* Cột phải: Visual showcase minh họa hạm đội */}
-            <div className="lg:col-span-5 flex flex-col items-center justify-center">
-              <div className="relative w-full max-w-sm rounded-3xl bg-cyan-950/40 border border-cyan-400/30 p-5 backdrop-blur-md shadow-2xl flex flex-col items-center text-center">
-                {/* Visual Ship Asset */}
-                <div className="w-full h-44 rounded-2xl bg-gradient-to-b from-cyan-900/40 to-blue-950/60 flex items-center justify-center relative overflow-hidden border border-cyan-400/20">
-                  <img
-                    src="/assets/naval-war/ships/Preview.png"
-                    alt="Chiến Hạm Hải Tặc Tri Thức"
-                    className="max-h-36 max-w-full object-contain drop-shadow-2xl hover:scale-105 transition-transform duration-500"
-                    onError={(e) => {
-                      (e.target as HTMLElement).style.display = "none";
-                    }}
-                  />
-                  <div className="absolute bottom-2 left-2 right-2 px-2 py-1 bg-black/60 backdrop-blur-xs rounded-lg text-[10px] font-bold text-cyan-200 flex items-center justify-between">
-                    <span>Lưới Mặt Biển 15×15</span>
-                    <span>5 Chiến Hạm Độc Lập</span>
-                  </div>
-                </div>
-
-                {/* Score & Tactical Status Badge Preview */}
-                <div className="w-full mt-3.5 grid grid-cols-2 gap-2 text-left">
-                  <div className="p-2.5 rounded-xl bg-rose-950/60 border border-rose-500/30">
-                    <span className="text-[10px] font-bold text-rose-300 uppercase block">Đội Đỏ (Red Fleet)</span>
-                    <span className="font-heading font-black text-sm text-white">5 Tàu Chiến</span>
-                  </div>
-                  <div className="p-2.5 rounded-xl bg-blue-950/60 border border-blue-500/30">
-                    <span className="text-[10px] font-bold text-blue-300 uppercase block">Đội Xanh (Blue Armada)</span>
-                    <span className="font-heading font-black text-sm text-white">5 Tàu Chiến</span>
-                  </div>
-                </div>
-
-                <div className="mt-3 flex items-center gap-1.5 text-[11px] text-cyan-200/80 font-medium">
-                  <CheckCircle2 size={13} className="text-cyan-400" />
-                  <span>Đồng bộ SignalR thời gian thực 60 FPS</span>
-                </div>
-              </div>
+              <button
+                type="button"
+                onClick={() => onOpenCreateRoom?.("HOST_PACED", "NAVAL_WAR")}
+                className="px-4 py-2.5 rounded-xl bg-cyan-50 hover:bg-cyan-600 text-cyan-700 hover:text-white font-heading font-bold text-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+              >
+                <Play size={14} fill="currentColor" />
+                <span>Mở Phòng Chơi</span>
+              </button>
             </div>
           </div>
-        </div>
 
-        {/* ══════════════════════════════════════════════════════════════════
-            2 THẺ CHẾ ĐỘ BỔ SUNG: PHÒNG THƯỜNG & PHÒNG GIẢI ĐẤU
-        ══════════════════════════════════════════════════════════════════ */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Chế độ 2: Phòng Thường (Host-Paced Live) */}
           <div className="bg-white rounded-[28px] border-2 border-slate-200/90 hover:border-indigo-400 p-6 sm:p-7 shadow-xs hover:shadow-md transition-all duration-300 flex flex-col justify-between group">
             <div>
@@ -251,6 +256,56 @@ export default function GameModesSection({
               </button>
             </div>
           </div>
+
+          {/* 7 Chế độ trò chơi tương tác nằm chung cùng khu vực Khám Phá Trò Chơi */}
+          {NEW_SEVEN_GAMES.map((g) => (
+            <div
+              key={g.id}
+              className="bg-white rounded-[28px] border-2 border-slate-200/90 hover:border-indigo-400 p-6 sm:p-7 shadow-xs hover:shadow-md transition-all duration-300 flex flex-col justify-between group"
+            >
+              <div>
+                <div className="flex items-start justify-between gap-4 mb-4">
+                  <div
+                    className={`w-14 h-14 rounded-2xl border flex items-center justify-center shrink-0 text-3xl group-hover:scale-105 transition-transform shadow-2xs ${g.iconBg}`}
+                  >
+                    {g.icon}
+                  </div>
+                  <span
+                    className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full border ${g.badgeBg}`}
+                  >
+                    {g.badge}
+                  </span>
+                </div>
+
+                <h3 className="font-heading font-black text-xl text-slate-900 group-hover:text-indigo-600 transition-colors">
+                  {g.name}
+                </h3>
+                <p className="text-xs text-indigo-600 font-bold uppercase tracking-wider mt-0.5 mb-2.5">
+                  {g.subtitle}
+                </p>
+                <p className="text-xs sm:text-sm text-slate-500 leading-relaxed">
+                  {g.desc}
+                </p>
+              </div>
+
+              <div className="pt-6 border-t border-slate-100 flex items-center justify-between gap-2 mt-6">
+                <Link
+                  href={`/rooms/SOLO/multi-game?game=${g.id}`}
+                  className="px-3.5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-heading font-bold text-xs transition-colors"
+                >
+                  Chơi Thử 1 Người
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => onOpenCreateRoom?.("HOST_PACED", g.id)}
+                  className="px-4 py-2.5 rounded-xl bg-indigo-50 hover:bg-indigo-600 text-indigo-700 hover:text-white font-heading font-bold text-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Play size={14} fill="currentColor" />
+                  <span>Mở Phòng Chơi</span>
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </section>

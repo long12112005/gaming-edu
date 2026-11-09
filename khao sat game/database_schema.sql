@@ -163,3 +163,44 @@ CREATE INDEX idx_slide_options_slide ON slide_options(slide_id);
 CREATE INDEX idx_room_players_room ON room_players(room_id);
 CREATE INDEX idx_player_responses_room_player ON player_responses(room_player_id);
 CREATE INDEX idx_question_qa_room ON question_qa(room_id);
+-- 1. Thêm cột phân loại Game vào bảng rooms
+ALTER TABLE rooms ADD 
+    game_type NVARCHAR(50) DEFAULT 'NAVAL_WAR'; 
+    -- Các giá trị: 'NAVAL_WAR', 'HEX_CONQUEST', 'TOWER_DEFENSE', 'DRAGON_BOAT', 
+    -- 'RUNAWAY_TRAIN', 'ARTILLERY_DUEL', 'EDU_AMONG_US', 'QUIZ_BOMBERMAN'
+GO
+
+-- 2. Thêm cột Vai trò đặc biệt & Điểm hành động dùng chung vào room_players
+ALTER TABLE room_players ADD 
+    player_role NVARCHAR(30) DEFAULT 'MEMBER', -- Dùng cho Game 9 ('SCIENTIST', 'IMPOSTOR') hoặc Đội trưởng ('CAPTAIN')
+    action_points INT DEFAULT 0, -- Điểm hành động / Vàng / Lượt đặt bom / Đạn pháo nhận được khi trả lời ĐÚNG
+    is_isolated BIT DEFAULT 0; -- Dùng khi bị bỏ phiếu cách ly (Game 9) hoặc dính bẫy choáng
+GO
+
+-- 3. Bảng lưu Trạng thái Bản đồ & Đội chơi theo từng Game (Multi-game State)
+CREATE TABLE room_game_states (
+    id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+    room_id UNIQUEIDENTIFIER REFERENCES rooms(id) ON DELETE CASCADE,
+    team_or_group NVARCHAR(30) NOT NULL, -- 'GLOBAL_MAP', 'TEAM_A', 'TEAM_B', 'TEAM_C', 'TEAM_D'
+    hp_or_progress INT DEFAULT 100, -- Máu Pháo đài (Game 2, 8), % Sửa trạm (Game 9), Quãng đường thuyền/tàu (Game 5, 7)
+    board_state_json NVARCHAR(MAX) NOT NULL, -- Lưu lưới Hex (Game 1), Tháp/Quái (Game 2), Đường ray (Game 7), Mê cung Bom (Game 10)
+    skills_state_json NVARCHAR(MAX) NULL, -- Lưu số lượt kỹ năng còn lại của Đội/Nhóm
+    updated_at DATETIME2 DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(room_id, team_or_group)
+);
+
+-- 4. Bảng Nhật ký Hành động Đa Game (Đồng bộ Real-time & Chống gian lận)
+CREATE TABLE room_game_actions (
+    id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+    room_id UNIQUEIDENTIFIER REFERENCES rooms(id) ON DELETE CASCADE,
+    player_id UNIQUEIDENTIFIER REFERENCES room_players(id) ON DELETE NO ACTION,
+    slide_id UNIQUEIDENTIFIER NULL REFERENCES slides(id) ON DELETE NO ACTION, -- Ràng buộc hành động này sinh ra từ câu hỏi nào
+    action_type NVARCHAR(50) NOT NULL, -- VD: 'CLAIM_HEX', 'BUILD_TOWER', 'ROW_BOAT', 'PLACE_RAIL', 'FIRE_CANNON', 'SABOTAGE', 'PLANT_BOMB'
+    action_payload_json NVARCHAR(MAX) NOT NULL, -- Tọa độ, góc bắn, loại tháp, hoặc ID người bị cách ly
+    action_result NVARCHAR(50) NOT NULL,
+    created_at DATETIME2 DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_game_states_room ON room_game_states(room_id);
+CREATE INDEX idx_game_actions_room ON room_game_actions(room_id, created_at);
+GO

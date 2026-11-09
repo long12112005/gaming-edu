@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Plus_Jakarta_Sans, Be_Vietnam_Pro } from "next/font/google";
 import "./globals.css";
+import "@/styles/gameEffects.css";
 import QueryProvider from "@/components/providers/QueryProvider";
 
 const plusJakartaSans = Plus_Jakarta_Sans({

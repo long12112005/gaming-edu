@@ -190,8 +190,121 @@ export function useNavalWarHub(pinCode?: string) {
     setTimeout(() => setScreenShake(false), 500);
   }, []);
 
+  const soloEnemyShipsRef = useRef<NavalShipModel[]>([]);
+
+  const generateRandomFleet = useCallback((size = 15): NavalShipModel[] => {
+    const lengths = [5, 4, 3, 3, 2];
+    const occupied = new Set<string>();
+    const fleet: NavalShipModel[] = [];
+
+    lengths.forEach((len, idx) => {
+      let placed = false;
+      for (let attempt = 0; attempt < 200 && !placed; attempt++) {
+        const horiz = Math.random() < 0.5;
+        const maxR = horiz ? size - 1 : size - len;
+        const maxC = horiz ? size - len : size - 1;
+        const r0 = Math.floor(Math.random() * (maxR + 1));
+        const c0 = Math.floor(Math.random() * (maxC + 1));
+
+        const coords: ShipCell[] = [];
+        let collision = false;
+        for (let k = 0; k < len; k++) {
+          const r = horiz ? r0 : r0 + k;
+          const c = horiz ? c0 + k : c0;
+          if (occupied.has(`${r},${c}`)) {
+            collision = true;
+            break;
+          }
+          coords.push({ r, c, hit: false, shielded: false });
+        }
+        if (!collision) {
+          coords.forEach((pt) => occupied.add(`${pt.r},${pt.c}`));
+          fleet.push({
+            id: `ship-${idx + 1}`,
+            shipType: idx + 1,
+            orientation: horiz ? "H" : "V",
+            coordinates: coords,
+            isSunk: false,
+          });
+          placed = true;
+        }
+      }
+    });
+    return fleet;
+  }, []);
+
+  const initSoloMatch = useCallback(() => {
+    const friendly = generateRandomFleet(15);
+    const enemy = generateRandomFleet(15);
+    soloEnemyShipsRef.current = enemy;
+    setMyShips(friendly);
+    setEnemyShots([]);
+    setShotsEarned(1);
+    setCurrentCombo(0);
+    setEnergyPoints(25);
+    setTeamAShipsRemaining(5);
+    setTeamBShipsRemaining(5);
+    setRadarRemaining(2);
+    setShieldRemaining(2);
+    setTurnNumber(1);
+    setCurrentTurnTeam("TEAM_A");
+    setMatchResult(null);
+    setIsConnected(true);
+    setIsHost(false);
+    setMyTeamSide("TEAM_A");
+    setMyPlayerId("solo-captain");
+    setMyNickname("Thuyền Trưởng (Solo)");
+    setIsMatchStarted(true);
+    setLobbyState({
+      pinCode: "SOLO",
+      totalPlayers: 2,
+      teamAPlayers: [{ playerId: "solo-captain", nickname: "Thuyền Trưởng (Solo)", teamSide: "TEAM_A", joinedAt: new Date().toISOString() }],
+      teamBPlayers: [{ playerId: "ai-armada", nickname: "Hạm Đội AI (Đội Xích)", teamSide: "TEAM_B", joinedAt: new Date().toISOString() }],
+      teamACount: 1,
+      teamBCount: 1,
+    });
+    setLeaderboard([
+      {
+        playerId: "solo-captain",
+        nickname: "Thuyền Trưởng (Solo)",
+        teamSide: "TEAM_A",
+        totalScore: 0,
+        currentCombo: 0,
+        maxCombo: 0,
+        energyPoints: 25,
+        shotsEarned: 1,
+        validShotsCount: 0,
+        hitsCount: 0,
+        shipsSunkContribution: 0,
+        skillsUsedCount: 0,
+        hitAccuracy: 0,
+      },
+      {
+        playerId: "ai-armada",
+        nickname: "Hạm Đội AI (Đội Xích)",
+        teamSide: "TEAM_B",
+        totalScore: 0,
+        currentCombo: 0,
+        maxCombo: 0,
+        energyPoints: 0,
+        shotsEarned: 0,
+        validShotsCount: 0,
+        hitsCount: 0,
+        shipsSunkContribution: 0,
+        skillsUsedCount: 0,
+        hitAccuracy: 0,
+      },
+    ]);
+    addCombatLog("Chế độ Chơi Thử 1 Người đã sẵn sàng! Bạn được tặng sẵn 1 viên đạn pháo đầu tiên.", "INFO");
+  }, [generateRandomFleet, addCombatLog]);
+
   // Connect to Naval SignalR Hub
   useEffect(() => {
+    if (pinCode === "SOLO") {
+      initSoloMatch();
+      return;
+    }
+
     let isCancelled = false;
     let startPromise: Promise<void> | null = null;
 
@@ -612,43 +725,262 @@ export function useNavalWarHub(pinCode?: string) {
     }
   }, []);
 
-  const startMatch = useCallback(async (pin: string) => {
-    if (connectionRef.current && connectionRef.current.state === signalR.HubConnectionState.Connected) {
-      await connectionRef.current.invoke("StartMatch", pin);
-    }
-  }, []);
+  const startMatch = useCallback(
+    async (pin: string) => {
+      if (pin === "SOLO") {
+        initSoloMatch();
+        return;
+      }
+      if (connectionRef.current && connectionRef.current.state === signalR.HubConnectionState.Connected) {
+        await connectionRef.current.invoke("StartMatch", pin);
+      }
+    },
+    [initSoloMatch]
+  );
 
-  const resetMatch = useCallback(async (pin: string) => {
-    if (connectionRef.current && connectionRef.current.state === signalR.HubConnectionState.Connected) {
-      await connectionRef.current.invoke("ResetMatch", pin);
-    }
-  }, []);
+  const resetMatch = useCallback(
+    async (pin: string) => {
+      if (pin === "SOLO") {
+        initSoloMatch();
+        return;
+      }
+      if (connectionRef.current && connectionRef.current.state === signalR.HubConnectionState.Connected) {
+        await connectionRef.current.invoke("ResetMatch", pin);
+      }
+    },
+    [initSoloMatch]
+  );
 
-  const submitAnswer = useCallback(async (pin: string, slideId: string, answerData: string, timeMs: number) => {
-    if (connectionRef.current && connectionRef.current.state === signalR.HubConnectionState.Connected) {
-      await connectionRef.current.invoke("SubmitAnswer", pin, slideId, answerData, timeMs);
-    }
-  }, []);
+  const submitAnswer = useCallback(
+    async (pin: string, slideId: string, answerData: string, timeMs: number) => {
+      if (pin === "SOLO") {
+        const isCorrect = answerData.endsWith("-correct");
+        if (isCorrect) {
+          navalSounds.playCorrect();
+          setShotsEarned((prev) => prev + 1);
+          setCurrentCombo((prev) => prev + 1);
+          setEnergyPoints((prev) => prev + 25);
+          setLeaderboard((prev) =>
+            prev.map((p) =>
+              p.playerId === "solo-captain"
+                ? {
+                    ...p,
+                    totalScore: p.totalScore + 1000,
+                    currentCombo: p.currentCombo + 1,
+                    maxCombo: Math.max(p.maxCombo, p.currentCombo + 1),
+                    energyPoints: p.energyPoints + 25,
+                    shotsEarned: p.shotsEarned + 1,
+                  }
+                : p
+            )
+          );
+          addCombatLog("Trả lời chính xác! +1 Đạn Pháo & +25 Năng Lượng. Hãy nhấp vào lưới địch để khai hỏa!", "INFO");
+        } else {
+          navalSounds.playWrong();
+          setCurrentCombo(0);
+          setTurnNumber((prev) => prev + 1);
+          addCombatLog("Trả lời sai! Đã chuyển sang câu hỏi tiếp theo.", "INFO");
+        }
+        return;
+      }
+      if (connectionRef.current && connectionRef.current.state === signalR.HubConnectionState.Connected) {
+        await connectionRef.current.invoke("SubmitAnswer", pin, slideId, answerData, timeMs);
+      }
+    },
+    [addCombatLog]
+  );
 
-  const timeoutTurn = useCallback(async (pin: string) => {
-    if (connectionRef.current && connectionRef.current.state === signalR.HubConnectionState.Connected) {
-      await connectionRef.current.invoke("TimeoutTurn", pin);
-    }
-  }, []);
+  const timeoutTurn = useCallback(
+    async (pin: string) => {
+      if (pin === "SOLO") {
+        setTurnNumber((prev) => prev + 1);
+        addCombatLog("Hết thời gian trả lời! Chuyển sang câu hỏi tiếp theo.", "INFO");
+        return;
+      }
+      if (connectionRef.current && connectionRef.current.state === signalR.HubConnectionState.Connected) {
+        await connectionRef.current.invoke("TimeoutTurn", pin);
+      }
+    },
+    [addCombatLog]
+  );
 
-  const fireShot = useCallback(async (pin: string, targetRow: number, targetCol: number, isPrecision: boolean = false) => {
-    if (connectionRef.current && connectionRef.current.state === signalR.HubConnectionState.Connected) {
-      await connectionRef.current.invoke("FireShot", pin, targetRow, targetCol, isPrecision);
-    }
-  }, []);
+  const fireShot = useCallback(
+    async (pin: string, targetRow: number, targetCol: number, isPrecision: boolean = false) => {
+      if (pin === "SOLO") {
+        if (shotsEarned <= 0) {
+          addCombatLog("Bạn đã hết đạn pháo! Hãy trả lời đúng câu hỏi để nạp thêm đạn.", "INFO");
+          return;
+        }
+        if (isPrecision && energyPoints < 50) {
+          addCombatLog("Không đủ 50 điểm năng lượng để kích hoạt Pháo Xuyên Giáp (1×3)!", "INFO");
+          return;
+        }
 
-  const useSkill = useCallback(async (pin: string, skillType: string, targetRow: number, targetCol: number) => {
-    if (connectionRef.current && connectionRef.current.state === signalR.HubConnectionState.Connected) {
-      await connectionRef.current.invoke("UseSkill", pin, skillType, targetRow, targetCol);
-    }
-  }, []);
+        const targets = isPrecision
+          ? [
+              { r: targetRow, c: Math.max(0, targetCol - 1) },
+              { r: targetRow, c: targetCol },
+              { r: targetRow, c: Math.min(14, targetCol + 1) },
+            ]
+          : [{ r: targetRow, c: targetCol }];
+
+        let anyHit = false;
+        let anySunk = false;
+        const newShots: ShotHistoryItem[] = [];
+
+        targets.forEach(({ r, c }) => {
+          let hitShip: NavalShipModel | undefined;
+          for (const ship of soloEnemyShipsRef.current) {
+            const cell = ship.coordinates.find((pt) => pt.r === r && pt.c === c);
+            if (cell) {
+              cell.hit = true;
+              hitShip = ship;
+              if (ship.coordinates.every((pt) => pt.hit)) {
+                ship.isSunk = true;
+                anySunk = true;
+              }
+              break;
+            }
+          }
+          if (hitShip) {
+            anyHit = true;
+            newShots.push({
+              targetRow: r,
+              targetCol: c,
+              result: hitShip.isSunk ? "SUNK" : "HIT",
+              sunkShipType: hitShip.isSunk ? hitShip.shipType : undefined,
+            });
+          } else {
+            newShots.push({ targetRow: r, targetCol: c, result: "MISS" });
+          }
+        });
+
+        const remainingEnemyShips = soloEnemyShipsRef.current.filter((s) => !s.isSunk).length;
+        setTeamBShipsRemaining(remainingEnemyShips);
+        setEnemyShots((prev) => [...prev, ...newShots]);
+        const nextShots = Math.max(0, shotsEarned - 1);
+        setShotsEarned(nextShots);
+        if (isPrecision) {
+          setEnergyPoints((prev) => Math.max(0, prev - 50));
+        }
+
+        if (anySunk) {
+          navalSounds.playShipSunk();
+          triggerScreenShake();
+          addCombatLog(`Bắn chìm chiến hạm địch tại (${targetRow + 1}, ${targetCol + 1})! Còn lại ${remainingEnemyShips}/5 tàu địch.`, "SUNK");
+        } else if (anyHit) {
+          navalSounds.playHit();
+          triggerScreenShake();
+          addCombatLog(`Trúng mục tiêu tại tọa độ (${targetRow + 1}, ${targetCol + 1})!`, "HIT");
+        } else {
+          navalSounds.playMiss();
+          addCombatLog(`Đạn rơi xuống biển tại (${targetRow + 1}, ${targetCol + 1}).`, "MISS");
+        }
+
+        setLeaderboard((prev) =>
+          prev.map((p) => {
+            if (p.playerId !== "solo-captain") return p;
+            const validShots = p.validShotsCount + 1;
+            const hits = p.hitsCount + (anyHit ? 1 : 0);
+            return {
+              ...p,
+              totalScore: p.totalScore + (anySunk ? 500 : anyHit ? 250 : 0),
+              validShotsCount: validShots,
+              hitsCount: hits,
+              shipsSunkContribution: 5 - remainingEnemyShips,
+              hitAccuracy: Math.round((hits / validShots) * 100),
+            };
+          })
+        );
+
+        if (remainingEnemyShips === 0) {
+          navalSounds.playShipSunk();
+          setMatchResult({
+            isGameOver: true,
+            isEarlyTermination: false,
+            winningTeam: "TEAM_A",
+            winReason: "Tiêu diệt toàn bộ 5 tàu chiến đối phương!",
+            priorityCriterion: "ALL_SHIPS_SUNK",
+          });
+        } else if (nextShots === 0) {
+          setTurnNumber((prev) => prev + 1);
+        }
+        return;
+      }
+      if (connectionRef.current && connectionRef.current.state === signalR.HubConnectionState.Connected) {
+        await connectionRef.current.invoke("FireShot", pin, targetRow, targetCol, isPrecision);
+      }
+    },
+    [shotsEarned, energyPoints, addCombatLog, triggerScreenShake]
+  );
+
+  const useSkill = useCallback(
+    async (pin: string, skillType: string, targetRow: number, targetCol: number) => {
+      if (pin === "SOLO") {
+        if (skillType === "RADAR") {
+          if (radarRemaining <= 0 || energyPoints < 50) {
+            addCombatLog("Không đủ lượt Radar hoặc thiếu 50 điểm năng lượng!", "INFO");
+            return;
+          }
+          let detected = false;
+          for (const ship of soloEnemyShipsRef.current) {
+            if (ship.isSunk) continue;
+            for (const pt of ship.coordinates) {
+              if (!pt.hit && Math.abs(pt.r - targetRow) <= 1 && Math.abs(pt.c - targetCol) <= 1) {
+                detected = true;
+                break;
+              }
+            }
+          }
+          navalSounds.playRadarPing();
+          setRadarRemaining((prev) => Math.max(0, prev - 1));
+          setEnergyPoints((prev) => Math.max(0, prev - 50));
+          setRadarScanWave({ centerRow: targetRow, centerCol: targetCol, detected });
+          setTimeout(() => setRadarScanWave(null), 2200);
+          addCombatLog(
+            detected
+              ? `Radar 3×3 tại (${targetRow + 1}, ${targetCol + 1}): PHÁT HIỆN TÍN HIỆU TÀU ĐỊCH!`
+              : `Radar 3×3 tại (${targetRow + 1}, ${targetCol + 1}): Vùng biển trống.`,
+            "RADAR"
+          );
+        } else if (skillType === "SHIELD") {
+          if (shieldRemaining <= 0 || energyPoints < 50) {
+            addCombatLog("Không đủ lượt Khiên hoặc thiếu 50 điểm năng lượng!", "INFO");
+            return;
+          }
+          navalSounds.playShieldActivate();
+          setShieldRemaining((prev) => Math.max(0, prev - 1));
+          setEnergyPoints((prev) => Math.max(0, prev - 50));
+          setMyShips((prev) =>
+            prev.map((ship) => ({
+              ...ship,
+              coordinates: ship.coordinates.map((pt) =>
+                pt.r === targetRow && pt.c === targetCol ? { ...pt, shielded: true } : pt
+              ),
+            }))
+          );
+          addCombatLog(`Đã kích hoạt Lá Chắn Bảo Vệ tại ô (${targetRow + 1}, ${targetCol + 1})!`, "SHIELD");
+        }
+        return;
+      }
+      if (connectionRef.current && connectionRef.current.state === signalR.HubConnectionState.Connected) {
+        await connectionRef.current.invoke("UseSkill", pin, skillType, targetRow, targetCol);
+      }
+    },
+    [radarRemaining, shieldRemaining, energyPoints, addCombatLog]
+  );
 
   const endMatchEarly = useCallback(async (pin: string) => {
+    if (pin === "SOLO") {
+      setMatchResult({
+        isGameOver: true,
+        isEarlyTermination: true,
+        winningTeam: "TEAM_A",
+        winReason: "Kết thúc sớm trận đấu luyện tập 1 người.",
+        priorityCriterion: "EARLY_END",
+      });
+      return;
+    }
     if (connectionRef.current && connectionRef.current.state === signalR.HubConnectionState.Connected) {
       await connectionRef.current.invoke("EndMatchEarly", pin);
     }

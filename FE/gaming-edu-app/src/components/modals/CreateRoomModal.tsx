@@ -27,6 +27,8 @@ import {
   Calendar,
   Globe,
   User as UserIcon,
+  Crosshair,
+  Bomb,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { Quiz } from "@/types/database";
@@ -107,6 +109,81 @@ function ModeOptionCard({
   );
 }
 
+
+export interface GameTypeOption {
+  id: string;
+  name: string;
+  desc: string;
+  badge: string;
+  icon: string;
+}
+
+export const GAME_TYPE_OPTIONS: GameTypeOption[] = [
+  {
+    id: "CLASSIC",
+    name: "Cơ Bản (Trắc Nghiệm)",
+    desc: "Thi đấu trắc nghiệm thuần túy không kèm bản đồ trò chơi.",
+    badge: "Tiêu chuẩn",
+    icon: "🎮",
+  },
+  {
+    id: "NAVAL_WAR",
+    name: "Hải Chiến Tri Thức",
+    desc: "Bắn Tàu 2 phe Đội Đỏ vs Đội Xanh (50 người). Nạp đạn pháo, Radar & Khiên.",
+    badge: "Hải Quân",
+    icon: "⚓",
+  },
+  {
+    id: "HEX_CONQUEST",
+    name: "Đế Chế Lục Giác",
+    desc: "Thuật toán BFS vây đất 8x8, vây kín đối phương để đồng hóa ô đất.",
+    badge: "Chiến Thuật",
+    icon: "👑",
+  },
+  {
+    id: "TOWER_DEFENSE",
+    name: "Thủ Thành Tri Thức",
+    desc: "Bảo vệ Căn cứ 100 HP, xây tháp pháo bắn quái và gọi Bão Băng.",
+    badge: "Thủ Thành",
+    icon: "🛡️",
+  },
+  {
+    id: "DRAGON_BOAT",
+    name: "Đua Thuyền Rồng",
+    desc: "Đua 1000m trên 3 làn nước, né chướng ngại vật & bật Nitro.",
+    badge: "Tốc Độ",
+    icon: "🐉",
+  },
+  {
+    id: "RUNAWAY_TRAIN",
+    name: "Chuyến Tàu Sinh Tử",
+    desc: "Ghép các mảnh ray tàu trước khi tàu mất phanh trật bánh.",
+    badge: "Sinh Tồn",
+    icon: "🚂",
+  },
+  {
+    id: "ARTILLERY_DUEL",
+    name: "Pháo Đài Đại Bác",
+    desc: "Bắn pháo Parabol tính toán góc bắn, lực và sức cản của gió.",
+    badge: "Vật Lý",
+    icon: "🎯",
+  },
+  {
+    id: "EDU_AMONG_US",
+    name: "Truy Tìm Nội Gián",
+    desc: "Ẩn vai trò 20% Impostor phá hoại trạm, họp khẩn bỏ phiếu cách ly.",
+    badge: "Ẩn Danh",
+    icon: "🚀",
+  },
+  {
+    id: "QUIZ_BOMBERMAN",
+    name: "Đặt Bom Chữ Thập",
+    desc: "Sàn đấu 11x11, đặt bom nổ chữ thập phá tường gạch tìm lối đi.",
+    badge: "Hành Động",
+    icon: "💣",
+  },
+];
+
 // ─── MAIN MODAL: TẠO PHÒNG THI ĐẤU (CHỌN ĐỀ & CHẾ ĐỘ CHƠI) ───────────────────
 export default function CreateRoomModal({
   isOpen,
@@ -130,6 +207,9 @@ export default function CreateRoomModal({
     "HOST_PACED" | "ASYNC_TOURNAMENT"
   >(initialMode === "ASYNC_TOURNAMENT" ? "ASYNC_TOURNAMENT" : "HOST_PACED");
   const [selectedTheme, setSelectedTheme] = useState<string>(initialTheme || "CLASSIC");
+  const [selectedGameType, setSelectedGameType] = useState<string>(
+    initialTheme && initialTheme !== "CLASSIC" ? initialTheme : "CLASSIC"
+  );
 
   // Tournament settings
   const [tournamentDurationHours, setTournamentDurationHours] = useState<number>(24);
@@ -169,7 +249,7 @@ export default function CreateRoomModal({
 
   useEffect(() => {
     if (initialTheme) {
-      setSelectedTheme(initialTheme);
+    if (initialTheme) { setSelectedTheme(initialTheme); setSelectedGameType(initialTheme); }
     }
   }, [initialTheme]);
 
@@ -330,7 +410,8 @@ export default function CreateRoomModal({
       const res = await api.post("/rooms", {
         quizId: selectedQuizId,
         mode: selectedMode,
-        gameModeTheme: selectedTheme,
+        gameModeTheme: selectedGameType === "NAVAL_WAR" ? "NAVAL_WAR" : (selectedGameType !== "CLASSIC" ? selectedGameType : selectedTheme),
+        gameType: selectedGameType !== "CLASSIC" ? selectedGameType : (selectedTheme === "NAVAL_WAR" ? "NAVAL_WAR" : null),
         endTime: selectedMode === "ASYNC_TOURNAMENT" ? computedEndTime : null,
         questionTimeLimit:
           selectedMode === "ASYNC_TOURNAMENT" && tournamentQuestionTimeLimit > 0
@@ -342,8 +423,10 @@ export default function CreateRoomModal({
         const room = res.data.data;
         const pin = room.pinCode || room.pin;
         onClose();
-        if (selectedTheme === "NAVAL_WAR") {
+        if (selectedGameType === "NAVAL_WAR") {
           router.push(`/rooms/${pin}/naval`);
+        } else if (selectedGameType && selectedGameType !== "CLASSIC") {
+          router.push(`/rooms/${pin}/multi-game`);
         } else {
           router.push(`/host/${room.id}?pin=${pin}`);
         }
@@ -696,23 +779,25 @@ export default function CreateRoomModal({
             )}
           </div>
 
+
           {/* ═══════════════════════════════════════════════════════════════════
-              BƯỚC 2: CHẾ ĐỘ VẬN HÀNH PHÒNG (ROOM MODE)
+              BƯỚC 2: CHỌN KIỂU CHƠI & CHẾ ĐỘ PHÒNG
           ═══════════════════════════════════════════════════════════════════ */}
+
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <label className="text-xs sm:text-sm font-black font-heading text-slate-800 flex items-center gap-2 uppercase tracking-wider">
                 <span className="w-6 h-6 rounded-lg bg-purple-50 border border-purple-200 text-purple-600 flex items-center justify-center text-xs font-black">
                   2
                 </span>
-                Chế Độ Vận Hành Phòng
+                Chọn Kiểu Chơi & Chế Độ Phòng
               </label>
               <span className="text-[11px] text-slate-500">
-                Chọn cách thức dẫn dắt tiến độ thi đấu
+                Chọn kiểu trò chơi hoặc thể thức vận hành phòng thi đấu
               </span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[340px] overflow-y-auto pr-1">
               <ModeOptionCard
                 mode="NAVAL_WAR"
                 label="Hải Tặc Tri Thức"
@@ -720,9 +805,10 @@ export default function CreateRoomModal({
                 iconBg="bg-cyan-50 border-cyan-200 text-cyan-600"
                 desc="Đấu trường chiến thuật Bắn Tàu 2 phe Đội Đỏ vs Đội Xanh (50 người). Trả lời câu hỏi nạp đạn pháo, bật Radar & Khiên."
                 badge="HOT • MỚI"
-                selected={selectedTheme === "NAVAL_WAR"}
+                selected={selectedGameType === "NAVAL_WAR"}
                 onClick={() => {
                   setSelectedTheme("NAVAL_WAR");
+                  setSelectedGameType("NAVAL_WAR");
                   setSelectedMode("HOST_PACED");
                 }}
               />
@@ -732,9 +818,11 @@ export default function CreateRoomModal({
                 icon={<Gamepad2 size={24} className="text-violet-600" />}
                 iconBg="bg-violet-50 border-violet-200 text-violet-600"
                 desc="Cả lớp thi đấu trực tiếp cùng lúc. Hệ thống tự động đếm ngược và chuyển câu hỏi khi hoàn thành."
-                selected={selectedTheme !== "NAVAL_WAR" && selectedMode === "HOST_PACED"}
+                badge="KINH ĐIỂN"
+                selected={selectedGameType === "CLASSIC" && selectedMode === "HOST_PACED"}
                 onClick={() => {
                   setSelectedTheme("CLASSIC");
+                  setSelectedGameType("CLASSIC");
                   setSelectedMode("HOST_PACED");
                 }}
               />
@@ -744,16 +832,116 @@ export default function CreateRoomModal({
                 icon={<Trophy size={24} className="text-amber-600" />}
                 iconBg="bg-amber-50 border-amber-200 text-amber-600"
                 desc="Mở giải đấu bảng xếp hạng 24/7, thí sinh tự do vào thi bất đồng bộ với timer cá nhân, tự lưu nháp 30s."
-                selected={selectedTheme !== "NAVAL_WAR" && selectedMode === "ASYNC_TOURNAMENT"}
+                badge="24/7"
+                selected={selectedGameType === "CLASSIC" && selectedMode === "ASYNC_TOURNAMENT"}
                 onClick={() => {
                   setSelectedTheme("CLASSIC");
+                  setSelectedGameType("CLASSIC");
                   setSelectedMode("ASYNC_TOURNAMENT");
+                }}
+              />
+              <ModeOptionCard
+                mode="HEX_CONQUEST"
+                label="Đế Chế Lục Giác"
+                icon={<Crown size={24} className="text-amber-600" />}
+                iconBg="bg-amber-50 border-amber-200 text-amber-600"
+                desc="Vây đất trên lưới lục giác 8×8 bằng thuật toán BFS. Bao vây lãnh thổ đối phương để đồng hóa hàng loạt ô đất."
+                badge="CHIẾN THUẬT"
+                selected={selectedGameType === "HEX_CONQUEST"}
+                onClick={() => {
+                  setSelectedTheme("HEX_CONQUEST");
+                  setSelectedGameType("HEX_CONQUEST");
+                  setSelectedMode("HOST_PACED");
+                }}
+              />
+              <ModeOptionCard
+                mode="TOWER_DEFENSE"
+                label="Thủ Thành Tri Thức"
+                icon={<Shield size={24} className="text-emerald-600" />}
+                iconBg="bg-emerald-50 border-emerald-200 text-emerald-600"
+                desc="Bảo vệ Căn cứ 100 HP, xây và nâng cấp tháp pháo Laser, gọi Bão Tuyết Thiên Thạch đóng băng quái vật."
+                badge="PHÒNG THỦ"
+                selected={selectedGameType === "TOWER_DEFENSE"}
+                onClick={() => {
+                  setSelectedTheme("TOWER_DEFENSE");
+                  setSelectedGameType("TOWER_DEFENSE");
+                  setSelectedMode("HOST_PACED");
+                }}
+              />
+              <ModeOptionCard
+                mode="DRAGON_BOAT"
+                label="Đua Thuyền Rồng"
+                icon={<Flame size={24} className="text-orange-600" />}
+                iconBg="bg-orange-50 border-orange-200 text-orange-600"
+                desc="Đua thuyền 1000m trên 3 làn nước, chuyển làn né đá ngầm, bật Tăng Tốc Nitro và phun Mực Đen."
+                badge="TỐC ĐỘ"
+                selected={selectedGameType === "DRAGON_BOAT"}
+                onClick={() => {
+                  setSelectedTheme("DRAGON_BOAT");
+                  setSelectedGameType("DRAGON_BOAT");
+                  setSelectedMode("HOST_PACED");
+                }}
+              />
+              <ModeOptionCard
+                mode="RUNAWAY_TRAIN"
+                label="Chuyến Tàu Sinh Tử"
+                icon={<Zap size={24} className="text-rose-600" />}
+                iconBg="bg-rose-50 border-rose-200 text-rose-600"
+                desc="Ghép các đoạn ray thẳng & cua trên lưới 10×10 trước khi tàu trật bánh, kéo Phanh Khẩn Cấp và nổ đá."
+                badge="SINH TỒN"
+                selected={selectedGameType === "RUNAWAY_TRAIN"}
+                onClick={() => {
+                  setSelectedTheme("RUNAWAY_TRAIN");
+                  setSelectedGameType("RUNAWAY_TRAIN");
+                  setSelectedMode("HOST_PACED");
+                }}
+              />
+              <ModeOptionCard
+                mode="ARTILLERY_DUEL"
+                label="Pháo Đài Đại Bác"
+                icon={<Crosshair size={24} className="text-indigo-600" />}
+                iconBg="bg-indigo-50 border-indigo-200 text-indigo-600"
+                desc="Căn chỉnh góc bắn, lực bắn và sức cản gió để nã pháo sập thành đối phương, bật Khiên Vòm phòng thủ."
+                badge="TỌA ĐỘ"
+                selected={selectedGameType === "ARTILLERY_DUEL"}
+                onClick={() => {
+                  setSelectedTheme("ARTILLERY_DUEL");
+                  setSelectedGameType("ARTILLERY_DUEL");
+                  setSelectedMode("HOST_PACED");
+                }}
+              />
+              <ModeOptionCard
+                mode="EDU_AMONG_US"
+                label="Truy Tìm Nội Gián"
+                icon={<Rocket size={24} className="text-sky-600" />}
+                iconBg="bg-sky-50 border-sky-200 text-sky-600"
+                desc="Nhà khoa học sửa trạm đạt 100%, Nội gián (20%) phá hoại lõi phản ứng, Quét sinh trắc & Bỏ phiếu cách ly."
+                badge="SUY LUẬN"
+                selected={selectedGameType === "EDU_AMONG_US"}
+                onClick={() => {
+                  setSelectedTheme("EDU_AMONG_US");
+                  setSelectedGameType("EDU_AMONG_US");
+                  setSelectedMode("HOST_PACED");
+                }}
+              />
+              <ModeOptionCard
+                mode="QUIZ_BOMBERMAN"
+                label="Đặt Bom Chữ Thập"
+                icon={<Bomb size={24} className="text-purple-600" />}
+                iconBg="bg-purple-50 border-purple-200 text-purple-600"
+                desc="Di chuyển bằng phím WASD/D-Pad trên sàn đấu 11×11, đặt bom nổ chữ thập phá tường gạch, bật Khiên & Sút bom."
+                badge="ĐỐI KHÁNG"
+                selected={selectedGameType === "QUIZ_BOMBERMAN"}
+                onClick={() => {
+                  setSelectedTheme("QUIZ_BOMBERMAN");
+                  setSelectedGameType("QUIZ_BOMBERMAN");
+                  setSelectedMode("HOST_PACED");
                 }}
               />
             </div>
 
             {/* ── TOURNAMENT SPECIFIC SETTINGS ── */}
-            {selectedTheme !== "NAVAL_WAR" && selectedMode === "ASYNC_TOURNAMENT" && (
+            {selectedGameType === "CLASSIC" && selectedMode === "ASYNC_TOURNAMENT" && (
               <div className="mt-4 p-4 rounded-2xl bg-gradient-to-r from-amber-500/10 via-amber-400/5 to-yellow-500/10 border-2 border-amber-300/80 space-y-4 animate-in fade-in duration-200">
                 <div className="flex items-center gap-2">
                   <Trophy className="w-5 h-5 text-amber-600 shrink-0" />
@@ -856,9 +1044,15 @@ export default function CreateRoomModal({
             </span>
             <span className="text-slate-300 shrink-0">•</span>
             <span className="text-indigo-600 font-bold truncate shrink-0">
-              {selectedTheme === "NAVAL_WAR" && "⚓ Hải Tặc Tri Thức"}
-              {selectedTheme !== "NAVAL_WAR" && selectedMode === "HOST_PACED" && "🎮 Phòng Thường"}
-              {selectedTheme !== "NAVAL_WAR" && selectedMode === "ASYNC_TOURNAMENT" && "🏆 Phòng Giải Đấu"}
+              {selectedGameType === "CLASSIC" && (selectedMode === "HOST_PACED" ? "🎮 Phòng Thường" : "🏆 Phòng Giải Đấu")}
+              {selectedGameType === "NAVAL_WAR" && "⚓ Hải Chiến Tri Thức"}
+              {selectedGameType === "HEX_CONQUEST" && "👑 Đế Chế Lục Giác"}
+              {selectedGameType === "TOWER_DEFENSE" && "🛡️ Thủ Thành Tri Thức"}
+              {selectedGameType === "DRAGON_BOAT" && "🐉 Đua Thuyền Rồng"}
+              {selectedGameType === "RUNAWAY_TRAIN" && "🚂 Chuyến Tàu Sinh Tử"}
+              {selectedGameType === "ARTILLERY_DUEL" && "🎯 Pháo Đài Đại Bác"}
+              {selectedGameType === "EDU_AMONG_US" && "🚀 Truy Tìm Nội Gián"}
+              {selectedGameType === "QUIZ_BOMBERMAN" && "💣 Đặt Bom Chữ Thập"}
             </span>
           </div>
 

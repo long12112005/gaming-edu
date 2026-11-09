@@ -1,3 +1,4 @@
+﻿using GamingEdu.API.Services.GameEngines;
 using System.Text;
 using System.Threading.RateLimiting;
 using System.Security.Claims;
@@ -264,6 +265,15 @@ builder.Services.AddScoped<IGroupService,       GroupService>();
 builder.Services.AddScoped<IQAService,          QAService>();
 builder.Services.AddScoped<INavalMapService,    NavalMapService>();
 builder.Services.AddScoped<INavalCombatService, NavalCombatService>();
+// ─── 7 CHẾ ĐỘ MULTI-GAME ENGINES ───────────────────────────────────────
+builder.Services.AddScoped<IGameModeEngine, HexConquestEngine>();
+builder.Services.AddScoped<IGameModeEngine, TowerDefenseEngine>();
+builder.Services.AddScoped<IGameModeEngine, DragonBoatEngine>();
+builder.Services.AddScoped<IGameModeEngine, RunawayTrainEngine>();
+builder.Services.AddScoped<IGameModeEngine, ArtilleryDuelEngine>();
+builder.Services.AddScoped<IGameModeEngine, EduAmongUsEngine>();
+builder.Services.AddScoped<IGameModeEngine, QuizBombermanEngine>();
+builder.Services.AddScoped<IGameEngineFactory, GameEngineFactory>();
 
 // FuzzyMatchingService: stateless, dùng Singleton để tránh allocation mỗi request
 builder.Services.AddSingleton<FuzzyMatchingService>();
@@ -342,5 +352,6 @@ app.MapHub<NotificationHub>("/hubs/notifications");
 app.MapHub<QAHub>("/hubs/qa");
 app.MapHub<NavalWarHub>("/hubs/naval-war");
 app.MapHub<NavalWarHub>("/hubs/naval");
+app.MapHub<MultiGameHub>("/hubs/multi-game");
 
 app.Run();

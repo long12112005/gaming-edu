@@ -347,7 +347,7 @@ export default function HostLobbyPage() {
       .then((res) => {
         if (res.data?.success && res.data.data) {
           const room = res.data.data;
-          const roomTheme = room.theme || room.gameModeTheme;
+          const roomTheme = room.gameType || room.theme || room.gameModeTheme; if (["HEX_CONQUEST", "TOWER_DEFENSE", "DRAGON_BOAT", "RUNAWAY_TRAIN", "ARTILLERY_DUEL", "EDU_AMONG_US", "QUIZ_BOMBERMAN"].includes(roomTheme) && room.pinCode) { router.replace(`/rooms/${room.pinCode}/multi-game`); return; }
           if (roomTheme === "NAVAL_WAR" && room.pinCode) {
             router.replace(`/rooms/${room.pinCode}/naval`);
             return;

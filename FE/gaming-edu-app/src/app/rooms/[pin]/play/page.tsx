@@ -55,9 +55,12 @@ export default function PlayerGamepadPage({ params }: { params: Promise<{ pin: s
   useEffect(() => {
     if (pin) {
       api.get(`/rooms/pin/${pin}`).then((res) => {
-        const theme = res.data?.data?.theme || res.data?.data?.gameModeTheme;
+        const theme = res.data?.data?.gameType || res.data?.data?.theme || res.data?.data?.gameModeTheme;
+        const multiGames = ["HEX_CONQUEST", "TOWER_DEFENSE", "DRAGON_BOAT", "RUNAWAY_TRAIN", "ARTILLERY_DUEL", "EDU_AMONG_US", "QUIZ_BOMBERMAN"];
         if (theme === "NAVAL_WAR") {
           router.replace(`/rooms/${pin}/naval`);
+        } else if (multiGames.includes(theme)) {
+          router.replace(`/rooms/${pin}/multi-game`);
         }
       }).catch(() => {});
     }

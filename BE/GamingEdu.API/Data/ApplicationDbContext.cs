@@ -1,4 +1,4 @@
-
+﻿
 
 using GamingEdu.API.Models;
 using Microsoft.EntityFrameworkCore;
@@ -28,6 +28,8 @@ public class ApplicationDbContext : DbContext
     public DbSet<NavalTeam>      NavalTeams      => Set<NavalTeam>();
     public DbSet<NavalShip>      NavalShips      => Set<NavalShip>();
     public DbSet<NavalAction>    NavalActions    => Set<NavalAction>();
+    public DbSet<RoomGameState>  RoomGameStates  => Set<RoomGameState>();
+    public DbSet<RoomGameAction> RoomGameActions => Set<RoomGameAction>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -196,6 +198,7 @@ public class ApplicationDbContext : DbContext
             e.HasIndex(r => r.PinCode).IsUnique();
             e.Property(r => r.PinCode).HasMaxLength(20).IsRequired();
             e.Property(r => r.Mode).HasMaxLength(50).IsRequired();
+            e.Property(r => r.GameType).HasMaxLength(50).HasDefaultValue("NAVAL_WAR");
             e.Property(r => r.Status).HasMaxLength(50).HasDefaultValue("WAITING");
             e.Property(r => r.MapSize).HasDefaultValue(15);
             e.Property(r => r.GameSettings);
@@ -233,6 +236,9 @@ public class ApplicationDbContext : DbContext
             e.Property(rp => rp.HitsCount).HasDefaultValue(0);
             e.Property(rp => rp.ShipsSunkContribution).HasDefaultValue(0);
             e.Property(rp => rp.SkillsUsedCount).HasDefaultValue(0);
+            e.Property(rp => rp.PlayerRole).HasMaxLength(30).HasDefaultValue("MEMBER");
+            e.Property(rp => rp.ActionPoints).HasDefaultValue(0);
+            e.Property(rp => rp.IsIsolated).HasDefaultValue(false);
             e.Property(rp => rp.JoinedAt).HasColumnType("datetime2").HasDefaultValueSql("GETUTCDATE()");
 
             e.HasOne(rp => rp.Room)
@@ -355,6 +361,56 @@ public class ApplicationDbContext : DbContext
                 .OnDelete(DeleteBehavior.NoAction);
         });
 
+        // ── room_game_states ──────────────────────────────────────────
+        modelBuilder.Entity<RoomGameState>(e =>
+        {
+            e.ToTable("room_game_states");
+            e.HasKey(s => s.Id);
+            e.Property(s => s.Id).ValueGeneratedNever();
+            e.Property(s => s.TeamOrGroup).HasMaxLength(30).IsRequired();
+            e.Property(s => s.HpOrProgress).HasDefaultValue(100);
+            e.Property(s => s.BoardStateJson).IsRequired();
+            e.Property(s => s.UpdatedAt).HasColumnType("datetime2").HasDefaultValueSql("GETUTCDATE()");
+
+            e.HasIndex(s => new { s.RoomId, s.TeamOrGroup }).IsUnique();
+
+            e.HasOne(s => s.Room)
+                .WithMany(r => r.GameStates)
+                .HasForeignKey(s => s.RoomId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ── room_game_actions ─────────────────────────────────────────
+        modelBuilder.Entity<RoomGameAction>(e =>
+        {
+            e.ToTable("room_game_actions");
+            e.HasKey(a => a.Id);
+            e.Property(a => a.Id).ValueGeneratedNever();
+            e.Property(a => a.ActionType).HasMaxLength(50).IsRequired();
+            e.Property(a => a.ActionPayloadJson).IsRequired();
+            e.Property(a => a.ActionResult).HasMaxLength(50).IsRequired();
+            e.Property(a => a.CreatedAt).HasColumnType("datetime2").HasDefaultValueSql("GETUTCDATE()");
+
+            e.HasIndex(a => a.RoomId).HasDatabaseName("idx_game_actions_room");
+            e.HasIndex(a => new { a.RoomId, a.CreatedAt }).HasDatabaseName("idx_game_actions_room_created");
+
+            e.HasOne(a => a.Room)
+                .WithMany(r => r.GameActions)
+                .HasForeignKey(a => a.RoomId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(a => a.Player)
+                .WithMany(rp => rp.GameActions)
+                .HasForeignKey(a => a.PlayerId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            e.HasOne(a => a.Slide)
+                .WithMany(s => s.GameActions)
+                .HasForeignKey(a => a.SlideId)
+                .OnDelete(DeleteBehavior.NoAction)
+                .IsRequired(false);
+        });
+
         // ── Indexes from SQL schema ────────────────────────────────────
         // idx_users_email — covered by HasIndex above
         // idx_groups_code — covered by HasIndex above
@@ -385,4 +441,5 @@ public class ApplicationDbContext : DbContext
             .HasDatabaseName("idx_player_responses_slide");
     }
 }
+
 

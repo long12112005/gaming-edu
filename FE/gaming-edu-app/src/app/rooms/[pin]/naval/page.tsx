@@ -135,6 +135,98 @@ export default function NavalWarGamePage({ params }: { params: Promise<{ pin: st
     setPlayerId(storedPlayerId);
     setNickname(effectiveNickname);
 
+    // Nếu là chế độ Chơi Thử 1 Người (SOLO) thì nạp bộ câu hỏi mẫu trực tiếp
+    if (pin === "SOLO") {
+      setHasJoinedTeam(true);
+      setSlides([
+        {
+          id: "naval-solo-1",
+          type: "QUIZ",
+          questionText: "Chiến thắng Bạch Đằng năm 938 do vị danh tướng nào lãnh đạo đánh tan quân Nam Hán?",
+          timeLimit: 30,
+          points: 1000,
+          orderIndex: 0,
+          options: [
+            { id: "ns1-a-correct", content: "Ngô Quyền", orderIndex: 0 },
+            { id: "ns1-b", content: "Lý Thường Kiệt", orderIndex: 1 },
+            { id: "ns1-c", content: "Trần Hưng Đạo", orderIndex: 2 },
+            { id: "ns1-d", content: "Lê Hoàn", orderIndex: 3 },
+          ],
+        },
+        {
+          id: "naval-solo-2",
+          type: "QUIZ",
+          questionText: "Đại dương nào có diện tích lớn nhất trên Trái Đất?",
+          timeLimit: 30,
+          points: 1000,
+          orderIndex: 1,
+          options: [
+            { id: "ns2-a", content: "Đại Tây Dương", orderIndex: 0 },
+            { id: "ns2-b-correct", content: "Thái Bình Dương", orderIndex: 1 },
+            { id: "ns2-c", content: "Ấn Độ Dương", orderIndex: 2 },
+            { id: "ns2-d", content: "Bắc Băng Dương", orderIndex: 3 },
+          ],
+        },
+        {
+          id: "naval-solo-3",
+          type: "QUIZ",
+          questionText: "Lực đẩy Ác-si-mét tác dụng lên vật nhúng trong chất lỏng có chiều như thế nào?",
+          timeLimit: 30,
+          points: 1000,
+          orderIndex: 2,
+          options: [
+            { id: "ns3-a", content: "Hướng thẳng đứng từ trên xuống dưới", orderIndex: 0 },
+            { id: "ns3-b-correct", content: "Hướng thẳng đứng từ dưới lên trên", orderIndex: 1 },
+            { id: "ns3-c", content: "Hướng theo phương ngang", orderIndex: 2 },
+            { id: "ns3-d", content: "Mọi hướng như nhau", orderIndex: 3 },
+          ],
+        },
+        {
+          id: "naval-solo-4",
+          type: "QUIZ",
+          questionText: "Sóng siêu âm trong hệ thống Sonar của tàu ngầm hoạt động dựa trên hiện tượng vật lý nào?",
+          timeLimit: 30,
+          points: 1000,
+          orderIndex: 3,
+          options: [
+            { id: "ns4-a-correct", content: "Phản xạ sóng âm", orderIndex: 0 },
+            { id: "ns4-b", content: "Khúc xạ ánh sáng", orderIndex: 1 },
+            { id: "ns4-c", content: "Nhiễu xạ điện từ", orderIndex: 2 },
+            { id: "ns4-d", content: "Phân cực ánh sáng", orderIndex: 3 },
+          ],
+        },
+        {
+          id: "naval-solo-5",
+          type: "QUIZ",
+          questionText: "Quần đảo Hoàng Sa và Trường Sa thuộc chủ quyền của quốc gia nào?",
+          timeLimit: 30,
+          points: 1000,
+          orderIndex: 4,
+          options: [
+            { id: "ns5-a-correct", content: "Việt Nam", orderIndex: 0 },
+            { id: "ns5-b", content: "Philippines", orderIndex: 1 },
+            { id: "ns5-c", content: "Malaysia", orderIndex: 2 },
+            { id: "ns5-d", content: "Indonesia", orderIndex: 3 },
+          ],
+        },
+        {
+          id: "naval-solo-6",
+          type: "QUIZ",
+          questionText: "Đơn vị 'Hải lý' (Nautical mile) trong hàng hải xấp xỉ bằng bao nhiêu kilômét?",
+          timeLimit: 30,
+          points: 1000,
+          orderIndex: 5,
+          options: [
+            { id: "ns6-a", content: "1,000 km", orderIndex: 0 },
+            { id: "ns6-b-correct", content: "1,852 km", orderIndex: 1 },
+            { id: "ns6-c", content: "2,540 km", orderIndex: 2 },
+            { id: "ns6-d", content: "3,140 km", orderIndex: 3 },
+          ],
+        },
+      ]);
+      return;
+    }
+
     // Fetch room details to check slides, QR code, and host status
     api
       .get(`/rooms/pin/${pin}`)
