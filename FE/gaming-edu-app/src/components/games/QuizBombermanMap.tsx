@@ -93,7 +93,7 @@ export default function QuizBombermanMap({
       const pc = myPlayer?.c ?? 1;
       const range = myPlayer?.bombRange ?? 2;
       await onPerformAction("PLANT_BOMB", {});
-      // Bom hẹn giờ phát nổ sau 3.5 giây theo hình chữ thập (+) bán kính 2-4 ô
+      // Bom hẹn giờ phát nổ sau 3.2 giây theo hình chữ thập (+) bán kính 2-4 ô
       setTimeout(async () => {
         soundFX.playBigExplosion();
         const flames: { r: number; c: number }[] = [{ r: pr, c: pc }];
@@ -164,10 +164,10 @@ export default function QuizBombermanMap({
   return (
     <div className="flex flex-col items-center gap-4 w-full max-w-5xl mx-auto p-4 bg-slate-900/95 rounded-3xl border border-amber-500/30 backdrop-blur-md shadow-2xl text-white">
       {/* Header trạng thái Bomber & 5 Tim (HP) */}
-      <div className="flex items-center justify-between w-full px-4 py-3 bg-slate-800/80 rounded-2xl border border-slate-700">
+      <div className="flex items-center justify-between w-full px-4 py-3 bg-slate-800/85 rounded-2xl border border-slate-700">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-amber-500/20 rounded-2xl border border-amber-400/30">
-            <GameAssets.TickingBomb />
+            <GameAssets.TickingBomb isLongFire={(myPlayer?.bombRange ?? 2) > 2} />
           </div>
           <div>
             <div className="text-xs uppercase tracking-wider text-amber-400 font-bold flex items-center gap-1.5">
@@ -213,13 +213,13 @@ export default function QuizBombermanMap({
         </div>
       </div>
 
-      {/* Sàn đấu Mê Cung 15x15 */}
+      {/* Sàn đấu Mê Cung 15x15 với Tile đồ họa SVG */}
       <div className="relative p-2 sm:p-3 bg-slate-950 rounded-2xl border border-slate-800 shadow-inner overflow-x-auto max-w-full">
         <div
           className="grid gap-0.5"
           style={{
-            gridTemplateColumns: `repeat(${size}, minmax(24px, 32px))`,
-            gridTemplateRows: `repeat(${size}, minmax(24px, 32px))`,
+            gridTemplateColumns: `repeat(${size}, minmax(26px, 34px))`,
+            gridTemplateRows: `repeat(${size}, minmax(26px, 34px))`,
           }}
         >
           {Array.from({ length: size }).map((_, r) =>
@@ -232,55 +232,42 @@ export default function QuizBombermanMap({
               return (
                 <div
                   key={`${r}-${c}`}
-                  className={`relative flex items-center justify-center rounded text-[10px] font-bold transition-all select-none border ${
+                  className={`relative flex items-center justify-center rounded text-[10px] font-bold transition-all select-none overflow-hidden ${
                     isFlame
-                      ? "bomb-cross-flame border-orange-400 z-30"
+                      ? "bomb-cross-flame border border-orange-300 z-30"
                       : cellType === "W"
-                      ? "bg-slate-800 border-slate-700 text-slate-500 shadow-inner"
+                      ? "bg-slate-800"
                       : cellType === "B"
-                      ? "bg-amber-900/50 border-amber-700/60 text-amber-300"
-                      : "bg-slate-900/40 border-slate-800/80"
+                      ? "bg-amber-950/60"
+                      : "bg-slate-900/50 border border-slate-800/70"
                   }`}
                   style={{ width: "100%", aspectRatio: "1/1" }}
                 >
-                  {/* Tường Sắt cố định */}
-                  {cellType === "W" && (
-                    <div className="w-full h-full bg-slate-800 rounded flex items-center justify-center opacity-70">
-                      🧱
-                    </div>
-                  )}
+                  {/* Tường Sắt cố định (SVG) */}
+                  {cellType === "W" && <GameAssets.MazeWallTile type="W" />}
 
-                  {/* Tường Gạch (40% bản đồ - Phá được +50đ) */}
-                  {cellType === "B" && (
-                    <div className="w-full h-full bg-amber-900/60 rounded flex items-center justify-center text-[9px]">
-                      📦
-                    </div>
-                  )}
+                  {/* Tường Gạch Nung phá được +50đ (SVG) */}
+                  {cellType === "B" && <GameAssets.MazeWallTile type="B" />}
 
                   {/* Quả bom hẹn giờ */}
                   {bomb && (
                     <div className="absolute inset-0 flex items-center justify-center z-10 scale-75">
-                      <GameAssets.TickingBomb />
+                      <GameAssets.TickingBomb isLongFire={(bomb.range ?? 2) > 2} />
                     </div>
                   )}
 
-                  {/* Người chơi */}
+                  {/* Nhân vật Bomberman bằng Sprite SVG */}
                   {playersHere.length > 0 && (
                     <div className="absolute inset-0 flex items-center justify-center z-20">
-                      <div className="relative">
-                        <div
-                          className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black border shadow-md ${
-                            playersHere[0].playerId === myPlayer?.playerId
-                              ? "bg-emerald-500 border-white text-slate-950 scale-110 ring-2 ring-emerald-400/60"
-                              : "bg-rose-600 border-rose-300 text-white"
-                          }`}
-                        >
-                          {playersHere[0].nickname.substring(0, 1).toUpperCase()}
-                        </div>
-                        {playersHere[0].shieldActive && (
-                          <div className="absolute -inset-1 rounded-full border-2 border-cyan-400 animate-spin" />
-                        )}
-                      </div>
+                      <GameAssets.BomberCharacter
+                        color={
+                          playersHere[0].playerId === myPlayer?.playerId
+                            ? "#10b981"
+                            : "#e11d48"
+                        }
+                        label={playersHere[0].nickname.substring(0, 1).toUpperCase()}
+                        hasShield={playersHere[0].shieldActive}
+                      />
                     </div>
                   )}
                 </div>
@@ -291,7 +278,7 @@ export default function QuizBombermanMap({
       </div>
 
       {/* Bộ điều khiển di chuyển D-Pad, Đặt Bom & 3 Kỹ năng Chiến thuật */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full p-4 bg-slate-800/70 rounded-2xl border border-slate-700">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full p-4 bg-slate-800/75 rounded-2xl border border-slate-700">
         {/* D-Pad di chuyển */}
         <div className="flex flex-col items-center justify-center gap-1">
           <button
@@ -328,9 +315,9 @@ export default function QuizBombermanMap({
               <ArrowRight size={18} />
             </button>
           </div>
-          <span className="text-[10px] text-slate-400 mt-1">
+          <span className="text-[10px] text-slate-400 mt-1 text-center">
             {availableSteps < 1
-              ? "⚠️ Hết bước di chuyển! Trả lời đúng câu hỏi để nhận +3 Bước & +1 Bom"
+              ? "Hết bước di chuyển! Trả lời đúng câu hỏi để nhận +3 Bước & +1 Bom"
               : "Đúng 1 câu = +3 Bước Di Chuyển + 1 Quả Bom • Phá gạch +50đ • Trúng địch -1 Tim & cướp 200đ"}
           </span>
         </div>

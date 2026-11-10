@@ -1,166 +1,205 @@
+/* ============================================================================
+   HỆ THỐNG HIỆU ỨNG ĐỒ HỌA & HOẠT ẢNH 60 FPS CHO 7 GAME TƯƠNG TÁC MỚI
+   ============================================================================ */
+
 /* GAME 1: Hiệu ứng Chiếm Ô Lục Giác & Nổ Đổi Màu (Hex Conquest) */
 .hex-cell-claimed {
-    clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%);
-    animation: hexPulse 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+  animation: hexPulse 0.55s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
 }
 
 @keyframes hexPulse {
-    0% {
-        transform: scale(0.3) rotate(-30deg);
-        filter: brightness(2);
-    }
-
-    70% {
-        transform: scale(1.15) rotate(5deg);
-    }
-
-    100% {
-        transform: scale(1) rotate(0deg);
-        filter: brightness(1);
-    }
+  0% {
+    transform: scale(0.35) rotate(-25deg);
+    filter: brightness(2.2) drop-shadow(0 0 18px #fde047);
+  }
+  70% {
+    transform: scale(1.18) rotate(4deg);
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+    filter: brightness(1);
+  }
 }
 
 /* GAME 2: Hiệu ứng Đóng Băng Toàn Bản Đồ & Cường Hóa Tháp (Tower Defense) */
 .td-freeze-overlay {
-    background: radial-gradient(circle, rgba(165, 243, 252, 0.4) 0%, rgba(14, 165, 233, 0.7) 100%);
-    backdrop-filter: blur(2px);
-    animation: frostPulse 1.5s infinite alternate;
+  background: radial-gradient(
+    circle,
+    rgba(165, 243, 252, 0.25) 0%,
+    rgba(14, 165, 233, 0.55) 100%
+  );
+  backdrop-filter: blur(1.5px);
+  animation: frostPulse 1.2s infinite alternate;
 }
 
 @keyframes frostPulse {
-    from {
-        box-shadow: inset 0 0 20px #38bdf8;
-    }
-
-    to {
-        box-shadow: inset 0 0 60px #0284c7;
-    }
+  from {
+    box-shadow: inset 0 0 25px #38bdf8;
+  }
+  to {
+    box-shadow: inset 0 0 65px #0284c7;
+  }
 }
 
-/* GAME 5: Hiệu ứng Thuyền Lướt Sóng Nitro & Dính Mực Đen (Dragon Boat) */
+/* GAME 3: Hiệu ứng Thuyền Lướt Sóng Nitro, Nước Trôi & Dính Mực Đen (Dragon Boat) */
 .boat-nitro-boost {
-    filter: drop-shadow(-12px 0px 8px #f97316) drop-shadow(-24px 0px 15px #ef4444);
-    animation: boatShake 0.15s infinite;
+  filter: drop-shadow(-10px 0px 8px #f97316) drop-shadow(-22px 0px 14px #ef4444);
+  animation: boatShake 0.16s infinite alternate;
+}
+
+@keyframes boatShake {
+  0% {
+    transform: translateY(-1px) rotate(-1deg);
+  }
+  100% {
+    transform: translateY(1.5px) rotate(1deg);
+  }
+}
+
+.river-water-flow {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    rgba(56, 189, 248, 0.08) 0px,
+    rgba(56, 189, 248, 0.08) 16px,
+    transparent 16px,
+    transparent 32px
+  );
+  background-size: 64px 64px;
+  animation: riverScroll 2.2s linear infinite;
+}
+
+@keyframes riverScroll {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: -64px 0;
+  }
 }
 
 .ink-blind-effect {
-    background: radial-gradient(circle, #090d16 40%, transparent 75%);
-    animation: inkSplat 0.4s ease-out forwards;
+  background: radial-gradient(circle, #090d16 40%, rgba(15, 23, 42, 0.92) 80%);
+  animation: inkSplat 0.4s ease-out forwards;
 }
 
 @keyframes inkSplat {
-    0% {
-        transform: scale(0);
-        opacity: 0;
-    }
-
-    80% {
-        transform: scale(1.1);
-        opacity: 0.95;
-    }
-
-    100% {
-        transform: scale(1);
-        opacity: 0.9;
-    }
+  0% {
+    transform: scale(0.85);
+    opacity: 0;
+  }
+  80% {
+    transform: scale(1.02);
+    opacity: 0.98;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0.95;
+  }
 }
 
-/* GAME 7: Hiệu ứng Tàu Hỏa Chạy & Tia Lửa Phanh Khẩn Cấp (Runaway Train) */
+/* GAME 4: Hiệu ứng Tàu Hỏa Chạy & Tia Lửa Phanh Khẩn Cấp (Runaway Train) */
 .train-emergency-brake {
-    animation: sparkBrake 0.2s infinite;
-    box-shadow: 0 8px 15px -3px #f59e0b, 0 4px 6px -2px #ef4444;
+  animation: sparkBrake 0.18s infinite;
+  filter: drop-shadow(0 6px 10px #f59e0b) drop-shadow(0 2px 6px #ef4444);
 }
 
 @keyframes sparkBrake {
-
-    0%,
-    100% {
-        transform: translateX(0);
-    }
-
-    50% {
-        transform: translateX(-3px) rotate(-1deg);
-    }
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(-3px) rotate(-1.5deg);
+  }
 }
 
-/* GAME 8: Hiệu ứng Lá Chắn Vòm Pháo Đài & Vệt Đạn Bay (Artillery Duel) */
+/* GAME 5: Hiệu ứng Lá Chắn Vòm Pháo Đài & Vệt Đạn Bay (Artillery Duel) */
 .artillery-dome-shield {
-    border-radius: 50% 50% 0 0;
-    border: 3px solid #38bdf8;
-    background: linear-gradient(180deg, rgba(56, 189, 248, 0.45) 0%, rgba(56, 189, 248, 0.05) 100%);
-    box-shadow: 0 -10px 25px rgba(56, 189, 248, 0.6);
-    animation: shieldFlicker 1.2s infinite;
+  border-radius: 50% 50% 12% 12%;
+  border: 3px solid #38bdf8;
+  background: linear-gradient(
+    180deg,
+    rgba(56, 189, 248, 0.48) 0%,
+    rgba(56, 189, 248, 0.06) 100%
+  );
+  box-shadow: 0 -10px 28px rgba(56, 189, 248, 0.65), inset 0 8px 16px rgba(186, 230, 253, 0.45);
+  animation: shieldFlicker 1.2s infinite alternate;
 }
 
-/* GAME 9: Hiệu ứng Báo Động Đỏ Nội Gián Phá Hoại & Máy Quét (Edu Among Us) */
+@keyframes shieldFlicker {
+  from {
+    opacity: 0.82;
+    transform: scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1.03);
+  }
+}
+
+/* GAME 6: Hiệu ứng Báo Động Đỏ Nội Gián Phá Hoại & Máy Quét (Edu Among Us) */
 .impostor-sabotage-alarm {
-    animation: redAlert 0.8s infinite;
+  animation: redAlert 0.85s infinite;
 }
 
 @keyframes redAlert {
-
-    0%,
-    100% {
-        background-color: rgba(220, 38, 38, 0.05);
-    }
-
-    50% {
-        background-color: rgba(220, 38, 38, 0.45);
-        box-shadow: inset 0 0 80px #dc2626;
-    }
+  0%,
+  100% {
+    background-color: rgba(127, 29, 29, 0.35);
+  }
+  50% {
+    background-color: rgba(220, 38, 38, 0.55);
+    box-shadow: inset 0 0 80px #dc2626;
+  }
 }
 
 .biometric-scanner-beam {
-    background: linear-gradient(180deg, transparent, rgba(34, 197, 94, 0.8), transparent);
-    animation: scanUpDown 1.2s infinite ease-in-out;
+  background: linear-gradient(180deg, transparent, rgba(34, 197, 94, 0.85), transparent);
+  animation: scanUpDown 1.2s infinite ease-in-out;
 }
 
 @keyframes scanUpDown {
-    0% {
-        transform: translateY(-100%);
-    }
-
-    100% {
-        transform: translateY(100%);
-    }
+  0% {
+    transform: translateY(-100%);
+  }
+  100% {
+    transform: translateY(320%);
+  }
 }
 
-/* GAME 10: Hiệu ứng Quả Bom Nhấp Nháy & Tia Lửa Nổ Chữ Thập (Quiz Bomberman) */
+/* GAME 7: Hiệu ứng Quả Bom Nhấp Nháy & Tia Lửa Nổ Chữ Thập (Quiz Bomberman) */
 .bomb-ticking {
-    animation: bombPulse 0.4s infinite alternate ease-in-out;
+  animation: bombPulse 0.38s infinite alternate ease-in-out;
 }
 
 @keyframes bombPulse {
-    from {
-        transform: scale(0.9);
-        filter: drop-shadow(0 0 4px #ef4444);
-    }
-
-    to {
-        transform: scale(1.15);
-        filter: drop-shadow(0 0 15px #f97316);
-    }
+  from {
+    transform: scale(0.9);
+    filter: drop-shadow(0 0 4px #ef4444);
+  }
+  to {
+    transform: scale(1.16);
+    filter: drop-shadow(0 0 16px #f97316);
+  }
 }
 
 .bomb-cross-flame {
-    background: linear-gradient(90deg, #fde047, #f97316, #dc2626);
-    box-shadow: 0 0 20px #f97316;
-    animation: flameExpand 0.45s ease-out forwards;
+  background: radial-gradient(circle, #fef08a 15%, #f97316 55%, #dc2626 95%);
+  box-shadow: 0 0 22px #f97316, inset 0 0 8px #ffffff;
+  animation: flameExpand 0.55s ease-out forwards;
 }
 
 @keyframes flameExpand {
-    0% {
-        transform: scale(0.2);
-        opacity: 1;
-    }
-
-    70% {
-        transform: scale(1.05);
-        opacity: 1;
-    }
-
-    100% {
-        transform: scale(1);
-        opacity: 0;
-    }
+  0% {
+    transform: scale(0.25);
+    opacity: 1;
+  }
+  65% {
+    transform: scale(1.12);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0;
+  }
 }

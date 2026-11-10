@@ -28,6 +28,8 @@ import {
   Swords,
   RefreshCw,
   Users,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
 import { useMultiGameHub } from "@/hooks/useMultiGameHub";
 import { soundFX } from "@/utils/gameSoundEngine";
@@ -293,18 +295,20 @@ function createInitialSoloBoard(mode: string, playerName: string) {
         waveNumber: 1,
         pathTiles,
         towers: [
-          { id: "t1", ownerTeam: "TEAM_A", x: 0, y: 2, lane: 0, type: "ARCHER", level: 1, range: 2, damage: 30 },
+          { id: "t1", ownerTeam: "TEAM_A", x: 0, y: 2, lane: 0, type: "ARCHER", level: 2, range: 3, damage: 45 },
+          { id: "t2", ownerTeam: "TEAM_A", x: 2, y: 3, lane: 0, type: "FREEZE", level: 1, range: 2, damage: 25 },
+          { id: "t3", ownerTeam: "TEAM_A", x: 4, y: 4, lane: 1, type: "LASER", level: 2, range: 3, damage: 60 },
         ],
         creeps: [
-          { id: "c1", ownerTeam: "TEAM_B", type: "SCOUT", lane: 0, hp: 50, maxHp: 50, pathIndex: 6, isFrozen: false },
-          { id: "c2", ownerTeam: "TEAM_B", type: "TANK", lane: 1, hp: 300, maxHp: 300, pathIndex: 5, isFrozen: false },
+          { id: "c1", ownerTeam: "TEAM_B", type: "SCOUT", lane: 0, hp: 50, maxHp: 50, pathIndex: 5, isFrozen: false },
+          { id: "c2", ownerTeam: "TEAM_B", type: "TANK", lane: 1, hp: 300, maxHp: 300, pathIndex: 4, isFrozen: false },
         ],
       };
     }
     case "DRAGON_BOAT": {
       return {
-        boatA: { distance: 0, currentLane: 1, comboRow: 0, nitroStrokesLeft: 0, hasWindShield: false },
-        boatB: { distance: 0, currentLane: 2, comboRow: 0, nitroStrokesLeft: 0, hasWindShield: false },
+        boatA: { distance: 150, currentLane: 1, comboRow: 1, nitroStrokesLeft: 0, hasWindShield: false },
+        boatB: { distance: 105, currentLane: 2, comboRow: 0, nitroStrokesLeft: 0, hasWindShield: false },
         obstacles: [
           { id: "obs-1", distance: 250, lane: 1, type: "WHIRLPOOL" },
           { id: "obs-2", distance: 250, lane: 3, type: "ROCK_REEF" },
@@ -357,14 +361,14 @@ function createInitialSoloBoard(mode: string, playerName: string) {
     }
     case "EDU_AMONG_US": {
       return {
-        stationProgress: 0,
+        stationProgress: 36,
         meetingActive: false,
         meetingCallerNickname: null,
         meltdownActive: false,
         systemShieldActive: false,
         signalJamActive: false,
         activityLog: [
-          "Trạm Không Gian khởi động ở 0% Năng lượng. Nhà Khoa Học trả lời đúng tự động tăng +3% tiến độ!",
+          "Trạm Không Gian Orbital-IX đang ở 36% Năng lượng. Nhà Khoa Học trả lời đúng tự động tăng +3% tiến độ!",
         ],
         players: [
           { id: "solo-p1", nickname: `${playerName} (Bạn)`, role: "SCIENTIST", isIsolated: false, avatarColor: "#38bdf8" },
@@ -444,6 +448,7 @@ export default function MultiGameArenaLayout({
 
   // Mỗi phòng chỉ cố định 1 chế độ trò chơi duy nhất giống Hải Tặc Tri Thức
   const [activeGameType, setActiveGameType] = useState<string>(initialGameType || "HEX_CONQUEST");
+  const [isSoundMuted, setIsSoundMuted] = useState<boolean>(() => soundFX.isMuted());
 
   useEffect(() => {
     if (initialGameType && initialGameType !== activeGameType) {
@@ -1800,6 +1805,18 @@ export default function MultiGameArenaLayout({
               </button>
             </>
           )}
+
+          <button
+            type="button"
+            onClick={() => {
+              const nextMuted = soundFX.toggleMute();
+              setIsSoundMuted(nextMuted);
+            }}
+            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-all cursor-pointer"
+            title={isSoundMuted ? "Bật âm thanh" : "Tắt âm thanh"}
+          >
+            {isSoundMuted ? <VolumeX className="w-4 h-4 text-rose-400" /> : <Volume2 className="w-4 h-4 text-cyan-400" />}
+          </button>
 
           <button
             type="button"

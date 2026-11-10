@@ -15,7 +15,7 @@ function MultiGameContent({ pin }: { pin: string }) {
   const searchParams = useSearchParams();
   const queryGameType = searchParams.get("game");
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(pin.toUpperCase() !== "SOLO");
   const [roomData, setRoomData] = useState<any>(null);
   const [slides, setSlides] = useState<QuestionSlideItem[]>(DEFAULT_SOLO_SLIDES);
   const [playerId, setPlayerId] = useState<string>("solo-player-1");
@@ -27,7 +27,9 @@ function MultiGameContent({ pin }: { pin: string }) {
 
     async function initializeGameRoom() {
       try {
-        setLoading(true);
+        if (pin.toUpperCase() !== "SOLO") {
+          setLoading(true);
+        }
 
         // 1. Lấy thông tin user hiện tại từ Cookie
         const userJson = Cookies.get("user");

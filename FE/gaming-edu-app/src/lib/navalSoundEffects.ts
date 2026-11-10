@@ -1,15 +1,7 @@
 import { NAVAL_ASSETS } from "@/lib/navalAssets";
 
-let HowlClass: any = null;
-let HowlerGlobal: any = null;
-
-if (typeof window !== "undefined") {
-  try {
-    const howler = require("howler");
-    HowlClass = howler.Howl;
-    HowlerGlobal = howler.Howler;
-  } catch {}
-}
+const HowlClass: any = null;
+const HowlerGlobal: any = null;
 
 class NavalSoundSynthesizer {
   private ctx: AudioContext | null = null;

@@ -1,23 +1,15 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import {
   Gamepad2,
   Trophy,
   Anchor,
   Sparkles,
-  Shield,
-  Radio,
-  Crosshair,
-  Users,
-  ArrowRight,
-  Flame,
   Info,
-  CheckCircle2,
   Play,
-  Zap,
 } from "lucide-react";
+import { GameAssets } from "@/components/common/GameSvgAssets";
 
 const NEW_SEVEN_GAMES = [
   {
@@ -25,7 +17,7 @@ const NEW_SEVEN_GAMES = [
     name: "Đế Chế Lãnh Thổ",
     subtitle: "Hex Conquest · Vây Thành Đổi Màu BFS 11×11",
     badge: "CHIẾN THUẬT VÂY ĐẤT",
-    icon: "👑",
+    renderSprite: () => <GameAssets.HexFortress color="#3b82f6" />,
     iconBg: "bg-amber-50 border-amber-200 text-amber-600",
     badgeBg: "bg-amber-50 text-amber-700 border-amber-200",
     desc: "Mở rộng lãnh thổ trên lưới lục giác 11×11 từ góc Tây Bắc & Đông Nam. Bao vây kín cụm ô địch để đồng hóa hàng loạt bằng BFS, bật Tường Thành, Nhảy Dù & Bom Màu.",
@@ -35,7 +27,7 @@ const NEW_SEVEN_GAMES = [
     name: "Thủ Thành Tri Thức",
     subtitle: "Tower Defense · Công Thủ 2 Làn Đường 1000 HP",
     badge: "CÔNG THỦ 1000 HP",
-    icon: "🛡️",
+    renderSprite: () => <GameAssets.DefenseTurret teamColor="#10b981" towerType="ARCHER" level={3} />,
     iconBg: "bg-emerald-50 border-emerald-200 text-emerald-600",
     badgeBg: "bg-emerald-50 text-emerald-700 border-emerald-200",
     desc: "Trả lời đúng nhận 100 Vàng (+50 Vàng thưởng tốc độ). Xây Tháp Cung, Tháp Băng, Tháp Laser phòng thủ hoặc thả Quái Trinh Sát & Chiến Xa Bọc Thép công phá căn cứ địch.",
@@ -45,7 +37,11 @@ const NEW_SEVEN_GAMES = [
     name: "Đua Thuyền Vượt Bão",
     subtitle: "Dragon Boat · Đua Thuyền Rồng 1000m",
     badge: "ĐUA SÔNG 1000M",
-    icon: "🐉",
+    renderSprite: () => (
+      <div className="scale-75">
+        <GameAssets.DragonBoat color="#ef4444" isNitro={true} />
+      </div>
+    ),
     iconBg: "bg-orange-50 border-orange-200 text-orange-600",
     badgeBg: "bg-orange-50 text-orange-700 border-orange-200",
     desc: "Mỗi câu trả lời đúng tạo 1 Nhịp Chèo (+15m) cùng hiệu ứng Đồng Tâm Hiệp Lực (+5m). Né Xoáy Nước & Đá Ngầm ở mốc 250m, 500m, 750m, bật Tăng Tốc Nitro & Phun Mực Đen.",
@@ -55,7 +51,7 @@ const NEW_SEVEN_GAMES = [
     name: "Chuyến Tàu Sinh Tử",
     subtitle: "Runaway Train · Ghép Ray Dẫn Đường 12×8",
     badge: "GHÉP RAY 12×8",
-    icon: "🚂",
+    renderSprite: () => <GameAssets.TrainLocomotive isOverdrive={true} />,
     iconBg: "bg-rose-50 border-rose-200 text-rose-600",
     badgeBg: "bg-rose-50 text-rose-700 border-rose-200",
     desc: "Ghép các mảnh ray thẳng & cua 90° trên bản đồ 12×8 dẫn tàu từ Ga Khởi Hành (Cột 1) đến Ga Đích (Cột 12), dùng Bẻ Ghi Đường Ray, Tăng Áp Lò Hơi & Phanh Khẩn Cấp 12s.",
@@ -65,7 +61,11 @@ const NEW_SEVEN_GAMES = [
     name: "Pháo Đài Tri Thức",
     subtitle: "Artillery Duel · Đấu Pháo Tọa Độ Parabol",
     badge: "VẬT LÝ PARABOL",
-    icon: "🎯",
+    renderSprite: () => (
+      <div className="scale-90">
+        <GameAssets.ArtilleryCannon angle={40} color="#4f46e5" isPiercing={true} />
+      </div>
+    ),
     iconBg: "bg-indigo-50 border-indigo-200 text-indigo-600",
     badgeBg: "bg-indigo-50 text-indigo-700 border-indigo-200",
     desc: "Căn chỉnh Góc bắn (15°–80°), Lực bắn (10–100) và Gió (-10 đến +10) vượt ngọn núi giữa bản đồ để bắn sập Pháo đài đối phương (1000 HP), bắn Đạn Phân Mảnh & Xuyên Núi.",
@@ -75,7 +75,7 @@ const NEW_SEVEN_GAMES = [
     name: "Truy Tìm Nội Gián",
     subtitle: "Edu Among Us · Trạm Không Gian Ẩn Danh 20%",
     badge: "ẨN DANH 20%",
-    icon: "🚀",
+    renderSprite: () => <GameAssets.AstronautCrew color="#0ea5e9" />,
     iconBg: "bg-sky-50 border-sky-200 text-sky-600",
     badgeBg: "bg-sky-50 text-sky-700 border-sky-200",
     desc: "Nhà Khoa Học (80%) trả lời đúng tự động tăng năng lượng trạm lên 100%, dùng Máy Quét Sinh Trắc & Bỏ phiếu cách ly. Nội Gián (20%) ngụy trang 0% và đánh sập lò phản ứng.",
@@ -85,7 +85,7 @@ const NEW_SEVEN_GAMES = [
     name: "Đặt Bom Mê Cung",
     subtitle: "Quiz Bomberman · Mê Cung 15×15 (5 Tim HP)",
     badge: "MÊ CUNG 15×15",
-    icon: "💣",
+    renderSprite: () => <GameAssets.TickingBomb isLongFire={true} />,
     iconBg: "bg-purple-50 border-purple-200 text-purple-600",
     badgeBg: "bg-purple-50 text-purple-700 border-purple-200",
     desc: "Trả lời đúng nhận 3 Bước Di Chuyển + 1 Quả Bom Hẹn Giờ trên mê cung 15×15. Nổ chữ thập phá tường gạch (+50đ), trúng địch trừ 1 Tim, cướp 200đ, dùng Bom Lửa Dài & Đá Bom.",
@@ -257,7 +257,7 @@ export default function GameModesSection({
             </div>
           </div>
 
-          {/* 7 Chế độ trò chơi tương tác nằm chung cùng khu vực Khám Phá Trò Chơi */}
+          {/* 7 Chế độ trò chơi tương tác với Sprite Đồ họa riêng */}
           {NEW_SEVEN_GAMES.map((g) => (
             <div
               key={g.id}
@@ -266,9 +266,9 @@ export default function GameModesSection({
               <div>
                 <div className="flex items-start justify-between gap-4 mb-4">
                   <div
-                    className={`w-14 h-14 rounded-2xl border flex items-center justify-center shrink-0 text-3xl group-hover:scale-105 transition-transform shadow-2xs ${g.iconBg}`}
+                    className={`w-14 h-14 rounded-2xl border flex items-center justify-center shrink-0 overflow-hidden group-hover:scale-105 transition-transform shadow-2xs ${g.iconBg}`}
                   >
-                    {g.icon}
+                    {g.renderSprite()}
                   </div>
                   <span
                     className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full border ${g.badgeBg}`}
